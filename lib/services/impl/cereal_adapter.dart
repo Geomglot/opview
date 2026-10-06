@@ -80,6 +80,7 @@ class CerealAdapter implements TelemetryAdapter {
         state.applyModelV2(data);
         return true; // modelV2 triggers render
       case 'liveCalibration':
+      case 'extrinsicsCalibration': // renamed from liveCalibration, same fields
         state.applyLiveCalibration(data);
         return false;
       case 'radarState':
@@ -92,6 +93,7 @@ class CerealAdapter implements TelemetryAdapter {
         state.applyDeviceState(data);
         return false;
       case 'roadCameraState':
+      case 'narrowRoadCameraState': // renamed from roadCameraState, same fields
         state.applyRoadCameraState(data);
         return false;
       default:

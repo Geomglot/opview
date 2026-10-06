@@ -14,6 +14,7 @@ void main() {
       expect(json['cameras'], ['road']);
       expect(json['bridge_services_in'], isEmpty);
       expect(json['bridge_services_out'], ['carState', 'modelV2']);
+      expect(json['enabled'], true);
     });
 
     test('toJson with wideRoad camera', () {

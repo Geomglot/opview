@@ -29,10 +29,16 @@ class AugmentedRoadView extends StatefulWidget {
   final UIState uiState;
   final RTCVideoRenderer? videoRenderer;
 
+  // manual device IP, for networks where mDNS discovery does not work
+  final Future<String?> Function()? loadManualHost;
+  final Future<void> Function(String? host)? onSetManualHost;
+
   const AugmentedRoadView({
     super.key,
     required this.uiState,
     this.videoRenderer,
+    this.loadManualHost,
+    this.onSetManualHost,
   });
 
   @override
@@ -145,6 +151,16 @@ class _AugmentedRoadViewState extends State<AugmentedRoadView> {
                           fontWeight: FontWeight.w300,
                         ),
                       )),
+                      if (widget.onSetManualHost != null) ...[
+                        SizedBox(height: 20 * scale),
+                        TextButton(
+                          onPressed: () => _showManualHostDialog(context),
+                          child: Text(
+                            'Set device IP',
+                            style: TextStyle(color: const Color(0x99FFFFFF), fontSize: 20 * scale),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -153,6 +169,32 @@ class _AugmentedRoadViewState extends State<AugmentedRoadView> {
         );
       }),
     );
+  }
+
+  /// ask for the device IP; empty clears it and goes back to auto-discovery
+  Future<void> _showManualHostDialog(BuildContext context) async {
+    final current = await widget.loadManualHost?.call() ?? '';
+    if (!context.mounted) return;
+    final controller = TextEditingController(text: current);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Device IP'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.url,
+          decoration: const InputDecoration(hintText: 'e.g. 192.168.1.50 (empty = auto)'),
+          onSubmitted: (v) => Navigator.of(context).pop(v),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.of(context).pop(controller.text), child: const Text('Save')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (result != null) await widget.onSetManualHost!(result);
   }
 
   /// video layer: RTCVideoView with BoxFit.cover, or black placeholder

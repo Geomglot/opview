@@ -19,6 +19,7 @@ import 'package:opview/services/impl/mdns_discovery.dart';
 import 'package:opview/services/impl/webrtc_transport.dart';
 import 'package:opview/services/impl/cereal_adapter.dart';
 import 'package:opview/services/wake_lock_service.dart' as wake_lock;
+import 'package:opview/system/webrtc/webrtcd_api.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -30,6 +31,9 @@ const _rediscoverDelay = Duration(seconds: 15);
 
 // SharedPreferences key for cached host
 const _cachedHostKey = 'last_known_host';
+
+// SharedPreferences key for a host the user typed in (skips discovery)
+const _manualHostKey = 'manual_host';
 
 // camera switching thresholds (augmented_road_view.py:29-30)
 const wideCamMaxSpeed = 10.0;  // m/s — switch to wide below this
@@ -84,6 +88,14 @@ class ConnectionManager {
   /// tries cached host first for fast reconnect, mDNS in parallel as fallback
   void start() async {
     _listenConnectivity();
+
+    final manualHost = await loadManualHost();
+    if (manualHost != null) {
+      _setStatus('using manual host $manualHost');
+      _host = manualHost;
+      _connect();
+      return;
+    }
 
     final cachedHost = await _loadCachedHost();
     if (cachedHost != null && await _isOnSameSubnet(cachedHost)) {
@@ -174,9 +186,29 @@ class ConnectionManager {
   void _listenData() {
     _dataSub?.cancel();
     _dataSub = _transport.dataStream.listen((chunk) {
+      final reason = parseDisconnect(chunk);
+      if (reason != null) {
+        _onServerDisconnect(reason);
+        return;
+      }
       _adapter.apply(_uiState, chunk);
       _switchStreamIfNeeded();
     });
+  }
+
+  /// webrtcd ended the session: reconnect at once after a timeout (it shuts
+  /// down 5 s after the last session ends), but do not fight another viewer
+  void _onServerDisconnect(String reason) {
+    if (isTakeover(reason)) {
+      _setStatus('another viewer took over, reopen opview to reconnect');
+      _setConnected(false);
+      pause();
+      return;
+    }
+    _setStatus('device ended session ($reason), reconnecting');
+    _teardown();
+    _retryCount = 0;
+    _connect();
   }
 
   /// switch camera based on experimental mode + speed hysteresis
@@ -291,6 +323,26 @@ class ConnectionManager {
     _retryCount = 0;
     _host = null;
     start();
+  }
+
+  /// host the user typed in, or null to use discovery
+  Future<String?> loadManualHost() async {
+    final prefs = await SharedPreferences.getInstance();
+    final host = prefs.getString(_manualHostKey)?.trim();
+    return (host == null || host.isEmpty) ? null : host;
+  }
+
+  /// set (or clear with null/empty) the manual host, then reconnect
+  Future<void> setManualHost(String? host) async {
+    final prefs = await SharedPreferences.getInstance();
+    final trimmed = host?.trim() ?? '';
+    if (trimmed.isEmpty) {
+      await prefs.remove(_manualHostKey);
+    } else {
+      await prefs.setString(_manualHostKey, trimmed);
+    }
+    _stopDiscovery();
+    reconnect();
   }
 
   Future<String?> _loadCachedHost() async {
