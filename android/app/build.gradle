@@ -21,7 +21,7 @@ android {
 
     defaultConfig {
         applicationId = "org.dragonpilot.opview"
-        minSdk = 21          // Android 5.0 — pinned, do NOT use flutter.minSdkVersion (floats to 24+)
+        minSdk = 24          // Android 7.0, the lowest Flutter 3.47+ supports; pinned, do NOT use flutter.minSdkVersion (floats)
         targetSdk = 34
         versionCode = flutter.versionCode
         versionName = flutter.versionName
