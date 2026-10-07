@@ -16,6 +16,10 @@ import 'package:opview/selfdrive/ui/onroad/model_renderer.dart';
 import 'package:opview/selfdrive/ui/onroad/hud_renderer.dart';
 import 'package:opview/selfdrive/ui/onroad/alert_renderer.dart';
 
+// which build this is, shown on the Connecting screen; set at build time with
+// flutter build apk --dart-define=OPVIEW_BUILD=0.1.1-comma3x.N
+const opviewBuild = String.fromEnvironment('OPVIEW_BUILD', defaultValue: 'dev build');
+
 // -- border colors (augmented_road_view.py:23-27) --
 
 const borderColors = {
@@ -138,6 +142,10 @@ class _AugmentedRoadViewState extends State<AugmentedRoadView> {
                           fontSize: 40 * scale,
                           fontWeight: FontWeight.w300,
                         ),
+                      ),
+                      Text(
+                        'opview $opviewBuild',
+                        style: TextStyle(color: const Color(0x66FFFFFF), fontSize: 18 * scale),
                       ),
                       SizedBox(height: 20 * scale),
                       ...widget.uiState.connectionLog.map((line) => Text(

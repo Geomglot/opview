@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:opview/selfdrive/ui/ui_state.dart';
+import 'package:opview/selfdrive/ui/onroad/augmented_road_view.dart';
 import 'package:opview/selfdrive/ui/onroad/exp_button.dart';
 import 'package:opview/selfdrive/ui/onroad/hud_renderer.dart';
 import 'package:opview/selfdrive/ui/onroad/speed_limit_renderer.dart';
@@ -311,5 +312,11 @@ void main() {
       ])));
       expect(find.byType(Image), findsNothing);
     });
+  });
+
+  testWidgets('Connecting screen shows which build is installed', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 600));
+    await tester.pumpWidget(MaterialApp(home: AugmentedRoadView(uiState: UIState())));
+    expect(find.text('opview $opviewBuild'), findsOneWidget);
   });
 }
