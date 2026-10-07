@@ -118,3 +118,63 @@ List<List<double>> rotFromEuler(List<double> rpy) {
     [-sp,     cp * sr,                cp * cr               ],
   ];
 }
+
+// -- video framing (augmented_road_view.py _calc_frame_matrix) --
+
+/// a far point straight ahead, used to find the horizon
+const infPoint = [1000.0, 0.0, 0.0];
+
+/// where the camera image goes on screen, and the matching car-space -> screen
+/// transform for the overlay. Both come from one zoom and one offset, as on the device.
+class FrameTransform {
+  final double zoom;        // screen px per camera px
+  final double videoLeft;   // camera image placement, screen px
+  final double videoTop;
+  final double videoWidth;
+  final double videoHeight;
+  final List<List<double>> carToScreen;
+
+  const FrameTransform(this.zoom, this.videoLeft, this.videoTop, this.videoWidth, this.videoHeight, this.carToScreen);
+}
+
+/// port of the device's frame matrix for a content rect at ([x], [y]) of size [w] x [h].
+/// [deviceZoom] is the device's zoom (1.1 road, 2.0 wide) on the 1080 px tall 3X screen;
+/// [scale] (screen height / 1080) keeps the same height of picture as the 3X. As on the
+/// device, the zoom grows if needed to cover the whole rect, and the image is shifted
+/// towards the calibrated horizon but never so far that an edge shows.
+FrameTransform calcFrameTransform({
+  required CameraConfig camera,
+  required List<List<double>> calibration,
+  required double deviceZoom,
+  required double scale,
+  required double x,
+  required double y,
+  required double w,
+  required double h,
+}) {
+  final intrinsic = camera.intrinsics;
+  final calibTransform = matmul3x3(intrinsic, calibration);
+  final kep = matvec3(calibTransform, infPoint);
+  final cx = intrinsic[0][2], cy = intrinsic[1][2];
+
+  final zoom = [deviceZoom * scale, w / (2 * cx), h / (2 * cy)].reduce(max);
+
+  final margin = 5 * scale;
+  final maxXOffset = max(0.0, cx * zoom - w / 2 - margin);
+  final maxYOffset = max(0.0, cy * zoom - h / 2 - margin);
+  var xOffset = 0.0, yOffset = 0.0;
+  if (kep[2].abs() > 1e-6) {
+    xOffset = ((kep[0] / kep[2] - cx) * zoom).clamp(-maxXOffset, maxXOffset);
+    yOffset = ((kep[1] / kep[2] - cy) * zoom).clamp(-maxYOffset, maxYOffset);
+  }
+
+  final tx = (w / 2 + x - xOffset) - cx * zoom;
+  final ty = (h / 2 + y - yOffset) - cy * zoom;
+  final videoTransform = [
+    [zoom, 0.0, tx],
+    [0.0, zoom, ty],
+    [0.0, 0.0, 1.0],
+  ];
+  return FrameTransform(zoom, tx, ty, camera.width * zoom, camera.height * zoom,
+      matmul3x3(videoTransform, calibTransform));
+}
