@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:opview/selfdrive/ui/ui_state.dart';
@@ -165,6 +166,19 @@ void main() {
       expect(formatAheadDistance(100, false), '350 ft');
       expect(formatAheadDistance(2000, false), '1.2 mi');
     });
+  });
+
+  test('slim modelV2 from webrtcd (dys-a, opview mode) fills the path, lanes and edges', () {
+    // captured on the comma: webrtcd sends only the fields opview draws, rounded to the millimetre
+    final st = UIState();
+    final updated = CerealAdapter().apply(st, File('test/fixtures/model_v2_opview_slim.json').readAsStringSync());
+    expect(updated, isTrue);
+    expect(st.pathX.length, 33);
+    expect(st.laneLineX.every((l) => l.length == 33), isTrue);
+    expect(st.laneLineProbs.length, 4);
+    expect(st.roadEdgeX.every((e) => e.length == 33), isTrue);
+    expect(st.roadEdgeStds.length, 2);
+    expect(st.accelerationX, isNotEmpty);
   });
 
   group('HUD renders with sunnypilot extras', () {
