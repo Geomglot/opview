@@ -28,9 +28,10 @@ SOFTWARE.
 
 ------------------------------------------------------------------------
 
-The speed limit sign, road name and steering wheel tint, and the icons in
-assets/icons/ (chffr_wheel.png, experimental.png, img_plus_arrow_up.png,
-img_minus_arrow_down.png), are ported from openpilot (above) and sunnypilot
+The speed limit sign, road name, steering wheel tint and turn signal arrows,
+and the icons in assets/icons/ (chffr_wheel.png, experimental.png,
+img_plus_arrow_up.png, img_minus_arrow_down.png, turn_signal_left.png,
+blind_spot_left.png), are ported from openpilot (above) and sunnypilot
 (https://github.com/sunnypilot/sunnypilot), which is also licensed under the
 MIT License: Copyright (c) 2021-, Haibin Wen, sunnypilot, and a number of
 other contributors.

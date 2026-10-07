@@ -9,6 +9,7 @@ import 'package:opview/selfdrive/ui/ui_state.dart';
 import 'package:opview/selfdrive/ui/onroad/exp_button.dart';
 import 'package:opview/selfdrive/ui/onroad/road_name_renderer.dart';
 import 'package:opview/selfdrive/ui/onroad/speed_limit_renderer.dart';
+import 'package:opview/selfdrive/ui/onroad/turn_signal_renderer.dart';
 
 // -- constants (hud_renderer.py) --
 
@@ -54,6 +55,7 @@ class HudRenderer extends StatelessWidget {
         // sunnypilot extras (sunnypilot/onroad/hud_renderer.py render order)
         RoadNameRenderer(uiState: uiState, scale: scale),
         Positioned.fill(child: SpeedLimitRenderer(uiState: uiState, scale: scale)),
+        Positioned.fill(child: TurnSignalRenderer(uiState: uiState, scale: scale)),
       ],
     );
   }
@@ -89,6 +91,8 @@ class HudRenderer extends StatelessWidget {
         case UIStatus.engaged: maxColor = HudColors.engaged;
         case UIStatus.disengaged: maxColor = HudColors.disengaged;
         case UIStatus.override_: maxColor = HudColors.override_;
+        case UIStatus.latOnly:
+        case UIStatus.longOnly: break; // grey, as on the device
       }
     }
 

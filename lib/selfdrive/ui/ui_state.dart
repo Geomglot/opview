@@ -16,7 +16,7 @@ const msToMph = 2.23694;
 
 // -- engagement status (matches ui_state.py UIStatus) --
 
-enum UIStatus { disengaged, engaged, override_ }
+enum UIStatus { disengaged, engaged, override_, latOnly, longOnly }
 
 // -- sunnypilot (speed_limit/common.py Mode, lateral_mode.py) --
 
@@ -103,6 +103,26 @@ class UIState extends ChangeNotifier {
   int speedLimitMode = speedLimitModeOff;
   bool roadNameToggle = false;
   bool forceTorqueSteer = false;
+  bool trueVEgoUI = false;
+  bool liveSpeedCorrection = false;
+  int cruiseSpeedOffsetKph = 0;
+  bool showTurnSignals = false;
+  bool showBlindSpot = false;
+
+  // selfdriveStateSP.mads + onroadEvents — sunnypilot border colours
+  bool madsSeen = false;
+  String madsState = 'disabled';
+  bool madsEnabled = false;
+  bool madsAvailable = false;
+  bool overrideLongitudinal = false;
+
+  // carState turn signals / blind spot
+  bool leftBlinker = false;
+  bool rightBlinker = false;
+  bool leftBlindspot = false;
+  bool rightBlindspot = false;
+  DateTime? leftSignalSince;   // when the blinker came on, for the arrow pulse
+  DateTime? rightSignalSince;
 
   // longitudinalPlanSP.speedLimit — speeds in m/s
   double speedLimit = 0.0;
@@ -164,6 +184,14 @@ class UIState extends ChangeNotifier {
     vEgoCluster = (data['vEgoCluster'] as num?)?.toDouble() ?? 0.0;
     vCruiseCluster = (data['vCruiseCluster'] as num?)?.toDouble() ?? 0.0;
     if (!vEgoClusterSeen && vEgoCluster != 0.0) vEgoClusterSeen = true;
+    final left = data['leftBlinker'] as bool? ?? false;
+    final right = data['rightBlinker'] as bool? ?? false;
+    if (left && !leftBlinker) leftSignalSince = DateTime.now();
+    if (right && !rightBlinker) rightSignalSince = DateTime.now();
+    leftBlinker = left;
+    rightBlinker = right;
+    leftBlindspot = data['leftBlindspot'] as bool? ?? false;
+    rightBlindspot = data['rightBlindspot'] as bool? ?? false;
     // no notify — picked up on next modelV2
   }
 
@@ -179,11 +207,7 @@ class UIState extends ChangeNotifier {
 
     // update engagement status
     started = true;
-    if (openpilotState == 'preEnabled' || openpilotState == 'overriding') {
-      status = UIStatus.override_;
-    } else {
-      status = enabled ? UIStatus.engaged : UIStatus.disengaged;
-    }
+    _updateStatus();
     // no notify — picked up on next modelV2
   }
 
@@ -252,7 +276,50 @@ class UIState extends ChangeNotifier {
     // no notify — picked up on next modelV2
   }
 
+  /// engagement status; once sunnypilot's MADS state has arrived, follow
+  /// sunnypilot ui_state.py UIStateSP.update_status
+  void _updateStatus() {
+    final override = openpilotState == 'preEnabled' || openpilotState == 'overriding';
+    if (!madsSeen) {
+      status = override ? UIStatus.override_ : (enabled ? UIStatus.engaged : UIStatus.disengaged);
+      return;
+    }
+    if (openpilotState == 'preEnabled') {
+      status = UIStatus.override_;
+    } else if (openpilotState == 'overriding' && (!madsAvailable || overrideLongitudinal)) {
+      status = UIStatus.override_;
+    } else if (madsState == 'paused' || madsState == 'overriding') {
+      status = UIStatus.override_;
+    } else if (!madsAvailable) {
+      status = enabled ? UIStatus.engaged : UIStatus.disengaged;
+    } else if (madsEnabled && enabled) {
+      status = UIStatus.engaged;
+    } else if (madsEnabled) {
+      status = UIStatus.latOnly;
+    } else if (enabled) {
+      status = UIStatus.longOnly;
+    } else {
+      status = UIStatus.disengaged;
+    }
+  }
+
   // -- sunnypilot apply methods --
+
+  void applySelfdriveStateSP(Map<String, dynamic> data) {
+    final mads = data['mads'] as Map<String, dynamic>? ?? const {};
+    madsSeen = true;
+    madsState = mads['state'] as String? ?? 'disabled';
+    madsEnabled = mads['enabled'] as bool? ?? false;
+    madsAvailable = mads['available'] as bool? ?? false;
+    _updateStatus();
+    // no notify — picked up on next modelV2
+  }
+
+  /// onroadEvents is a list of events; only overrideLongitudinal matters here
+  void applyOnroadEvents(List<dynamic> events) {
+    overrideLongitudinal = events.any((e) => e is Map && e['overrideLongitudinal'] == true);
+    _updateStatus();
+  }
 
   void applyOpviewParams(Map<String, dynamic> data) {
     paramsSeen = true;
@@ -260,6 +327,11 @@ class UIState extends ChangeNotifier {
     speedLimitMode = (data['SpeedLimitMode'] as num?)?.toInt() ?? speedLimitModeOff;
     roadNameToggle = data['RoadNameToggle'] as bool? ?? false;
     forceTorqueSteer = data['RivianForceTorqueSteer'] as bool? ?? false;
+    trueVEgoUI = data['TrueVEgoUI'] as bool? ?? false;
+    liveSpeedCorrection = data['SPLiveSpeedCorrectionEnabled'] as bool? ?? false;
+    cruiseSpeedOffsetKph = (data['SPCruiseSpeedOffset'] as num?)?.toInt() ?? 0;
+    showTurnSignals = data['ShowTurnSignals'] as bool? ?? false;
+    showBlindSpot = data['BlindSpot'] as bool? ?? false;
     // car make and flags (carParams is only published every ~50 s)
     brand = data['CarBrand'] as String? ?? brand;
     carFlags = (data['CarFlags'] as num?)?.toInt() ?? carFlags;
@@ -332,9 +404,18 @@ class UIState extends ChangeNotifier {
   /// show the road name pill (road_name.py)
   bool get showRoadName => roadNameToggle && roadName.isNotEmpty;
 
-  /// display speed in current unit (km/h or mph)
+  /// display speed in current unit (km/h or mph); sunnypilot speed_renderer.py:
+  /// the dash speed unless "Always Display True Speed" is on, then the wheel speed,
+  /// less the learned over-read when live speed correction is on
   double get displaySpeed {
-    final v = vEgoClusterSeen ? vEgoCluster : vEgo;
+    double v;
+    if (vEgoClusterSeen && !trueVEgoUI) {
+      v = vEgoCluster;
+    } else if (liveSpeedCorrection) {
+      v = vEgo - cruiseSpeedOffsetKph / msToKph;
+    } else {
+      v = vEgo;
+    }
     final conv = isMetric ? msToKph : msToMph;
     final s = v * conv;
     return s > 0 ? s : 0;

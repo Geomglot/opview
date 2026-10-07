@@ -5,6 +5,7 @@ import 'package:opview/selfdrive/ui/ui_state.dart';
 import 'package:opview/selfdrive/ui/onroad/exp_button.dart';
 import 'package:opview/selfdrive/ui/onroad/hud_renderer.dart';
 import 'package:opview/selfdrive/ui/onroad/speed_limit_renderer.dart';
+import 'package:opview/selfdrive/ui/onroad/turn_signal_renderer.dart';
 import 'package:opview/services/impl/cereal_adapter.dart';
 
 UIState _withParams({bool metric = true, int mode = 1, bool roadName = true, bool forceTorque = false}) {
@@ -191,7 +192,9 @@ void main() {
           ..applySelfdriveState({'enabled': true, 'engageable': true, 'experimentalMode': !metric})
           ..applyCarParams({'brand': 'rivian', 'flags': rivianAngleHarnessFlag})
           ..applyCarControl({'latActive': true})
-          ..applyCarState({'vEgo': 45 / 3.6, 'vCruiseCluster': 40.0});
+          ..applyOpviewParams({'IsMetric': metric, 'SpeedLimitMode': 2, 'RoadNameToggle': true,
+            'ShowTurnSignals': true, 'BlindSpot': true})
+          ..applyCarState({'vEgo': 45 / 3.6, 'vCruiseCluster': 40.0, 'leftBlinker': true, 'rightBlindspot': true});
         st.applyCarOutput({'actuatorsOutput': {'torqueOutputCan': 0.3}});
         await tester.binding.setSurfaceSize(const Size(1920, 1080));
         await tester.pumpWidget(MaterialApp(home: SizedBox(width: 1920, height: 1080,
@@ -199,11 +202,114 @@ void main() {
         expect(find.text('A very long road name that should be shortened'), findsOneWidget);
         expect(find.byType(ExpButton), findsOneWidget);
         expect(find.byType(SpeedLimitRenderer), findsOneWidget);
+        expect(find.byType(Image), findsNWidgets(3)); // wheel, left arrow, right blind spot
         // upstream's imperial MAX box overflows with the blocky test font (not on real fonts);
         // tolerate only that
         final e = tester.takeException();
         expect(e == null || '$e'.contains('RenderFlex overflowed'), isTrue, reason: '$e');
       });
     }
+  });
+
+  group('MADS border status', () {
+    UIState mads(String state, {bool enabled = false, bool madsEnabled = false, bool available = true}) =>
+        UIState()
+          ..applySelfdriveStateSP({'mads': {'state': madsEnabled ? 'enabled' : 'disabled', 'enabled': madsEnabled, 'available': available}})
+          ..applySelfdriveState({'enabled': enabled, 'state': state});
+
+    test('stock rules until selfdriveStateSP arrives', () {
+      final st = UIState()..applySelfdriveState({'enabled': true, 'state': 'enabled'});
+      expect(st.status, UIStatus.engaged);
+    });
+
+    test('steering only is latOnly, cruise only is longOnly, both is engaged', () {
+      expect(mads('disabled', madsEnabled: true).status, UIStatus.latOnly);
+      expect(mads('enabled', enabled: true).status, UIStatus.longOnly);
+      expect(mads('enabled', enabled: true, madsEnabled: true).status, UIStatus.engaged);
+      expect(mads('disabled').status, UIStatus.disengaged);
+    });
+
+    test('MADS paused or overriding is override', () {
+      final st = UIState()
+        ..applySelfdriveState({'enabled': false, 'state': 'disabled'})
+        ..applySelfdriveStateSP({'mads': {'state': 'paused', 'enabled': true, 'available': true}});
+      expect(st.status, UIStatus.override_);
+    });
+
+    test('openpilot overriding: steering only stays latOnly unless gas overrides cruise', () {
+      final st = mads('overriding', enabled: false, madsEnabled: true);
+      expect(st.status, UIStatus.latOnly);
+      final a = CerealAdapter();
+      a.apply(st, '{"type": "onroadEvents", "data": [{"name": "gasPressedOverride", "overrideLongitudinal": true}]}');
+      expect(st.status, UIStatus.override_);
+      a.apply(st, '{"type": "onroadEvents", "data": []}');
+      expect(st.status, UIStatus.latOnly);
+    });
+
+    test('MADS not available falls back to stock', () {
+      expect(mads('enabled', enabled: true, available: false).status, UIStatus.engaged);
+    });
+
+    test('adapter dispatches selfdriveStateSP', () {
+      final st = UIState()..applySelfdriveState({'enabled': false, 'state': 'disabled'});
+      CerealAdapter().apply(st, '{"type": "selfdriveStateSP", "data": {"mads": {"state": "enabled", "enabled": true, "available": true}}}');
+      expect(st.status, UIStatus.latOnly);
+    });
+  });
+
+  group('Always Display True Speed', () {
+    UIState speed(Map<String, dynamic> params) => UIState()
+      ..applyOpviewParams({'IsMetric': true, ...params})
+      ..applyCarState({'vEgo': 100 / 3.6, 'vEgoCluster': 103 / 3.6});
+
+    test('off: dash speed', () {
+      expect(speed({'TrueVEgoUI': false}).displaySpeed.round(), 103);
+    });
+
+    test('on: wheel speed', () {
+      expect(speed({'TrueVEgoUI': true}).displaySpeed.round(), 100);
+    });
+
+    test('on with live correction: wheel speed less the learned offset', () {
+      expect(speed({'TrueVEgoUI': true, 'SPLiveSpeedCorrectionEnabled': true, 'SPCruiseSpeedOffset': 2}).displaySpeed.round(), 98);
+    });
+  });
+
+  group('turn signals', () {
+    test('blind spot wins over the blinker, each needs its setting', () {
+      TurnSignalKind? k(bool sbs, bool bs, bool sts, bool b) =>
+          turnSignalKind(showBlindSpot: sbs, blindspot: bs, showTurnSignals: sts, blinker: b);
+      expect(k(true, true, true, true), TurnSignalKind.blindSpot);
+      expect(k(false, true, true, true), TurnSignalKind.signal);
+      expect(k(true, false, true, true), TurnSignalKind.signal);
+      expect(k(true, false, false, true), isNull);
+      expect(k(false, true, false, false), isNull);
+    });
+
+    test('arrow is bright at the start of each blink and fades', () {
+      expect(turnSignalAlpha(0), 1.0);
+      expect(turnSignalAlpha(0.6), lessThan(0.5));
+      expect(turnSignalAlpha(turnSignalBlinkPeriod + 0.01), 1.0);
+    });
+
+    test('pulse restarts when the blinker comes on', () {
+      final st = UIState()..applyCarState({'leftBlinker': true});
+      final first = st.leftSignalSince;
+      expect(first, isNotNull);
+      st.applyCarState({'leftBlinker': true});
+      expect(st.leftSignalSince, first);
+      st..applyCarState({'leftBlinker': false})..applyCarState({'leftBlinker': true});
+      expect(st.leftSignalSince!.isBefore(first!), isFalse);
+    });
+
+    testWidgets('nothing drawn when both settings are off', (tester) async {
+      final st = UIState()
+        ..applyOpviewParams({'ShowTurnSignals': false, 'BlindSpot': false})
+        ..applyCarState({'leftBlinker': true, 'rightBlindspot': true});
+      await tester.pumpWidget(MaterialApp(home: Stack(children: [
+        Positioned.fill(child: TurnSignalRenderer(uiState: st, scale: 1.0)),
+      ])));
+      expect(find.byType(Image), findsNothing);
+    });
   });
 }

@@ -55,7 +55,13 @@ class CerealAdapter implements TelemetryAdapter {
       final sanitized = raw.contains('NaN') ? raw.replaceAll(_nanRegex, 'null') : raw;
       final json = jsonDecode(sanitized) as Map<String, dynamic>;
       final type = json['type'] as String?;
-      final data = json['data'] as Map<String, dynamic>?;
+      final payload = json['data'];
+      // onroadEvents is the one service whose payload is a list
+      if (type == 'onroadEvents' && payload is List) {
+        state.applyOnroadEvents(payload);
+        return false;
+      }
+      final data = payload as Map<String, dynamic>?;
 
       if (type == null || data == null) return false;
 
@@ -114,6 +120,9 @@ class CerealAdapter implements TelemetryAdapter {
         return false;
       case 'carOutput':
         state.applyCarOutput(data);
+        return false;
+      case 'selfdriveStateSP':
+        state.applySelfdriveStateSP(data);
         return false;
       default:
         return false;

@@ -23,6 +23,9 @@ const borderColors = {
   UIStatus.disengaged: Color(0xFF122839),
   UIStatus.override_: Color(0xFF89928D),
   UIStatus.engaged: Color(0xFF167F40),
+  // sunnypilot MADS (sunnypilot/onroad/augmented_road_view.py BORDER_COLORS_SP)
+  UIStatus.latOnly: Color(0xFF00C8C8),   // cyan: steering only
+  UIStatus.longOnly: Color(0xFF961CA8),  // purple: cruise only
 };
 
 class AugmentedRoadView extends StatefulWidget {
