@@ -96,6 +96,25 @@ class CerealAdapter implements TelemetryAdapter {
       case 'narrowRoadCameraState': // renamed from roadCameraState, same fields
         state.applyRoadCameraState(data);
         return false;
+      // sunnypilot extras
+      case 'opviewParams': // device settings, sent by webrtcd on dys-a
+        state.applyOpviewParams(data);
+        return false;
+      case 'longitudinalPlanSP':
+        state.applyLongitudinalPlanSP(data);
+        return false;
+      case 'liveMapDataSP':
+        state.applyLiveMapDataSP(data);
+        return false;
+      case 'carParams':
+        state.applyCarParams(data);
+        return false;
+      case 'carControl':
+        state.applyCarControl(data);
+        return false;
+      case 'carOutput':
+        state.applyCarOutput(data);
+        return false;
       default:
         return false;
     }

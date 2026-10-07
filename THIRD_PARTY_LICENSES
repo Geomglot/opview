@@ -25,3 +25,12 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+------------------------------------------------------------------------
+
+The speed limit sign, road name and steering wheel tint, and the icons in
+assets/icons/ (chffr_wheel.png, experimental.png, img_plus_arrow_up.png,
+img_minus_arrow_down.png), are ported from openpilot (above) and sunnypilot
+(https://github.com/sunnypilot/sunnypilot), which is also licensed under the
+MIT License: Copyright (c) 2021-, Haibin Wen, sunnypilot, and a number of
+other contributors.

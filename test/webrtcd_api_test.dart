@@ -57,13 +57,28 @@ void main() {
     });
   });
 
-  group('service lists', () {
-    test('current and legacy lists differ only by the renamed services', () {
-      expect(bridgeServicesOut, contains('extrinsicsCalibration'));
-      expect(bridgeServicesOut, contains('narrowRoadCameraState'));
-      expect(legacyBridgeServicesOut, contains('liveCalibration'));
-      expect(legacyBridgeServicesOut, contains('roadCameraState'));
-      expect(bridgeServicesOut.length, legacyBridgeServicesOut.length);
+  group('servicesWithout', () {
+    test('renamed service falls back to its old name in place', () {
+      final next = servicesWithout(['a', 'extrinsicsCalibration', 'b'], 'extrinsicsCalibration');
+      expect(next, ['a', 'liveCalibration', 'b']);
+    });
+
+    test('unknown service with no old name is dropped', () {
+      expect(servicesWithout(['a', 'longitudinalPlanSP', 'b'], 'longitudinalPlanSP'), ['a', 'b']);
+    });
+
+    test('service not in the list gives up', () {
+      expect(servicesWithout(['a'], 'zzz'), isNull);
+      expect(servicesWithout(['a'], null), isNull);
+    });
+
+    test('KeyError message names the service', () {
+      expect(WebrtcdError('exception', "KeyError: 'liveMapDataSP'").unknownService, 'liveMapDataSP');
+    });
+
+    test('current list asks for the renamed and sunnypilot services', () {
+      expect(bridgeServicesOut, containsAll(['extrinsicsCalibration', 'narrowRoadCameraState',
+          'longitudinalPlanSP', 'liveMapDataSP', 'carControl', 'carOutput']));
     });
   });
 

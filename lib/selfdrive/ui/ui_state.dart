@@ -18,6 +18,22 @@ const msToMph = 2.23694;
 
 enum UIStatus { disengaged, engaged, override_ }
 
+// -- sunnypilot (speed_limit/common.py Mode, lateral_mode.py) --
+
+/// SpeedLimitMode param: 0 off, 1 information, 2 warning, 3 assist
+const speedLimitModeOff = 0;
+const speedLimitModeWarning = 2;
+
+/// opendbc RivianFlags.ANGLE_HARNESS
+const rivianAngleHarnessFlag = 2;
+
+/// consecutive zero-CAN-torque carOutput samples before calling it angle steering.
+/// the device uses 10 frames at 100 Hz (0.1 s); webrtcd sends carOutput at 20 Hz for opview
+const zeroTorqueHold = 3;
+
+/// how the wheel icon is tinted while MADS steers an angle-capable Rivian
+enum LateralMode { angle, torque }
+
 // -- state --
 
 class UIState extends ChangeNotifier {
@@ -33,6 +49,7 @@ class UIState extends ChangeNotifier {
 
   // selfdriveState
   bool enabled = false;
+  bool engageable = false;
   bool experimentalMode = false;
   String alertText1 = '';
   String alertText2 = '';
@@ -78,8 +95,37 @@ class UIState extends ChangeNotifier {
   String deviceType = '';
   String sensor = '';
 
-  // is_metric (default true, like stock)
+  // is_metric (default true, like stock); replaced by the device's IsMetric once opviewParams arrives
   bool isMetric = true;
+
+  // opviewParams — device settings sent by webrtcd (dys-a) once a second
+  bool paramsSeen = false;
+  int speedLimitMode = speedLimitModeOff;
+  bool roadNameToggle = false;
+  bool forceTorqueSteer = false;
+
+  // longitudinalPlanSP.speedLimit — speeds in m/s
+  double speedLimit = 0.0;
+  double speedLimitLast = 0.0;
+  double speedLimitOffset = 0.0;
+  bool speedLimitValid = false;
+  bool speedLimitLastValid = false;
+  double speedLimitFinalLast = 0.0;
+  String speedLimitSource = 'none';
+  String speedLimitAssistState = 'disabled';
+
+  // liveMapDataSP — speeds in m/s, distance in m
+  bool speedLimitAheadValid = false;
+  double speedLimitAhead = 0.0;
+  double speedLimitAheadDistance = 0.0;
+  String roadName = '';
+
+  // carParams / carControl / carOutput — for the Rivian angle/torque wheel tint
+  String brand = '';
+  int carFlags = 0;
+  bool latActive = false;
+  int _zeroTorqueCount = zeroTorqueHold;
+  LateralMode? lateralMode;
 
   // active camera: 'road' or 'wideRoad' (switches on experimental mode)
   String streamType = 'road';
@@ -123,6 +169,7 @@ class UIState extends ChangeNotifier {
 
   void applySelfdriveState(Map<String, dynamic> data) {
     enabled = data['enabled'] as bool? ?? false;
+    engageable = data['engageable'] as bool? ?? false;
     experimentalMode = data['experimentalMode'] as bool? ?? false;
     alertText1 = data['alertText1'] as String? ?? '';
     alertText2 = data['alertText2'] as String? ?? '';
@@ -205,7 +252,85 @@ class UIState extends ChangeNotifier {
     // no notify — picked up on next modelV2
   }
 
+  // -- sunnypilot apply methods --
+
+  void applyOpviewParams(Map<String, dynamic> data) {
+    paramsSeen = true;
+    isMetric = data['IsMetric'] as bool? ?? isMetric;
+    speedLimitMode = (data['SpeedLimitMode'] as num?)?.toInt() ?? speedLimitModeOff;
+    roadNameToggle = data['RoadNameToggle'] as bool? ?? false;
+    forceTorqueSteer = data['RivianForceTorqueSteer'] as bool? ?? false;
+    // car make and flags (carParams is only published every ~50 s)
+    brand = data['CarBrand'] as String? ?? brand;
+    carFlags = (data['CarFlags'] as num?)?.toInt() ?? carFlags;
+    // no notify — picked up on next modelV2
+  }
+
+  void applyLongitudinalPlanSP(Map<String, dynamic> data) {
+    final sl = data['speedLimit'] as Map<String, dynamic>? ?? const {};
+    final resolver = sl['resolver'] as Map<String, dynamic>? ?? const {};
+    final assist = sl['assist'] as Map<String, dynamic>? ?? const {};
+    speedLimit = (resolver['speedLimit'] as num?)?.toDouble() ?? 0.0;
+    speedLimitLast = (resolver['speedLimitLast'] as num?)?.toDouble() ?? 0.0;
+    speedLimitOffset = (resolver['speedLimitOffset'] as num?)?.toDouble() ?? 0.0;
+    speedLimitValid = resolver['speedLimitValid'] as bool? ?? false;
+    speedLimitLastValid = resolver['speedLimitLastValid'] as bool? ?? false;
+    speedLimitFinalLast = (resolver['speedLimitFinalLast'] as num?)?.toDouble() ?? 0.0;
+    speedLimitSource = resolver['source'] as String? ?? 'none';
+    speedLimitAssistState = assist['state'] as String? ?? 'disabled';
+    // no notify — picked up on next modelV2
+  }
+
+  void applyLiveMapDataSP(Map<String, dynamic> data) {
+    speedLimitAheadValid = data['speedLimitAheadValid'] as bool? ?? false;
+    speedLimitAhead = (data['speedLimitAhead'] as num?)?.toDouble() ?? 0.0;
+    speedLimitAheadDistance = (data['speedLimitAheadDistance'] as num?)?.toDouble() ?? 0.0;
+    roadName = data['roadName'] as String? ?? '';
+    // no notify — picked up on next modelV2
+  }
+
+  void applyCarParams(Map<String, dynamic> data) {
+    brand = data['brand'] as String? ?? '';
+    carFlags = (data['flags'] as num?)?.toInt() ?? 0;
+  }
+
+  void applyCarControl(Map<String, dynamic> data) {
+    latActive = data['latActive'] as bool? ?? false;
+  }
+
+  /// lateral_mode.py: on an angle-capable Rivian while MADS steers, the car sends no CAN
+  /// torque when it steers on its angle channel
+  void applyCarOutput(Map<String, dynamic> data) {
+    final angleCapable = brand == 'rivian' && (carFlags & rivianAngleHarnessFlag) != 0;
+    if (!angleCapable || !latActive) {
+      lateralMode = null;
+      return;
+    }
+    if (forceTorqueSteer) {
+      _zeroTorqueCount = 0;
+      lateralMode = LateralMode.torque;
+      return;
+    }
+    final actuators = data['actuatorsOutput'] as Map<String, dynamic>? ?? const {};
+    final torque = (actuators['torqueOutputCan'] as num?)?.toDouble() ?? 0.0;
+    if (torque == 0) {
+      _zeroTorqueCount = _zeroTorqueCount + 1 > zeroTorqueHold ? zeroTorqueHold : _zeroTorqueCount + 1;
+    } else {
+      _zeroTorqueCount = 0;
+    }
+    lateralMode = _zeroTorqueCount >= zeroTorqueHold ? LateralMode.angle : LateralMode.torque;
+  }
+
   // -- derived values --
+
+  /// speed conversion for the current unit
+  double get speedConv => isMetric ? msToKph : msToMph;
+
+  /// show the speed limit sign (speed_limit.py: SpeedLimitMode != off)
+  bool get showSpeedLimit => paramsSeen && speedLimitMode != speedLimitModeOff;
+
+  /// show the road name pill (road_name.py)
+  bool get showRoadName => roadNameToggle && roadName.isNotEmpty;
 
   /// display speed in current unit (km/h or mph)
   double get displaySpeed {

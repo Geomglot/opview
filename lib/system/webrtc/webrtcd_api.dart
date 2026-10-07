@@ -6,7 +6,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:opview/data/models.dart';
 
-// everything the stock UI subscribes to
+// everything the stock UI subscribes to, plus the sunnypilot extras
+// (speed limit sign, road name, Rivian angle/torque wheel tint)
 const bridgeServicesOut = [
   'carState',
   'selfdriveState',
@@ -17,20 +18,20 @@ const bridgeServicesOut = [
   'longitudinalPlan',
   'deviceState',
   'narrowRoadCameraState',
+  'longitudinalPlanSP',
+  'liveMapDataSP',
+  'carControl',
+  'carOutput',
 ];
 
-// same list with the service names used before openpilot renamed them
-const legacyBridgeServicesOut = [
-  'carState',
-  'selfdriveState',
-  'controlsState',
-  'modelV2',
-  'liveCalibration',
-  'radarState',
-  'longitudinalPlan',
-  'deviceState',
-  'roadCameraState',
-];
+// names used before openpilot renamed these services
+const legacyServiceNames = {
+  'extrinsicsCalibration': 'liveCalibration',
+  'narrowRoadCameraState': 'roadCameraState',
+};
+
+// most services a device could reject before we give up
+const _maxServiceRetries = 8;
 
 /// webrtcd answered but refused the session (e.g. busy, unknown service)
 class WebrtcdError implements Exception {
@@ -41,19 +42,37 @@ class WebrtcdError implements Exception {
   /// webrtcd raises KeyError for a service name it does not know
   bool get isUnknownService => message.startsWith('KeyError');
 
+  /// the service named in a KeyError, e.g. KeyError: 'liveCalibration'
+  String? get unknownService => RegExp(r"KeyError: '([^']+)'").firstMatch(message)?.group(1);
+
   @override
   String toString() => 'webrtcd $error: $message';
 }
 
-/// exchange SDP with webrtcd, returns answer SDP
-/// tries current service names first, then the pre-rename names for older openpilot
+/// exchange SDP with webrtcd, returns answer SDP.
+/// older devices reject services they do not have: use the old name if it was renamed,
+/// otherwise leave that service out, and try again
 Future<Map<String, dynamic>> postStream(String host, String offerSdp, {String camera = 'road'}) async {
-  try {
-    return await _post(host, offerSdp, camera, bridgeServicesOut);
-  } on WebrtcdError catch (e) {
-    if (!e.isUnknownService) rethrow;
-    return await _post(host, offerSdp, camera, legacyBridgeServicesOut);
+  var services = List<String>.of(bridgeServicesOut);
+  for (var attempt = 0;; attempt++) {
+    try {
+      return await _post(host, offerSdp, camera, services);
+    } on WebrtcdError catch (e) {
+      final next = servicesWithout(services, e.unknownService);
+      if (!e.isUnknownService || next == null || attempt >= _maxServiceRetries) rethrow;
+      services = next;
+    }
   }
+}
+
+/// [services] with [rejected] replaced by its old name, or removed; null if that changes nothing
+List<String>? servicesWithout(List<String> services, String? rejected) {
+  if (rejected == null || !services.contains(rejected)) return null;
+  final legacy = legacyServiceNames[rejected];
+  return [
+    for (final s in services)
+      if (s != rejected) s else if (legacy != null) legacy,
+  ];
 }
 
 Future<Map<String, dynamic>> _post(String host, String offerSdp, String camera, List<String> services) async {
