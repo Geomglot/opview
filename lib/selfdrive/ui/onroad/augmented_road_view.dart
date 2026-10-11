@@ -140,7 +140,10 @@ class _AugmentedRoadViewState extends State<AugmentedRoadView> {
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onLongPress: settings == null ? null : () => _openSettings(context, settings),
-            // a sideways swipe changes the layout; one starting at a screen edge is left to Android
+            // a sideways swipe changes the layout; one starting at a screen edge is left to Android.
+            // .down: the start position is where the finger went down, not where the drag was
+            // recognised (a little further along), so the edge test sees the real starting point
+            dragStartBehavior: DragStartBehavior.down,
             onHorizontalDragStart: settings == null || !widget.uiState.isConnected
                 ? null
                 : (d) {
