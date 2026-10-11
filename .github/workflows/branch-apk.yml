@@ -54,5 +54,5 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: opview-apk-arm64
+          name: OPRivView-apk-arm64
           path: build/app/outputs/flutter-apk/app-release.apk

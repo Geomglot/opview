@@ -29,7 +29,8 @@ android {
     }
 
     defaultConfig {
-        applicationId = "org.dragonpilot.opview"
+        // OPRivView: its own app id, so it installs alongside the original opview (org.dragonpilot.opview)
+        applicationId = "com.electricvalentines.oprivview"
         minSdk = 24          // Android 7.0, the lowest Flutter 3.47+ supports; pinned, do NOT use flutter.minSdkVersion (floats)
         targetSdk = 34
         versionCode = flutter.versionCode

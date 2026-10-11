@@ -134,7 +134,7 @@ class _SettingsBody extends StatelessWidget {
           Padding(
             padding: EdgeInsets.only(top: 9 * unit),
             child: Text(
-              'opview · $buildName',
+              'OPRivView · $buildName',
               textAlign: TextAlign.center,
               style: TextStyle(color: const Color(0x66FFFFFF), fontSize: 8 * unit, height: 1.0),
             ),

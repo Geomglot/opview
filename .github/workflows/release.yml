@@ -64,7 +64,7 @@ jobs:
       - name: Rename APK
         run: |
           version="${GITHUB_REF_NAME#v}"
-          cp build/app/outputs/flutter-apk/app-release.apk "opview-${version}.apk"
+          cp build/app/outputs/flutter-apk/app-release.apk "OPRivView-${version}.apk"
 
       - name: Generate changelog
         id: changelog
@@ -91,5 +91,5 @@ jobs:
 
             ## Download
 
-            - **opview-${{ github.ref_name }}.apk** — Universal Android APK (sideload)
-          files: opview-*.apk
+            - **OPRivView APK** — Universal Android APK (sideload)
+          files: OPRivView-*.apk

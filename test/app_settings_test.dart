@@ -181,7 +181,7 @@ void main() {
       await open(tester, host: '192.168.1.50');
       expect(find.text('192.168.1.50'), findsOneWidget);
       expect(find.text('found automatically'), findsOneWidget);
-      expect(find.text('opview \u00B7 abc1234'), findsOneWidget);
+      expect(find.text('OPRivView \u00B7 abc1234'), findsOneWidget);
       expect(find.text('Change'), findsNothing);  // no way to change it was given
       expect(tester.takeException(), isNull);
     });
