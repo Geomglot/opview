@@ -201,6 +201,9 @@ void main() {
     testWidgets('Change closes the menu and asks for the address', (tester) async {
       var asked = 0;
       await open(tester, host: '192.168.1.50', onChange: () => asked++);
+      // the menu scrolls once it is taller than the screen
+      await tester.ensureVisible(find.text('Change'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Change'));
       await tester.pumpAndSettle();
       expect(asked, 1);
