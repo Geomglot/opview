@@ -77,6 +77,30 @@ void main() {
       expect(calls, 1);
     });
 
+    test('road name: shown by default, can be hidden, remembered', () async {
+      SharedPreferences.setMockInitialValues({});
+      final a = AppSettings();
+      await a.load();
+      expect(a.showRoadName, isTrue);
+      await a.setShowRoadName(false);
+      final b = AppSettings();
+      await b.load();
+      expect(b.showRoadName, isFalse);
+    });
+
+    test('the road name follows the app setting, not the comma one', () {
+      final st = UIState()
+        ..roadName = 'Main St'
+        ..roadNameToggle = false;
+      expect(st.showRoadName, isTrue);
+      st.roadNameEnabled = false;
+      expect(st.showRoadName, isFalse);
+      st
+        ..roadNameEnabled = true
+        ..roadName = '';
+      expect(st.showRoadName, isFalse);  // no name from the maps
+    });
+
     test('folded Detailed panels toggle and are remembered', () async {
       SharedPreferences.setMockInitialValues({});
       final a = AppSettings();
@@ -254,6 +278,7 @@ void main() {
       expect(find.text('CLOCK'), findsNothing);
       expect(find.text('24 hour'), findsNothing);
       expect(find.text('SPEED LIMIT'), findsOneWidget);
+      expect(find.text('ROAD NAME'), findsOneWidget);
     });
 
     testWidgets('long press opens settings and a choice takes effect', (tester) async {

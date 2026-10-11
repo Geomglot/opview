@@ -603,7 +603,11 @@ class UIState extends ChangeNotifier {
   }
 
   /// show the road name pill (road_name.py)
-  bool get showRoadName => roadNameToggle && roadName.isNotEmpty;
+  /// the app's road name setting (AppSettings.showRoadName); the comma's own RoadNameToggle no longer decides
+  bool roadNameEnabled = true;
+
+  /// show the road name pill: turned on in the app, and the comma's maps have a name for this road
+  bool get showRoadName => roadNameEnabled && roadName.isNotEmpty;
 
   /// display speed in current unit (km/h or mph); sunnypilot speed_renderer.py:
   /// the dash speed unless "Always Display True Speed" is on, then the wheel speed,

@@ -123,6 +123,10 @@ class _SettingsBody extends StatelessWidget {
         ),
         _note('All layouts. Auto hides it until the comma has a speed limit (maps or the car)'),
 
+        _label('ROAD NAME'),
+        _choices<bool>(const [true, false], settings.showRoadName, (v) => v ? 'Show' : 'Hide', settings.setShowRoadName),
+        _note("All layouts, whatever the comma's own setting. Needs the comma's downloaded maps"),
+
         _label('COMMA DEVICE'),
         _deviceRow(),
 

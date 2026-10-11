@@ -40,12 +40,16 @@ const _legacyLayoutNames = {'miciExtended': OnroadLayout.enhanced};
 const _layoutKey = 'onroad_layout';
 const _speedLimitKey = 'speed_limit_display';
 const _collapsedKey = 'detailed_collapsed_panels';
+const _roadNameKey = 'show_road_name';
 
 class AppSettings extends ChangeNotifier {
   /// the clock is always shown, in 12 hour time; no longer a setting
   ClockMode clockMode = ClockMode.h12;
   OnroadLayout layout = OnroadLayout.classic;
   SpeedLimitDisplay speedLimitDisplay = SpeedLimitDisplay.auto;
+
+  /// the road name pill, whatever the comma's own road name setting
+  bool showRoadName = true;
 
   /// Detailed panels the driver has tapped shut, by name
   final Set<String> collapsedPanels = {};
@@ -54,6 +58,7 @@ class AppSettings extends ChangeNotifier {
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
     speedLimitDisplay = _byName(SpeedLimitDisplay.values, prefs.getString(_speedLimitKey), SpeedLimitDisplay.auto);
+    showRoadName = prefs.getBool(_roadNameKey) ?? true;
     collapsedPanels
       ..clear()
       ..addAll(prefs.getStringList(_collapsedKey) ?? const []);
@@ -68,6 +73,14 @@ class AppSettings extends ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_speedLimitKey, value.name);
+  }
+
+  Future<void> setShowRoadName(bool value) async {
+    if (value == showRoadName) return;
+    showRoadName = value;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_roadNameKey, value);
   }
 
   /// open a collapsed Detailed panel, or collapse an open one

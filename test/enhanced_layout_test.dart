@@ -456,6 +456,17 @@ void main() {
       }
     });
 
+    testWidgets('road name follows the app setting', (tester) async {
+      _screen(tester, 1920, 1080);
+      final state = createMockUIState()
+        ..roadNameToggle = false  // the comma's own setting no longer matters
+        ..roadName = 'Cam Fella Boulevard';
+      await tester.pumpWidget(_app(state, _enhanced()));
+      expect(find.text('Cam Fella Boulevard'), findsOneWidget);
+      await tester.pumpWidget(_app(state, _enhanced()..showRoadName = false));
+      expect(find.text('Cam Fella Boulevard'), findsNothing);
+    });
+
     testWidgets('imperial units show mph, and no speed limit sign is drawn', (tester) async {
       _screen(tester, 1920, 1080);
       final state = createMockUIState(leadDRel: 0);

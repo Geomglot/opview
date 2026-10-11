@@ -99,6 +99,8 @@ class _AugmentedRoadViewState extends State<AugmentedRoadView> {
         final clockMode = settings?.clockMode ?? ClockMode.h12;
         final speedLimitDisplay = settings?.speedLimitDisplay ?? SpeedLimitDisplay.auto;
         final layout = settings?.layout ?? OnroadLayout.classic;
+        // read by every layout through UIState.showRoadName
+        widget.uiState.roadNameEnabled = settings?.showRoadName ?? true;
 
         return MediaQuery(
           data: MediaQuery.of(context).copyWith(textScaler: TextScaler.noScaling),
