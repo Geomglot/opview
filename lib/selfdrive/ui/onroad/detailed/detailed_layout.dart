@@ -44,6 +44,10 @@ const _green = Color(0xFF3ADB6D);
 const _orange = Color(0xFFFF9A3C);
 const _blue = Color(0xFF4D9DFF);
 
+/// the second lead car: its box on the road and its row in the LEAD panel. Teal, unlike any
+/// warning or border colour, as openpilot only follows the first lead
+const detailedSecondLeadColor = Color(0xFF2DD4BF);
+
 /// shown for a value that is not available right now
 const detailedNoValue = '–';
 
@@ -179,6 +183,7 @@ class DetailedLayout extends StatelessWidget {
                 pathOpacity: enhancedPathOpacity,
                 maxPathDistance: enhancedPathDistance,
                 pathFadeStop: enhancedPathFadeStop,
+                secondLeadColor: detailedSecondLeadColor,
               ),
             ),
             Positioned(
@@ -761,7 +766,7 @@ class DetailedLeadPanel extends StatelessWidget {
         ('Closing', formatLeadRelSpeed(vRel, st.speedConv, speedUnit), Colors.white),
         ('Lead speed', '${max(0.0, (st.vEgo + vRel) * st.speedConv).round()} $speedUnit', Colors.white),
         ('Time to impact', ttl != null && ttl < 99 ? '${ttl.toStringAsFixed(1)} s' : detailedNoValue, Colors.white),
-        ('Second lead', second, Colors.white),
+        ('Second lead', second, second == detailedNoValue ? Colors.white : detailedSecondLeadColor),
       ],
     );
   }

@@ -305,6 +305,22 @@ void main() {
       expect(painter.pathOpacity, enhancedPathOpacity);
       expect(painter.maxPathDistance, enhancedPathDistance);
       expect(painter.pathFadeStop, enhancedPathFadeStop);
+      // the second lead car in teal, not the warning colours
+      expect(painter.secondLeadColor, detailedSecondLeadColor);
+    });
+
+    testWidgets('second lead row is teal when there is one', (tester) async {
+      _screen(tester, 1920, 1080);
+      final state = createMockUIState();
+      state.applyRadarState({
+        'leadOne': {'present': true, 'dRel': 30.0, 'vRel': -2.0, 'yRel': 0.0},
+        'leadTwo': {'present': true, 'dRel': 60.0, 'vRel': 0.0, 'yRel': 1.0},
+      });
+      await tester.pumpWidget(_app(state, _detailed()));
+      final value = find.descendant(
+          of: find.byType(DetailedLeadPanel), matching: find.text(formatLeadDistance(60.0, state.isMetric)));
+      expect(tester.widget<Text>(value).style?.color, detailedSecondLeadColor);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('alerts still show over the panels', (tester) async {

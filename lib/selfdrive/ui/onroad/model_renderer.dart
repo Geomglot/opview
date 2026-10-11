@@ -100,6 +100,10 @@ class ModelRendererPainter extends CustomPainter {
 
   /// where along the path, 0 near to 1 far, its fade to nothing begins in earnest (stock 0.5)
   final double pathFadeStop;
+
+  /// with [leadReticle]: the second lead car's box and tag in this one colour instead of the
+  /// warning colours (openpilot only follows the first); null draws it like the first, without a tag
+  final Color? secondLeadColor;
   final int _version;
 
   ModelRendererPainter({
@@ -113,6 +117,7 @@ class ModelRendererPainter extends CustomPainter {
     this.pathOpacity = 1.0,
     this.maxPathDistance = maxDrawDistance,
     this.pathFadeStop = 0.5,
+    this.secondLeadColor,
   }) : _version = state.version;
 
   // working data — rebuilt each paint
@@ -294,7 +299,8 @@ class ModelRendererPainter extends CustomPainter {
         if (one == null) {
           _drawLeadReticle(canvas, two, pathX, tag: true);
         } else if ((_leadNum(two, 'dRel') - _leadNum(one, 'dRel')).abs() > 3.0) {
-          _drawLeadReticle(canvas, two, pathX, tag: false);
+          final second = secondLeadColor;
+          _drawLeadReticle(canvas, two, pathX, tag: second != null, color: second);
         }
       }
       return;
@@ -326,7 +332,7 @@ class ModelRendererPainter extends CustomPainter {
   /// a box the size of a car, standing on the road at the lead's distance and drawn
   /// through the camera projection, so it grows and shrinks as the real car does.
   /// near face: bold corner brackets; far face and the edges joining them: faint
-  void _drawLeadReticle(Canvas canvas, Map<String, dynamic> lead, List<double> pathX, {required bool tag}) {
+  void _drawLeadReticle(Canvas canvas, Map<String, dynamic> lead, List<double> pathX, {required bool tag, Color? color}) {
     final dRel = _leadNum(lead, 'dRel');
     final vRel = _leadNum(lead, 'vRel');
     final yRel = _leadNum(lead, 'yRel');
@@ -346,7 +352,7 @@ class ModelRendererPainter extends CustomPainter {
       far.add(f);
     }
 
-    final color = leadWarnColor(leadWarnLevel(dRel, vRel));
+    final boxColor = color ?? leadWarnColor(leadWarnLevel(dRel, vRel));
     final s = contentRect.height / 1080.0;
     final nearWidth = (near[1] - near[0]).distance;
     final bold = (nearWidth * 0.045).clamp(3.5 * s, 9.0 * s).toDouble();
@@ -354,7 +360,7 @@ class ModelRendererPainter extends CustomPainter {
     final faint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = bold * 0.5
-      ..color = color.withAlpha(140);
+      ..color = boxColor.withAlpha(140);
     canvas.drawPath(ui.Path()..addPolygon(far, true), faint);
     for (int i = 0; i < 4; i++) {
       canvas.drawLine(near[i], far[i], faint);
@@ -364,7 +370,7 @@ class ModelRendererPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = bold
       ..strokeCap = StrokeCap.round
-      ..color = color;
+      ..color = boxColor;
     for (int i = 0; i < 4; i++) {
       final p = near[i];
       for (final q in [near[(i + 3) % 4], near[(i + 1) % 4]]) {
@@ -380,7 +386,7 @@ class ModelRendererPainter extends CustomPainter {
     final label = TextPainter(
       text: TextSpan(
         text: formatLeadDistance(dRel, state.isMetric),
-        style: TextStyle(color: color, fontSize: fontSize, fontWeight: FontWeight.bold, height: 1.0),
+        style: TextStyle(color: boxColor, fontSize: fontSize, fontWeight: FontWeight.bold, height: 1.0),
       ),
       textDirection: TextDirection.ltr,
     )..layout();
@@ -608,5 +614,5 @@ class ModelRendererPainter extends CustomPainter {
   @override
   bool shouldRepaint(ModelRendererPainter oldDelegate) =>
     oldDelegate._version != _version || !identical(oldDelegate.carSpaceTransform, carSpaceTransform) ||
-    oldDelegate.showLeads != showLeads;
+    oldDelegate.showLeads != showLeads || oldDelegate.secondLeadColor != secondLeadColor;
 }
