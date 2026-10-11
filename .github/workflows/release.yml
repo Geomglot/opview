@@ -58,8 +58,13 @@ jobs:
           flutter build apk --release --build-name "$version" --build-number "$BUILD_NUMBER" \
             --dart-define=OPVIEW_BUILD="$version"
 
+      # which key signed the APK. keytool cannot read it (the APK has only the v2/v3 signature
+      # scheme, no JAR signature), so use the SDK's apksigner; informational, never fails the build
       - name: Signing certificate
-        run: keytool -printcert -jarfile build/app/outputs/flutter-apk/app-release.apk | grep -E "Owner|SHA256:"
+        run: |
+          apksigner=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$apksigner" verify --print-certs build/app/outputs/flutter-apk/app-release.apk \
+            | grep -E "certificate (DN|SHA-256 digest)" || echo "::warning::could not read the signing certificate"
 
       - name: Rename APK
         run: |
