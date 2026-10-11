@@ -144,7 +144,7 @@ class DetailedLayout extends StatelessWidget {
       final radius = BorderRadius.circular(enhancedCornerRadius * unit);
       final edge = (enhancedBorderWidth + enhancedMargin) * unit;
       final frame = frameFor(w, h);
-      final hudBottom = edge + (enhancedSpeedPillHeight + 6 + 24) * unit;
+      final hudBottom = edge + (enhancedSpeedPillHeight + roadNameGap + roadNamePillHeight) * unit;
       final panelTop = (enhancedBorderWidth + detailedPanelTop) * unit;
 
       Widget column(List<Widget> children) => Align(
@@ -217,10 +217,10 @@ class DetailedLayout extends StatelessWidget {
             ),
             if (st.showRoadName)
               Positioned(
-                top: edge + (enhancedSpeedPillHeight + 6) * unit,
+                top: edge + (enhancedSpeedPillHeight + roadNameGap) * unit,
                 left: 0,
                 right: 0,
-                child: Center(child: _roadName(st.roadName, unit, w)),
+                child: Center(child: RoadNamePill(name: st.roadName, unit: unit, maxWidth: w * 0.4)),
               ),
 
             // driver monitoring and model confidence, top left
@@ -322,25 +322,6 @@ class DetailedLayout extends StatelessWidget {
   }
 }
 
-Widget _roadName(String name, double unit, double screenW) {
-  return ConstrainedBox(
-    constraints: BoxConstraints(maxWidth: screenW * 0.4),
-    child: Container(
-      height: 24 * unit,
-      padding: EdgeInsets.symmetric(horizontal: 10 * unit),
-      decoration: BoxDecoration(color: const Color(0xB3141414), borderRadius: BorderRadius.circular(8 * unit)),
-      child: Center(
-        widthFactor: 1,
-        child: Text(
-          name,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(color: HudColors.whiteTranslucent, fontSize: 13 * unit, fontWeight: FontWeight.w600, height: 1.0),
-        ),
-      ),
-    ),
-  );
-}
 
 // -- panels --
 

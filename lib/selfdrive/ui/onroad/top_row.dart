@@ -9,6 +9,8 @@ import 'package:opview/selfdrive/ui/ui_state.dart';
 const topRowSpeedPillHeight = 52.0;
 const topRowSidePillWidth = 84.0;   // set speed and speed limit
 const topRowSidePillHeight = 40.0;
+const roadNamePillHeight = 16.0;  // under the speed, Enhanced and Detailed
+const roadNameGap = 4.0;          // between the speed pill and the road name
 
 const _limitPillColor = Color(0xDBCED0D2);  // soft grey-white
 const _limitTextColor = Color(0xFF1A1A1A);
@@ -201,3 +203,34 @@ class SpeedTopRow extends StatelessWidget {
   }
 }
 
+
+/// the road name under the speed: small and see-through, so it stays secondary to the speed
+class RoadNamePill extends StatelessWidget {
+  final String name;
+  final double unit;
+  final double maxWidth;
+
+  const RoadNamePill({super.key, required this.name, required this.unit, required this.maxWidth});
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      key: const ValueKey('roadNamePill'),
+      constraints: BoxConstraints(maxWidth: maxWidth),
+      child: Container(
+        height: roadNamePillHeight * unit,
+        padding: EdgeInsets.symmetric(horizontal: 7 * unit),
+        decoration: BoxDecoration(color: const Color(0x80141414), borderRadius: BorderRadius.circular(8 * unit)),
+        child: Center(
+          widthFactor: 1,
+          child: Text(
+            name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: const Color(0xB3FFFFFF), fontSize: 9 * unit, fontWeight: FontWeight.w600, height: 1.0),
+          ),
+        ),
+      ),
+    );
+  }
+}

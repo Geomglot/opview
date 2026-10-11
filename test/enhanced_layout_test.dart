@@ -463,6 +463,10 @@ void main() {
         ..roadName = 'Cam Fella Boulevard';
       await tester.pumpWidget(_app(state, _enhanced()));
       expect(find.text('Cam Fella Boulevard'), findsOneWidget);
+      // the small see-through pill, just under the speed
+      final pill = tester.getRect(find.byKey(const ValueKey('roadNamePill')));
+      expect(pill.height, closeTo(roadNamePillHeight * _unit, 0.01));
+      expect(pill.top, closeTo(_edge + (enhancedSpeedPillHeight + roadNameGap) * _unit, 0.01));
       await tester.pumpWidget(_app(state, _enhanced()..showRoadName = false));
       expect(find.text('Cam Fella Boulevard'), findsNothing);
     });

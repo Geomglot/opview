@@ -144,7 +144,7 @@ class EnhancedLayout extends StatelessWidget {
       final frame = frameFor(w, h);
 
       // bottom of the road name pill: the lead's distance tag stays below it
-      final hudBottom = edge + (enhancedSpeedPillHeight + 6 + 24) * unit;
+      final hudBottom = edge + (enhancedSpeedPillHeight + roadNameGap + roadNamePillHeight) * unit;
 
       return ClipRRect(
         borderRadius: radius,
@@ -237,10 +237,10 @@ class EnhancedLayout extends StatelessWidget {
             // road name under the speed
             if (st.showRoadName)
               Positioned(
-                top: edge + (enhancedSpeedPillHeight + 6) * unit,
+                top: edge + (enhancedSpeedPillHeight + roadNameGap) * unit,
                 left: 0,
                 right: 0,
-                child: Center(child: _roadName(st.roadName, unit, w)),
+                child: Center(child: RoadNamePill(name: st.roadName, unit: unit, maxWidth: w * 0.5)),
               ),
 
             // driver monitoring and model confidence, top left
@@ -329,33 +329,6 @@ Widget _infoPill(double unit, String label, String value, Color valueColor) {
   );
 }
 
-Widget _roadName(String name, double unit, double screenW) {
-  return ConstrainedBox(
-    constraints: BoxConstraints(maxWidth: screenW * 0.5),
-    child: Container(
-      height: 24 * unit,
-      padding: EdgeInsets.symmetric(horizontal: 10 * unit),
-      decoration: BoxDecoration(
-        color: _pillColor,
-        borderRadius: BorderRadius.circular(8 * unit),
-      ),
-      child: Center(
-        widthFactor: 1,
-        child: Text(
-          name,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: HudColors.whiteTranslucent,
-            fontSize: 13 * unit,
-            fontWeight: FontWeight.w600,
-            height: 1.0,
-          ),
-        ),
-      ),
-    ),
-  );
-}
 
 // -- steering readout --
 
