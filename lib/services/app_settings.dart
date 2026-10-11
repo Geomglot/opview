@@ -3,6 +3,7 @@
 
 import 'package:flutter/foundation.dart';
 import 'package:opview/selfdrive/ui/ui_state.dart';
+import 'package:opview/services/system_service.dart' as system;
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// clock on the driving display
@@ -41,6 +42,10 @@ const _layoutKey = 'onroad_layout';
 const _speedLimitKey = 'speed_limit_display';
 const _collapsedKey = 'detailed_collapsed_panels';
 const _roadNameKey = 'show_road_name';
+const _brightnessKey = 'screen_brightness';
+
+/// the dimmest the brightness slider goes: still readable at night
+const minBrightness = 0.05;
 
 class AppSettings extends ChangeNotifier {
   /// the clock is always shown, in 12 hour time; no longer a setting
@@ -51,6 +56,12 @@ class AppSettings extends ChangeNotifier {
   /// the road name pill, whatever the comma's own road name setting
   bool showRoadName = true;
 
+  /// this app's screen brightness while it is open, 0.05..1; null follows the head unit
+  double? brightness;
+
+  /// the last brightness set by hand, for the slider while Auto is on
+  double manualBrightness = 0.6;
+
   /// Detailed panels the driver has tapped shut, by name
   final Set<String> collapsedPanels = {};
 
@@ -59,6 +70,10 @@ class AppSettings extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     speedLimitDisplay = _byName(SpeedLimitDisplay.values, prefs.getString(_speedLimitKey), SpeedLimitDisplay.auto);
     showRoadName = prefs.getBool(_roadNameKey) ?? true;
+    final savedBrightness = prefs.getDouble(_brightnessKey);
+    brightness = savedBrightness == null || savedBrightness < 0 ? null : savedBrightness.clamp(minBrightness, 1.0).toDouble();
+    if (savedBrightness != null && savedBrightness >= 0) manualBrightness = brightness!;
+    system.setAppBrightness(brightness);
     collapsedPanels
       ..clear()
       ..addAll(prefs.getStringList(_collapsedKey) ?? const []);
@@ -73,6 +88,18 @@ class AppSettings extends ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_speedLimitKey, value.name);
+  }
+
+  /// [value] null: follow the head unit's brightness (Auto)
+  Future<void> setBrightness(double? value) async {
+    final v = value?.clamp(minBrightness, 1.0).toDouble();
+    if (v == brightness) return;
+    brightness = v;
+    if (v != null) manualBrightness = v;
+    notifyListeners();
+    system.setAppBrightness(v);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_brightnessKey, v ?? -1);
   }
 
   Future<void> setShowRoadName(bool value) async {

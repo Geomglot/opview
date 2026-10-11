@@ -68,3 +68,8 @@ android {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // FileProvider, to hand a downloaded update to Android's installer
+    implementation "androidx.core:core:1.13.1"
+}
