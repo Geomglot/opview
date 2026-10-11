@@ -32,7 +32,34 @@ jobs:
       # rendered against stored images that the layout changes in this fork do not match
       - run: flutter test --exclude-tags golden
 
-      - run: flutter build apk --release
+      # the permanent release key from the repository secrets, so every APK can install over the last one.
+      # Without the secrets (a fork, say) the APK is signed with a throwaway debug key
+      - name: Signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.OPVIEW_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.OPVIEW_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.OPVIEW_KEY_ALIAS }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::warning::no OPVIEW_KEYSTORE_BASE64 secret: signing with a throwaway debug key"
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/opview-release.jks"
+          printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
+            "$RUNNER_TEMP/opview-release.jks" "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEYSTORE_PASSWORD" > android/key.properties
+
+      # Android only installs an update with a higher build number: the commit count only goes up
+      - name: Build number
+        run: echo "BUILD_NUMBER=$(git rev-list --count HEAD)" >> "$GITHUB_ENV"
+
+      - name: Build APK
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          flutter build apk --release --build-name "$version" --build-number "$BUILD_NUMBER" \
+            --dart-define=OPVIEW_BUILD="$version"
+
+      - name: Signing certificate
+        run: keytool -printcert -jarfile build/app/outputs/flutter-apk/app-release.apk | grep -E "Owner|SHA256:"
 
       - name: Rename APK
         run: |

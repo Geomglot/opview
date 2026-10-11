@@ -50,3 +50,8 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# release signing key (kept in GitHub secrets, never committed)
+android/key.properties
+*.jks
+*.keystore

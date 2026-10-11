@@ -11,6 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # the build number is the commit count
 
       - uses: actions/setup-java@v5
         with:
@@ -25,7 +27,30 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze --no-fatal-infos
       - run: flutter test --exclude-tags golden
-      - run: flutter build apk --release --target-platform android-arm64
+      # the permanent release key from the repository secrets, so every APK can install over the last one.
+      # Without the secrets (a fork, say) the APK is signed with a throwaway debug key
+      - name: Signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.OPVIEW_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.OPVIEW_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.OPVIEW_KEY_ALIAS }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::warning::no OPVIEW_KEYSTORE_BASE64 secret: signing with a throwaway debug key"
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/opview-release.jks"
+          printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
+            "$RUNNER_TEMP/opview-release.jks" "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEYSTORE_PASSWORD" > android/key.properties
+
+      # Android only installs an update with a higher build number: the commit count only goes up
+      - name: Build number
+        run: echo "BUILD_NUMBER=$(git rev-list --count HEAD)" >> "$GITHUB_ENV"
+
+      - name: Build APK
+        run: |
+          flutter build apk --release --target-platform android-arm64 --build-number "$BUILD_NUMBER" \
+            --dart-define=OPVIEW_BUILD="${GITHUB_REF_NAME}-${GITHUB_SHA::7}"
 
       - uses: actions/upload-artifact@v7
         with:

@@ -4,6 +4,15 @@ plugins {
     id "dev.flutter.flutter-gradle-plugin"
 }
 
+// release signing key: android/key.properties (written by the GitHub workflows from repository secrets, never
+// committed). Without it the APK is signed with the throwaway debug key, and Android will not install it over a
+// copy signed with the release key
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.withInputStream { keystoreProperties.load(it) }
+}
+
 android {
     namespace = "org.dragonpilot.opview"
     // match dashy: explicit SDK versions for old headunit compat
@@ -37,9 +46,20 @@ android {
         }
     }
 
+    signingConfigs {
+        if (keystorePropertiesFile.exists()) {
+            release {
+                storeFile = file(keystoreProperties["storeFile"])
+                storePassword = keystoreProperties["storePassword"]
+                keyAlias = keystoreProperties["keyAlias"]
+                keyPassword = keystoreProperties["keyPassword"]
+            }
+        }
+    }
+
     buildTypes {
         release {
-            signingConfig = signingConfigs.debug
+            signingConfig = keystorePropertiesFile.exists() ? signingConfigs.release : signingConfigs.debug
         }
     }
 }
