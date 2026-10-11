@@ -7,6 +7,7 @@
 //   1. ClipRect -> ModelRenderer + HudRenderer + AlertRenderer
 //   2. EngagementBorder (on top of everything)
 
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
@@ -76,6 +77,37 @@ class _AugmentedRoadViewState extends State<AugmentedRoadView> {
   double _cachedScreenH = 0;
   FrameTransform? _cachedTransform;
 
+  // swipe between layouts: where the finger went down, and the name pill shown afterwards
+  double? _swipeStartX;
+  double _swipeDx = 0;
+  bool _pillShown = false;
+  Timer? _pillTimer;
+
+  @override
+  void dispose() {
+    _pillTimer?.cancel();
+    super.dispose();
+  }
+
+  /// a finished horizontal swipe: left for the next layout, right for the previous; no wrap.
+  /// The name pill shows either way, so a swipe at the end still gets an answer
+  void _onSwipeEnd(DragEndDetails details, double screenW, AppSettings settings) {
+    final start = _swipeStartX;
+    _swipeStartX = null;
+    if (start == null) return;
+    final v = details.primaryVelocity ?? 0;
+    final far = _swipeDx.abs() >= screenW * layoutSwipeMinFraction;
+    final flung = _swipeDx.abs() >= screenW * layoutSwipeFlingFraction && v.abs() >= layoutSwipeFlingVelocity;
+    if (!far && !flung) return;
+    final next = layoutAfterSwipe(settings.layout, towardsNext: _swipeDx < 0);
+    if (next != settings.layout) settings.setLayout(next);
+    _pillTimer?.cancel();
+    setState(() => _pillShown = true);
+    _pillTimer = Timer(layoutPillDuration, () {
+      if (mounted) setState(() => _pillShown = false);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -108,6 +140,21 @@ class _AugmentedRoadViewState extends State<AugmentedRoadView> {
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onLongPress: settings == null ? null : () => _openSettings(context, settings),
+            // a sideways swipe changes the layout; one starting at a screen edge is left to Android
+            onHorizontalDragStart: settings == null || !widget.uiState.isConnected
+                ? null
+                : (d) {
+                    final x = d.localPosition.dx;
+                    final nearEdge = x < layoutSwipeEdge || x > screenW - layoutSwipeEdge;
+                    _swipeStartX = nearEdge ? null : x;
+                    _swipeDx = 0;
+                  },
+            onHorizontalDragUpdate: settings == null || !widget.uiState.isConnected
+                ? null
+                : (d) => _swipeDx += d.primaryDelta ?? 0,
+            onHorizontalDragEnd: settings == null || !widget.uiState.isConnected
+                ? null
+                : (d) => _onSwipeEnd(d, screenW, settings),
             child: Stack(
             fit: StackFit.expand,
             children: [
@@ -180,6 +227,20 @@ class _AugmentedRoadViewState extends State<AugmentedRoadView> {
                   left: 0,
                   right: 0,
                   child: Center(child: DataPausedTag(scale: scale)),
+                ),
+
+              // the layout's name for a moment after a swipe
+              if (settings != null)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: Center(
+                      child: AnimatedOpacity(
+                        opacity: _pillShown ? 1 : 0,
+                        duration: const Duration(milliseconds: 220),
+                        child: LayoutSwitchPill(layout: layout, unit: enhancedUnit(Size(screenW, screenH))),
+                      ),
+                    ),
+                  ),
                 ),
 
               // layer 3: connecting overlay with rolling status log
@@ -486,6 +547,90 @@ class DataPausedTag extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// -- swipe between layouts --
+
+/// a swipe this share of the screen width changes the layout...
+const layoutSwipeMinFraction = 0.25;
+
+/// ...or a quick flick of at least this share, at this speed (logical px/s)
+const layoutSwipeFlingFraction = 0.1;
+const layoutSwipeFlingVelocity = 900.0;
+
+/// swipes starting this close to the left or right edge are Android's (back gesture)
+const layoutSwipeEdge = 28.0;
+
+/// how long the layout's name stays up
+const layoutPillDuration = Duration(milliseconds: 1100);
+
+/// the layout a swipe leads to: Classic, Enhanced, Detailed in order, stopping at the ends
+OnroadLayout layoutAfterSwipe(OnroadLayout current, {required bool towardsNext}) {
+  const order = OnroadLayout.values;
+  final i = order.indexOf(current) + (towardsNext ? 1 : -1);
+  return order[i.clamp(0, order.length - 1)];
+}
+
+/// the layout's name with arrows for the ways it can still go and a dot for each layout
+class LayoutSwitchPill extends StatelessWidget {
+  final OnroadLayout layout;
+  final double unit;  // comma four pixels
+
+  const LayoutSwitchPill({super.key, required this.layout, required this.unit});
+
+  @override
+  Widget build(BuildContext context) {
+    const order = OnroadLayout.values;
+    final i = order.indexOf(layout);
+    Widget arrow(String c, bool on) => Text(
+          c,
+          style: TextStyle(color: Colors.white.withValues(alpha: on ? 0.85 : 0.2), fontSize: 13 * unit, height: 1.0),
+        );
+    return Container(
+      key: const ValueKey('layoutSwitchPill'),
+      padding: EdgeInsets.fromLTRB(16 * unit, 9 * unit, 16 * unit, 8 * unit),
+      decoration: BoxDecoration(
+        color: const Color(0xE0101010),
+        borderRadius: BorderRadius.circular(14 * unit),
+        boxShadow: [BoxShadow(color: const Color(0x73000000), blurRadius: 20 * unit, offset: Offset(0, 4 * unit))],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              arrow('\u2039', i > 0),
+              SizedBox(width: 8 * unit),
+              Text(
+                onroadLayoutLabel(layout),
+                style: TextStyle(color: Colors.white, fontSize: 15 * unit, fontWeight: FontWeight.bold, height: 1.0),
+              ),
+              SizedBox(width: 8 * unit),
+              arrow('\u203A', i < order.length - 1),
+            ],
+          ),
+          SizedBox(height: 6 * unit),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var d = 0; d < order.length; d++) ...[
+                if (d > 0) SizedBox(width: 4 * unit),
+                Container(
+                  width: (d == i ? 14 : 5) * unit,
+                  height: 5 * unit,
+                  decoration: BoxDecoration(
+                    color: d == i ? Colors.white : Colors.white.withValues(alpha: 0.35),
+                    borderRadius: BorderRadius.circular(3 * unit),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
       ),
     );
   }
