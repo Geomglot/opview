@@ -89,6 +89,8 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          # Geomglot's releases are all pre-releases; the in-app updater looks at them too
+          prerelease: true
           body: |
             ## What's Changed
 

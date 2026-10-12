@@ -65,6 +65,19 @@ void main() {
       expect(u.status, UpdateStatus.upToDate);
     });
 
+    test('a list of releases: the newest with an APK, pre-releases included, drafts skipped', () async {
+      final list = [
+        {..._release('v0.1.2-rivian.3'), 'draft': true},
+        _release('v0.1.2-rivian.2', apk: false),
+        {..._release('v0.1.2-rivian.1'), 'prerelease': true},
+        _release('v0.1.1-comma3x.5'),
+      ];
+      final u = _updater('0.1.1-comma3x.5', () => http.Response(jsonEncode(list), 200));
+      await u.check();
+      expect(u.status, UpdateStatus.available);
+      expect(u.latest!.version, '0.1.2-rivian.1');
+    });
+
     test('GitHub unreachable or refusing: failed, with a reason', () async {
       final u = _updater('0.1.1-mici.5', () => http.Response('{}', 403));
       await u.check();

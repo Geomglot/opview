@@ -1,4 +1,4 @@
-// in-app updates: compare this build with the latest GitHub release of gerrylum/opview,
+// in-app updates: compare this build with the newest GitHub release of Geomglot/opview (pre-releases included),
 // download its APK, and hand it to Android's installer (which always asks to confirm).
 // Updates install over the app only when both are signed with the same release key
 
@@ -14,7 +14,8 @@ import 'package:opview/services/system_service.dart' as system;
 /// time with --dart-define=OPVIEW_BUILD; branch builds are "<branch>-<sha>"
 const installedVersion = String.fromEnvironment('OPVIEW_BUILD', defaultValue: 'dev build');
 
-const _latestReleaseUrl = 'https://api.github.com/repos/gerrylum/opview/releases/latest';
+// the newest releases first; /releases/latest would skip pre-releases, and all of Geomglot's are pre-releases
+const _latestReleaseUrl = 'https://api.github.com/repos/Geomglot/opview/releases?per_page=10';
 
 class ReleaseInfo {
   final String version;  // tag without the leading v
@@ -37,6 +38,18 @@ class ReleaseInfo {
       notes: json['body'] as String? ?? '',
     );
   }
+}
+
+/// the newest release with an APK: from a list of releases (newest first, drafts skipped), or a single release
+ReleaseInfo? newestRelease(Object? json) {
+  if (json is Map<String, dynamic>) return ReleaseInfo.fromJson(json);
+  if (json is! List) return null;
+  for (final r in json.whereType<Map<String, dynamic>>()) {
+    if (r['draft'] == true) continue;
+    final info = ReleaseInfo.fromJson(r);
+    if (info != null) return info;
+  }
+  return null;
 }
 
 /// the numbers in a version, in order: 0.1.1-mici.5 -> [0, 1, 1, 5]
@@ -100,7 +113,7 @@ class Updater extends ChangeNotifier {
         _set(UpdateStatus.failed, 'GitHub answered ${r.statusCode}');
         return;
       }
-      final release = ReleaseInfo.fromJson(jsonDecode(r.body) as Map<String, dynamic>);
+      final release = newestRelease(jsonDecode(r.body));
       if (release == null) {
         _set(UpdateStatus.failed, 'The latest release has no APK');
         return;

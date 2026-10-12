@@ -3,7 +3,7 @@ name: Branch APK
 # test and build an arm64 APK for work-in-progress branches (CI only runs for main)
 on:
   push:
-    branches: [layouts]
+    branches: [rivian-support]
   workflow_dispatch:
 
 jobs:
