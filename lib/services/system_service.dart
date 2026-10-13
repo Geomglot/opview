@@ -1,6 +1,7 @@
 // screen brightness and installing an app update, via MainActivity's system channel.
 // Best effort: in tests, and on platforms without the channel, these do nothing
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 const _channel = MethodChannel('org.dragonpilot.opview/system');
@@ -34,3 +35,26 @@ Future<void> openInstallSettings() async {
 
 /// hand a downloaded APK to Android's installer, which asks to confirm. Throws on failure
 Future<void> installApk(String path) => _channel.invokeMethod('installApk', path);
+
+/// true while Android shows the app as a picture-in-picture window
+final pipMode = ValueNotifier<bool>(false);
+
+/// follow MainActivity's picture-in-picture changes into [pipMode]
+void listenForPip() {
+  try {
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'pipChanged') pipMode.value = call.arguments == true;
+    });
+  } catch (_) {
+    // no channel: never in PiP
+  }
+}
+
+/// whether going Home shrinks the app to a floating window
+Future<void> setPipEnabled(bool enabled) async {
+  try {
+    await _channel.invokeMethod('setPipEnabled', enabled);
+  } catch (_) {
+    // no channel, or PiP not supported: nothing to turn on
+  }
+}

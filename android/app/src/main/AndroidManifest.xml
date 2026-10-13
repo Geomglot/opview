@@ -41,6 +41,8 @@
             android:screenOrientation="sensorLandscape"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
+            android:supportsPictureInPicture="true"
+            android:resizeableActivity="true"
             android:windowSoftInputMode="adjustResize">
             <meta-data
               android:name="io.flutter.embedding.android.NormalTheme"
