@@ -109,6 +109,13 @@ class MainActivity: FlutterActivity() {
                     window.attributes = attrs
                     result.success(null)
                 }
+                // where to save a downloaded update: the folder update_paths.xml shares with the installer
+                // (Dart's own temp folder is code_cache, which the FileProvider cannot share)
+                "updateDir" -> {
+                    val dir = File(cacheDir, "updates")
+                    dir.mkdirs()
+                    result.success(dir.absolutePath)
+                }
                 // hand a downloaded APK to Android's installer, which asks the user to confirm
                 "installApk" -> {
                     val path = call.arguments as? String

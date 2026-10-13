@@ -73,6 +73,46 @@ void main() {
     });
   });
 
+  group('downloading', () {
+    // the release JSON for the check, then [apk] for the download
+    Updater withApk(http.StreamedResponse Function() apk) => Updater(
+          installed: '0.1.1-mici.4',
+          client: () => MockClient.streaming((req, _) async {
+            if (req.url.host == 'api.github.com') {
+              final body = utf8.encode(jsonEncode(_release('v0.1.1-mici.5')));
+              return http.StreamedResponse(Stream.value(body), 200, contentLength: body.length);
+            }
+            return apk();
+          }),
+        );
+
+    test('a whole download moves on to the installer step', () async {
+      final u = withApk(() => http.StreamedResponse(Stream.value(List.filled(1000, 1)), 200, contentLength: 1000));
+      await u.check();
+      await u.downloadAndInstall();
+      // no Android here: install permission reads as not granted, so it asks for that
+      expect(u.received, 1000);
+      expect(u.status, UpdateStatus.available);
+      expect(u.message, contains('Install unknown apps'));
+    });
+
+    test('a download cut short says so, not that the installer failed', () async {
+      final u = withApk(() => http.StreamedResponse(Stream.value(List.filled(1000, 1)), 200, contentLength: 5000000));
+      await u.check();
+      await u.downloadAndInstall();
+      expect(u.status, UpdateStatus.failed);
+      expect(u.message, startsWith('Download incomplete'));
+    });
+
+    test('a refused download gives the status code', () async {
+      final u = withApk(() => http.StreamedResponse(const Stream.empty(), 404));
+      await u.check();
+      await u.downloadAndInstall();
+      expect(u.status, UpdateStatus.failed);
+      expect(u.message, contains('404'));
+    });
+  });
+
   group('settings', () {
     Future<AppSettings> open(WidgetTester tester, Updater updater) async {
       tester.view.physicalSize = const Size(1920, 1080);

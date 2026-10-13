@@ -33,6 +33,16 @@ Future<void> openInstallSettings() async {
   }
 }
 
+/// the folder to save a downloaded update in, which the installer can be given files from;
+/// null without the channel
+Future<String?> updateDir() async {
+  try {
+    return await _channel.invokeMethod<String>('updateDir');
+  } catch (_) {
+    return null;
+  }
+}
+
 /// hand a downloaded APK to Android's installer, which asks to confirm. Throws on failure
 Future<void> installApk(String path) => _channel.invokeMethod('installApk', path);
 
