@@ -358,7 +358,7 @@ class _SettingsBody extends StatelessWidget {
         action = _button('Update', u.status == UpdateStatus.installing ? null : u.downloadAndInstall,
             primary: true, key: const ValueKey('updateInstall'));
       case UpdateStatus.downloading:
-        final mb = (int b) => (b / 1048576).toStringAsFixed(1);
+        String mb(int b) => (b / 1048576).toStringAsFixed(1);
         final frac = u.total > 0 ? (u.received / u.total).clamp(0.0, 1.0).toDouble() : 0.0;
         title = Column(
           crossAxisAlignment: CrossAxisAlignment.start,

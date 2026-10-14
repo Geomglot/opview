@@ -20,6 +20,7 @@ import 'package:opview/selfdrive/ui/onroad/alert_renderer.dart';
 import 'package:opview/selfdrive/ui/onroad/clock_renderer.dart';
 import 'package:opview/selfdrive/ui/onroad/detailed/detailed_layout.dart';
 import 'package:opview/selfdrive/ui/onroad/enhanced/enhanced_layout.dart';
+import 'package:opview/selfdrive/ui/onroad/pip_layout.dart';
 import 'package:opview/selfdrive/ui/settings/settings_dialog.dart';
 import 'package:opview/services/app_settings.dart';
 
@@ -52,6 +53,9 @@ class AugmentedRoadView extends StatefulWidget {
   // address of the comma in use, for the settings menu
   final String? Function()? currentHost;
 
+  // Android has shrunk the app to a picture-in-picture window: show PipLayout, no gestures
+  final bool pip;
+
   const AugmentedRoadView({
     super.key,
     required this.uiState,
@@ -60,6 +64,7 @@ class AugmentedRoadView extends StatefulWidget {
     this.onSetManualHost,
     this.settings,
     this.currentHost,
+    this.pip = false,
   });
 
   @override
@@ -134,6 +139,18 @@ class _AugmentedRoadViewState extends State<AugmentedRoadView> {
         final layout = settings?.layout ?? OnroadLayout.classic;
         // read by every layout through UIState.showRoadName
         widget.uiState.roadNameEnabled = settings?.showRoadName ?? true;
+
+        if (widget.pip) {
+          return MediaQuery(
+            data: MediaQuery.of(context).copyWith(textScaler: TextScaler.noScaling),
+            child: PipLayout(
+              uiState: widget.uiState,
+              speedLimitDisplay: speedLimitDisplay,
+              frameFor: _fullScreenFrame,
+              videoBuilder: _videoLayer,
+            ),
+          );
+        }
 
         return MediaQuery(
           data: MediaQuery.of(context).copyWith(textScaler: TextScaler.noScaling),

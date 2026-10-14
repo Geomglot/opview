@@ -7,11 +7,12 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:http/http.dart' as http;
 import 'package:opview/services/system_service.dart' as system;
 
 /// this build's version: the release tag without its "v" (e.g. 0.1.1-mici.5), set at build
-/// time with --dart-define=OPVIEW_BUILD; branch builds are "<branch>-<sha>"
+/// time with --dart-define=OPVIEW_BUILD; branch builds are `<branch>-<sha>`
 const installedVersion = String.fromEnvironment('OPVIEW_BUILD', defaultValue: 'dev build');
 
 // the newest releases first; /releases/latest would skip pre-releases, and all of Geomglot's are pre-releases
@@ -136,8 +137,10 @@ class Updater extends ChangeNotifier {
     total = release.apkSize;
     _set(UpdateStatus.downloading);
     final client = _client();
+    var step = 'Download failed';
     try {
-      final dir = Directory('${Directory.systemTemp.path}/updates');  // the app's cache on Android
+      // Android: the cache folder shared with the installer; tests and other platforms: temp
+      final dir = Directory(await system.updateDir() ?? '${Directory.systemTemp.path}/updates');
       await dir.create(recursive: true);
       final file = File('${dir.path}/OPRivView-update.apk');
       final response = await client.send(http.Request('GET', Uri.parse(release.apkUrl)));
@@ -162,6 +165,11 @@ class Updater extends ChangeNotifier {
         _set(UpdateStatus.available);
         return;
       }
+      if (total > 0 && received < total) {
+        _set(UpdateStatus.failed, 'Download incomplete (${received ~/ 1048576} of ${total ~/ 1048576} MB)');
+        return;
+      }
+      step = 'Could not open the installer';
       _set(UpdateStatus.installing);
       if (!await system.canInstallApks()) {
         // Android asks once to allow installs from this app; after that, Update again
@@ -171,8 +179,10 @@ class Updater extends ChangeNotifier {
       }
       await system.installApk(file.path);
       _set(UpdateStatus.available, 'Confirm the install on screen');
+    } on PlatformException catch (e) {
+      _set(UpdateStatus.failed, '$step: ${e.message ?? e.code}');
     } catch (e) {
-      _set(UpdateStatus.failed, 'Download failed');
+      _set(UpdateStatus.failed, '$step: $e');
     } finally {
       client.close();
     }

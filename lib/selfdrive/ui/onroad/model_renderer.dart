@@ -104,6 +104,9 @@ class ModelRendererPainter extends CustomPainter {
   /// with [leadReticle]: the second lead car's box and tag in this one colour instead of the
   /// warning colours (openpilot only follows the first); null draws it like the first, without a tag
   final Color? secondLeadColor;
+
+  /// with [leadReticle]: draw the distance tags (picture-in-picture leaves them to its lead pill)
+  final bool leadTags;
   final int _version;
 
   ModelRendererPainter({
@@ -118,6 +121,7 @@ class ModelRendererPainter extends CustomPainter {
     this.maxPathDistance = maxDrawDistance,
     this.pathFadeStop = 0.5,
     this.secondLeadColor,
+    this.leadTags = true,
   }) : _version = state.version;
 
   // working data — rebuilt each paint
@@ -378,7 +382,7 @@ class ModelRendererPainter extends CustomPainter {
       }
     }
 
-    if (!tag) return;
+    if (!tag || !leadTags) return;
 
     // distance tag above the box; when the car is close it stops at leadTagMinTop
     // and so tucks into the top of the box
@@ -614,5 +618,6 @@ class ModelRendererPainter extends CustomPainter {
   @override
   bool shouldRepaint(ModelRendererPainter oldDelegate) =>
     oldDelegate._version != _version || !identical(oldDelegate.carSpaceTransform, carSpaceTransform) ||
-    oldDelegate.showLeads != showLeads || oldDelegate.secondLeadColor != secondLeadColor;
+    oldDelegate.showLeads != showLeads || oldDelegate.secondLeadColor != secondLeadColor ||
+    oldDelegate.leadTags != leadTags;
 }
