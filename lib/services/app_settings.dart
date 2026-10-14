@@ -43,6 +43,7 @@ const _speedLimitKey = 'speed_limit_display';
 const _collapsedKey = 'detailed_collapsed_panels';
 const _roadNameKey = 'show_road_name';
 const _brightnessKey = 'screen_brightness';
+const _pipKey = 'picture_in_picture';
 
 /// the dimmest the brightness slider goes: still readable at night
 const minBrightness = 0.05;
@@ -55,6 +56,9 @@ class AppSettings extends ChangeNotifier {
 
   /// the road name pill, whatever the comma's own road name setting
   bool showRoadName = true;
+
+  /// shrink to a floating window on Home while connected; off: Home stops the stream as before
+  bool pictureInPicture = true;
 
   /// this app's screen brightness while it is open, 0.05..1; null follows the head unit
   double? brightness;
@@ -70,6 +74,7 @@ class AppSettings extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     speedLimitDisplay = _byName(SpeedLimitDisplay.values, prefs.getString(_speedLimitKey), SpeedLimitDisplay.auto);
     showRoadName = prefs.getBool(_roadNameKey) ?? true;
+    pictureInPicture = prefs.getBool(_pipKey) ?? true;
     final savedBrightness = prefs.getDouble(_brightnessKey);
     brightness = savedBrightness == null || savedBrightness < 0 ? null : savedBrightness.clamp(minBrightness, 1.0).toDouble();
     if (savedBrightness != null && savedBrightness >= 0) manualBrightness = brightness!;
@@ -108,6 +113,14 @@ class AppSettings extends ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_roadNameKey, value);
+  }
+
+  Future<void> setPictureInPicture(bool value) async {
+    if (value == pictureInPicture) return;
+    pictureInPicture = value;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_pipKey, value);
   }
 
   /// open a collapsed Detailed panel, or collapse an open one
