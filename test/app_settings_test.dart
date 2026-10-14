@@ -88,6 +88,17 @@ void main() {
       expect(b.showRoadName, isFalse);
     });
 
+    test('picture-in-picture: on by default, can be turned off, remembered', () async {
+      SharedPreferences.setMockInitialValues({});
+      final a = AppSettings();
+      await a.load();
+      expect(a.pictureInPicture, isTrue);
+      await a.setPictureInPicture(false);
+      final b = AppSettings();
+      await b.load();
+      expect(b.pictureInPicture, isFalse);
+    });
+
     test('the road name follows the app setting, not the comma one', () {
       final st = UIState()
         ..roadName = 'Main St'
@@ -282,6 +293,22 @@ void main() {
       expect(find.text('24 hour'), findsNothing);
       expect(find.text('SPEED LIMIT'), findsOneWidget);
       expect(find.text('ROAD NAME'), findsOneWidget);
+    });
+
+    testWidgets('picture-in-picture can be turned off from the menu', (tester) async {
+      fullHd(tester);
+      SharedPreferences.setMockInitialValues({});
+      final settings = AppSettings();
+      await settings.load();
+      await tester.pumpWidget(MaterialApp(home: AugmentedRoadView(uiState: connected(), settings: settings)));
+      await tester.longPress(find.byType(AugmentedRoadView));
+      await tester.pumpAndSettle();
+      expect(find.text('PICTURE-IN-PICTURE'), findsOneWidget);
+      // the speed limit row has an Off too; picture-in-picture is the last one
+      await tester.ensureVisible(find.text('Off').last);
+      await tester.tap(find.text('Off').last);
+      await tester.pumpAndSettle();
+      expect(settings.pictureInPicture, isFalse);
     });
 
     testWidgets('long press opens settings and a choice takes effect', (tester) async {

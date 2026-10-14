@@ -23,11 +23,12 @@ class _OpviewAppState extends State<OpviewApp> with WidgetsBindingObserver {
   // the app went fully into the background (not just PiP or the notification shade)
   final _lifecycle = LifecycleReconnect();
 
-  // picture-in-picture is offered on Home only while there is something to show
+  // picture-in-picture is offered on Home only while there is something to show,
+  // and the driver has not turned it off in Settings
   bool? _pipOffered;
 
   void _updatePipOffer() {
-    final want = _uiState.isConnected;
+    final want = _uiState.isConnected && _settings.pictureInPicture;
     if (want == _pipOffered) return;
     _pipOffered = want;
     setPipEnabled(want);
@@ -43,12 +44,14 @@ class _OpviewAppState extends State<OpviewApp> with WidgetsBindingObserver {
     _settings.load();
     listenForPip();
     _uiState.addListener(_updatePipOffer);
+    _settings.addListener(_updatePipOffer);
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _uiState.removeListener(_updatePipOffer);
+    _settings.removeListener(_updatePipOffer);
     // async cleanup — best-effort, State.dispose() is sync
     _connectionManager.dispose();
     _uiState.dispose();
