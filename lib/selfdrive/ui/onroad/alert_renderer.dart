@@ -39,6 +39,14 @@ const _alertColors = {
   _statusCritical: Color(0xF1C92231),
 };
 
+/// how far above the bottom of the content a small or mid alert reaches, in comma 3X pixels;
+/// 0 with no alert, or a full alert (which covers the screen)
+double classicAlertTop(UIState st) {
+  if (st.alertSize == _sizeSmall) return _alertHeightSmall - _alertMargin;
+  if (st.alertSize == _sizeNone || st.alertSize == _sizeFull) return 0;
+  return _alertHeightMid - _alertMargin;
+}
+
 class AlertRenderer extends StatelessWidget {
   final UIState uiState;
   final double scale;

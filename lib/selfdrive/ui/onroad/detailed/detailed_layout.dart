@@ -19,7 +19,9 @@ import 'package:opview/common/transformations.dart';
 import 'package:opview/selfdrive/ui/ui_state.dart';
 import 'package:opview/selfdrive/ui/onroad/clock_renderer.dart';
 import 'package:opview/selfdrive/ui/onroad/enhanced/enhanced_layout.dart';
+import 'package:opview/selfdrive/ui/onroad/bottom_bar.dart';
 import 'package:opview/selfdrive/ui/onroad/exp_button.dart';
+import 'package:opview/selfdrive/ui/onroad/lane_centering.dart';
 import 'package:opview/selfdrive/ui/onroad/hud_renderer.dart';
 import 'package:opview/selfdrive/ui/onroad/model_renderer.dart';
 import 'package:opview/selfdrive/ui/onroad/throttled.dart';
@@ -115,6 +117,7 @@ class DetailedLayout extends StatelessWidget {
   final UIState uiState;
   final ClockMode clockMode;
   final SpeedLimitDisplay speedLimitDisplay;
+  final BottomBar bottomBar;
   final FrameTransform Function(double w, double h) frameFor;
   final Widget Function(FrameTransform frame) videoBuilder;
 
@@ -129,6 +132,7 @@ class DetailedLayout extends StatelessWidget {
     required this.uiState,
     required this.clockMode,
     this.speedLimitDisplay = SpeedLimitDisplay.auto,
+    this.bottomBar = BottomBar.torque,
     required this.frameFor,
     required this.videoBuilder,
     this.collapsedPanels = const {},
@@ -203,9 +207,7 @@ class DetailedLayout extends StatelessWidget {
             ),
             if (st.showBlindSpot && st.leftBlindspot) _glow(unit, left: true),
             if (st.showBlindSpot && st.rightBlindspot) _glow(unit, left: false),
-            CustomPaint(
-              painter: EnhancedTorqueBarPainter(value: st.torqueBarValue, status: st.status, unit: unit),
-            ),
+            BottomArc(uiState: st, choice: bottomBar, unit: unit),
 
             // top row: set speed | speed | speed limit
             Positioned(
@@ -613,6 +615,7 @@ class DetailedSteeringPanel extends StatelessWidget {
         ('Torque cmd', on ? '${(st.torqueOutput * 100).round()}%' : detailedNoValue, Colors.white),
         ('Driver torque', st.steeringTorque.toStringAsFixed(1), Colors.white),
         ('Lat accel', on ? formatAccelPair(st.latAccelWant, st.latAccelGot) : detailedNoValue, Colors.white),
+        if (st.laneCenteringAvailable) ...laneCenteringRows(st),
       ],
       footer: _trace(
         unit,
@@ -627,6 +630,33 @@ class DetailedSteeringPanel extends StatelessWidget {
       ),
     );
   }
+}
+
+/// the STEERING panel's lane centering rows, from the indicator's latched half second summary
+List<(String, String, Color)> laneCenteringRows(UIState st) {
+  final lc = st.laneCentering;
+  if (!lc.visible) {
+    return const [('Centering', detailedNoValue, Colors.white), ('Push', detailedNoValue, Colors.white)];
+  }
+  final state = switch (lc.shownState) {
+    LaneCenteringState.gated => 'no lines',
+    LaneCenteringState.holding => lc.shownSingleLine ? 'clear of line' : 'centered',
+    LaneCenteringState.correcting => lc.shownSingleLine ? 'one line' : 'correcting',
+  };
+  final String where;
+  if (lc.shownSingleLine) {
+    where = 'line ${lc.shownLineSide > 0 ? 'R' : 'L'}';
+  } else {
+    final (amount, unit) = lc.offsetParts(isMetric: st.isMetric);
+    where = amount.isEmpty ? (unit.isEmpty ? detailedNoValue : unit) : '$amount $unit';
+  }
+  final push = lc.shownState == LaneCenteringState.correcting
+      ? '${lc.shownPush >= 0 ? '▶' : '◀'} ${lc.pushText} m/s²'
+      : detailedNoValue;
+  return [
+    ('Centering', '$state · $where', lc.shownColor),
+    ('Push', push, lc.shownState == LaneCenteringState.correcting ? lc.shownColor : Colors.white),
+  ];
 }
 
 class DetailedDriverPanel extends StatelessWidget {

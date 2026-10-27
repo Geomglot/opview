@@ -7,6 +7,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:opview/selfdrive/ui/onroad/lane_centering.dart';
 
 // -- constants --
 
@@ -174,6 +175,7 @@ class UIState extends ChangeNotifier {
   int cruiseSpeedOffsetKph = 0;
   bool showTurnSignals = false;
   bool showBlindSpot = false;
+  bool laneCenteringEnabled = false;
 
   // selfdriveStateSP.mads + onroadEvents — sunnypilot border colours
   bool madsSeen = false;
@@ -217,6 +219,10 @@ class UIState extends ChangeNotifier {
   double accelCommand = 0.0;  // carControl.actuators.accel, m/s^2
   int _zeroTorqueCount = zeroTorqueHold;
   LateralMode? lateralMode;
+
+  // carControlSP.laneCentering — the lane centering indicator
+  bool laneCenteringSeen = false;
+  final laneCentering = LaneCenteringIndicator();
 
   // the last ten seconds of lateral and longitudinal acceleration, one sample per
   // modelV2 (about 20 a second), oldest first; for the Detailed layout's traces
@@ -448,6 +454,7 @@ class UIState extends ChangeNotifier {
     cruiseSpeedOffsetKph = (data['SPCruiseSpeedOffset'] as num?)?.toInt() ?? 0;
     showTurnSignals = data['ShowTurnSignals'] as bool? ?? false;
     showBlindSpot = data['BlindSpot'] as bool? ?? false;
+    laneCenteringEnabled = data['LaneCenteringEnabled'] as bool? ?? false;
     // car make and flags (carParams is only published every ~50 s)
     brand = data['CarBrand'] as String? ?? brand;
     carFlags = (data['CarFlags'] as num?)?.toInt() ?? carFlags;
@@ -525,6 +532,21 @@ class UIState extends ChangeNotifier {
     accelCommand = (data['actuators']?['accel'] as num?)?.toDouble() ?? 0.0;
     targetSteeringAngleDeg = (data['actuators']?['steeringAngleDeg'] as num?)?.toDouble() ?? 0.0;
   }
+
+  /// lane_centering_indicator.py: shown while lane centering is on and steering
+  void applyCarControlSP(Map<String, dynamic> data) {
+    final lc = data['laneCentering'];
+    if (lc is! Map<String, dynamic>) return;  // a branch without lane centering
+    laneCenteringSeen = true;
+    if (!(paramsSeen && laneCenteringEnabled && latActive)) {
+      laneCentering.hide();
+      return;
+    }
+    laneCentering.update(LaneCenteringSample.fromJson(lc), vEgo, clock());
+  }
+
+  /// lane centering is on and its data is arriving, whether or not it is steering now
+  bool get laneCenteringAvailable => laneCenteringSeen && paramsSeen && laneCenteringEnabled;
 
   /// lateral_mode.py: on an angle-capable Rivian while MADS steers, the car sends no CAN
   /// torque when it steers on its angle channel

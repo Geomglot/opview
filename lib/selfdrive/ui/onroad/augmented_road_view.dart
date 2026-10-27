@@ -17,6 +17,8 @@ import 'package:opview/selfdrive/ui/ui_state.dart';
 import 'package:opview/selfdrive/ui/onroad/model_renderer.dart';
 import 'package:opview/selfdrive/ui/onroad/hud_renderer.dart';
 import 'package:opview/selfdrive/ui/onroad/alert_renderer.dart';
+import 'package:opview/selfdrive/ui/onroad/bottom_bar.dart';
+import 'package:opview/selfdrive/ui/onroad/lane_centering.dart';
 import 'package:opview/selfdrive/ui/onroad/clock_renderer.dart';
 import 'package:opview/selfdrive/ui/onroad/detailed/detailed_layout.dart';
 import 'package:opview/selfdrive/ui/onroad/enhanced/enhanced_layout.dart';
@@ -89,6 +91,9 @@ class _AugmentedRoadViewState extends State<AugmentedRoadView> {
   bool _pillShown = false;
   Timer? _pillTimer;
 
+  // a tap on the bottom bar: its new choice is shown in the pill instead of the layout's name
+  bool _bottomBarPill = false;
+
   @override
   void dispose() {
     _pillTimer?.cancel();
@@ -107,8 +112,22 @@ class _AugmentedRoadViewState extends State<AugmentedRoadView> {
     if (!far && !flung) return;
     final next = layoutAfterSwipe(settings.layout, towardsNext: _swipeDx < 0);
     if (next != settings.layout) settings.setLayout(next);
+    _showPill(bottomBar: false);
+  }
+
+  /// a tap at the bottom centre moves the current layout's bottom bar to its next choice
+  void _onTapUp(TapUpDetails details, Size screen, AppSettings settings) {
+    if (!inBottomBarTapZone(details.localPosition, screen)) return;
+    settings.setBottomBar(settings.layout, nextBottomBar(settings.bottomBarFor(settings.layout)));
+    _showPill(bottomBar: true);
+  }
+
+  void _showPill({required bool bottomBar}) {
     _pillTimer?.cancel();
-    setState(() => _pillShown = true);
+    setState(() {
+      _pillShown = true;
+      _bottomBarPill = bottomBar;
+    });
     _pillTimer = Timer(layoutPillDuration, () {
       if (mounted) setState(() => _pillShown = false);
     });
@@ -137,6 +156,7 @@ class _AugmentedRoadViewState extends State<AugmentedRoadView> {
         final clockMode = settings?.clockMode ?? ClockMode.h12;
         final speedLimitDisplay = settings?.speedLimitDisplay ?? SpeedLimitDisplay.auto;
         final layout = settings?.layout ?? OnroadLayout.classic;
+        final bottomBar = settings?.bottomBarFor(layout) ?? defaultBottomBars[layout]!;
         // read by every layout through UIState.showRoadName
         widget.uiState.roadNameEnabled = settings?.showRoadName ?? true;
 
@@ -158,6 +178,9 @@ class _AugmentedRoadViewState extends State<AugmentedRoadView> {
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onLongPress: settings == null ? null : () => _openSettings(context, settings),
+            onTapUp: settings == null || !widget.uiState.isConnected
+                ? null
+                : (d) => _onTapUp(d, Size(screenW, screenH), settings),
             // a sideways swipe changes the layout; one starting at a screen edge is left to Android.
             // .down: the start position is where the finger went down, not where the drag was
             // recognised (a little further along), so the edge test sees the real starting point
@@ -184,6 +207,7 @@ class _AugmentedRoadViewState extends State<AugmentedRoadView> {
                   uiState: widget.uiState,
                   clockMode: clockMode,
                   speedLimitDisplay: speedLimitDisplay,
+                  bottomBar: bottomBar,
                   collapsedPanels: settings?.collapsedPanels ?? const <String>{},
                   onTogglePanel: settings?.togglePanel,
                   frameFor: _fullScreenFrame,
@@ -194,6 +218,7 @@ class _AugmentedRoadViewState extends State<AugmentedRoadView> {
                   uiState: widget.uiState,
                   clockMode: clockMode,
                   speedLimitDisplay: speedLimitDisplay,
+                  bottomBar: bottomBar,
                   frameFor: _fullScreenFrame,
                   videoBuilder: _videoLayer,
                 )
@@ -223,6 +248,7 @@ class _AugmentedRoadViewState extends State<AugmentedRoadView> {
                       children: [
                         HudRenderer(uiState: widget.uiState, scale: scale, speedLimitDisplay: speedLimitDisplay),
                         if (clockMode != ClockMode.off) ClockRenderer(mode: clockMode, scale: scale),
+                        ..._classicBottomBar(bottomBar, scale, Size(screenW, screenH)),
                         AlertRenderer(uiState: widget.uiState, scale: scale),
                       ],
                     ),
@@ -258,7 +284,9 @@ class _AugmentedRoadViewState extends State<AugmentedRoadView> {
                       child: AnimatedOpacity(
                         opacity: _pillShown ? 1 : 0,
                         duration: const Duration(milliseconds: 220),
-                        child: LayoutSwitchPill(layout: layout, unit: enhancedUnit(Size(screenW, screenH))),
+                        child: _bottomBarPill
+                            ? BottomBarPill(choice: bottomBar, unit: enhancedUnit(Size(screenW, screenH)))
+                            : LayoutSwitchPill(layout: layout, unit: enhancedUnit(Size(screenW, screenH))),
                       ),
                     ),
                   ),
@@ -367,6 +395,27 @@ class _AugmentedRoadViewState extends State<AugmentedRoadView> {
 
   /// video layer: the camera image zoomed and shifted exactly as the overlay is,
   /// or black placeholder
+  /// Classic's bottom bar, inside the border: the torque bar as in Enhanced, or lane centering's
+  /// full form at the bottom centre, moved up above a small or mid alert while one is showing
+  List<Widget> _classicBottomBar(BottomBar choice, double scale, Size screen) {
+    final st = widget.uiState;
+    switch (shownBottomBar(choice, st)) {
+      case BottomBarShown.torque:
+        return [BottomArc(uiState: st, choice: choice, unit: enhancedUnit(screen))];
+      case BottomBarShown.laneCentering:
+        return [
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: (classicAlertTop(st) + classicLaneCenteringGap) * scale,
+            child: Center(child: LaneCenteringPill(lc: st.laneCentering, isMetric: st.isMetric, scale: scale)),
+          ),
+        ];
+      case BottomBarShown.none:
+        return const [];
+    }
+  }
+
   Widget _videoLayer(FrameTransform frame) {
     if (widget.videoRenderer == null) {
       return Container(color: Colors.black);
@@ -584,6 +633,10 @@ const layoutSwipeFlingVelocity = 900.0;
 
 /// swipes starting this close to the left or right edge are Android's (back gesture)
 const layoutSwipeEdge = 28.0;
+
+/// Classic: from the bottom of the content (or the top of an alert) to the lane centering
+/// indicator, in comma 3X pixels
+const classicLaneCenteringGap = 16.0;
 
 /// how long the layout's name stays up
 const layoutPillDuration = Duration(milliseconds: 1100);

@@ -7,7 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:opview/data/models.dart';
 
 // everything the stock UI subscribes to, plus the sunnypilot extras
-// (speed limit sign, road name, Rivian angle/torque wheel tint, MADS border colours)
+// (speed limit sign, road name, Rivian angle/torque wheel tint, MADS border colours, lane centering)
 const bridgeServicesOut = [
   'carState',
   'selfdriveState',
@@ -25,6 +25,7 @@ const bridgeServicesOut = [
   'selfdriveStateSP',
   'onroadEvents',
   'driverMonitoringState',  // Enhanced layout: driver monitoring icon
+  'carControlSP',  // lane centering indicator
 ];
 
 // names used before openpilot renamed these services

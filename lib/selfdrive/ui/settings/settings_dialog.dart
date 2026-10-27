@@ -128,6 +128,13 @@ class _SettingsBody extends StatelessWidget {
                 children: [
                   _label('LAYOUT'),
                   _choices<OnroadLayout>(OnroadLayout.values, settings.layout, onroadLayoutLabel, settings.setLayout),
+                  _label('BOTTOM BAR · ${onroadLayoutLabel(settings.layout).toUpperCase()}'),
+                  _choices<BottomBar>(
+                    BottomBar.values,
+                    settings.bottomBarFor(settings.layout),
+                    bottomBarLabel,
+                    (v) => settings.setBottomBar(settings.layout, v),
+                  ),
                   _label('SPEED LIMIT'),
                   _choices<SpeedLimitDisplay>(
                     SpeedLimitDisplay.values,

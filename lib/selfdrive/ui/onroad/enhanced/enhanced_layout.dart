@@ -28,6 +28,8 @@ import 'package:opview/selfdrive/ui/onroad/hud_renderer.dart';
 import 'package:opview/selfdrive/ui/onroad/model_renderer.dart';
 import 'package:opview/selfdrive/ui/onroad/throttled.dart';
 import 'package:opview/selfdrive/ui/onroad/top_row.dart';
+import 'package:opview/selfdrive/ui/onroad/bottom_bar.dart';
+import 'package:opview/selfdrive/ui/onroad/lane_centering.dart';
 import 'package:opview/services/app_settings.dart';
 
 // -- sizes, in comma four pixels --
@@ -52,8 +54,8 @@ const enhancedPathDistance = 150.0;  // metres; stock 100
 const enhancedPathFadeStop = 0.65;   // stock 0.5
 
 // torque bar (mici torque_bar.py uses a span of 12.7; shortened to clear the readouts)
-const _torqueAngleSpanDeg = 8.0;
-const _torqueRadius = 1200.0;
+const enhancedTorqueAngleSpanDeg = 8.0;
+const enhancedTorqueRadius = 1200.0;
 
 // alert sizes and severities, as in cereal
 const _alertSizeNone = 0;
@@ -118,6 +120,7 @@ class EnhancedLayout extends StatelessWidget {
   final UIState uiState;
   final ClockMode clockMode;
   final SpeedLimitDisplay speedLimitDisplay;
+  final BottomBar bottomBar;
 
   /// where the camera image goes and the matching overlay transform, for the whole
   /// screen; the same framing as the Classic layout
@@ -129,6 +132,7 @@ class EnhancedLayout extends StatelessWidget {
     required this.uiState,
     required this.clockMode,
     this.speedLimitDisplay = SpeedLimitDisplay.auto,
+    this.bottomBar = BottomBar.torque,
     required this.frameFor,
     required this.videoBuilder,
   });
@@ -221,9 +225,16 @@ class EnhancedLayout extends StatelessWidget {
                 ),
               ),
 
-            CustomPaint(
-              painter: EnhancedTorqueBarPainter(value: st.torqueBarValue, status: st.status, unit: unit),
-            ),
+            BottomArc(uiState: st, choice: bottomBar, unit: unit),
+            // lane centering's figures, between the arc and the alert card
+            if (shownBottomBar(bottomBar, st) == BottomBarShown.laneCentering)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: bottomArcBottom(unit) + (LaneCenteringArcPainter.thickness + 4) * unit,
+                height: 11 * unit,
+                child: Center(child: LaneCenteringCaption(lc: st.laneCentering, isMetric: st.isMetric, unit: unit)),
+              ),
 
             // top row: set speed | speed | speed limit, with the speed centred
             Positioned(
@@ -708,13 +719,13 @@ class EnhancedTorqueBarPainter extends CustomPainter {
     final mag = value.abs();
     final offset = (_interp(mag, 0.5, 1, 22, 26) + enhancedBorderWidth) * unit;
     final thickness = _interp(mag, 0.5, 1, 14, 56) * unit;
-    final radius = _torqueRadius * unit;
+    final radius = enhancedTorqueRadius * unit;
     final midR = radius + thickness / 2;
     final center = Offset(size.width / 2, size.height + radius - offset);
     final arc = Rect.fromCircle(center: center, radius: midR);
 
     const top = -pi / 2;
-    const halfSpan = _torqueAngleSpanDeg / 2 * pi / 180;
+    const halfSpan = enhancedTorqueAngleSpanDeg / 2 * pi / 180;
 
     final paint = Paint()
       ..style = PaintingStyle.stroke

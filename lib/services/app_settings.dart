@@ -35,6 +35,33 @@ String onroadLayoutLabel(OnroadLayout layout) {
   }
 }
 
+/// what sits at the bottom centre of a layout. Auto: lane centering while it is turned on in
+/// the comma's settings, the torque bar otherwise
+enum BottomBar { torque, laneCentering, auto, off }
+
+String bottomBarLabel(BottomBar b) {
+  switch (b) {
+    case BottomBar.torque:
+      return 'Torque';
+    case BottomBar.laneCentering:
+      return 'Lane centering';
+    case BottomBar.auto:
+      return 'Auto';
+    case BottomBar.off:
+      return 'Off';
+  }
+}
+
+/// what each layout showed before the choice existed: Classic had no torque bar
+const defaultBottomBars = {
+  OnroadLayout.classic: BottomBar.off,
+  OnroadLayout.enhanced: BottomBar.torque,
+  OnroadLayout.detailed: BottomBar.torque,
+};
+
+/// the next choice for a tap on the bottom bar, wrapping round
+BottomBar nextBottomBar(BottomBar b) => BottomBar.values[(b.index + 1) % BottomBar.values.length];
+
 /// what the Enhanced layout was saved as before it was renamed
 const _legacyLayoutNames = {'miciExtended': OnroadLayout.enhanced};
 
@@ -44,6 +71,7 @@ const _collapsedKey = 'detailed_collapsed_panels';
 const _roadNameKey = 'show_road_name';
 const _brightnessKey = 'screen_brightness';
 const _pipKey = 'picture_in_picture';
+String _bottomBarKey(OnroadLayout layout) => 'bottom_bar_${layout.name}';
 
 /// the dimmest the brightness slider goes: still readable at night
 const minBrightness = 0.05;
@@ -66,6 +94,11 @@ class AppSettings extends ChangeNotifier {
   /// the last brightness set by hand, for the slider while Auto is on
   double manualBrightness = 0.6;
 
+  /// the bottom bar choice for each layout
+  final Map<OnroadLayout, BottomBar> bottomBars = Map.of(defaultBottomBars);
+
+  BottomBar bottomBarFor(OnroadLayout layout) => bottomBars[layout] ?? defaultBottomBars[layout]!;
+
   /// Detailed panels the driver has tapped shut, by name
   final Set<String> collapsedPanels = {};
 
@@ -82,6 +115,9 @@ class AppSettings extends ChangeNotifier {
     collapsedPanels
       ..clear()
       ..addAll(prefs.getStringList(_collapsedKey) ?? const []);
+    for (final l in OnroadLayout.values) {
+      bottomBars[l] = _byName(BottomBar.values, prefs.getString(_bottomBarKey(l)), defaultBottomBars[l]!);
+    }
     final savedLayout = prefs.getString(_layoutKey);
     layout = _legacyLayoutNames[savedLayout] ?? _byName(OnroadLayout.values, savedLayout, OnroadLayout.classic);
     notifyListeners();
@@ -129,6 +165,14 @@ class AppSettings extends ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(_collapsedKey, collapsedPanels.toList()..sort());
+  }
+
+  Future<void> setBottomBar(OnroadLayout layout, BottomBar value) async {
+    if (value == bottomBarFor(layout)) return;
+    bottomBars[layout] = value;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_bottomBarKey(layout), value.name);
   }
 
   Future<void> setLayout(OnroadLayout value) async {
