@@ -157,8 +157,33 @@ class _SettingsBody extends StatelessWidget {
                 children: [
                   _label('COMMA DEVICE'),
                   _deviceRow(),
-                  _label('ROAD NAME'),
-                  _choices<bool>(const [true, false], settings.showRoadName, (v) => v ? 'Show' : 'Hide', settings.setShowRoadName),
+                  // two short choices side by side, so the menu still fits without scrolling
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _label('ROAD NAME'),
+                            _choices<bool>(const [true, false], settings.showRoadName, (v) => v ? 'Show' : 'Hide',
+                                settings.setShowRoadName),
+                          ],
+                        ),
+                      ),
+                      SizedBox(width: 8 * unit),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _label('CLOCK'),
+                            _choices<bool>(const [false, true], settings.clockMode == ClockMode.h24,
+                                (v) => v ? '24 hr' : '12 hr', settings.setClock24Hour),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                   _label('PICTURE-IN-PICTURE'),
                   _choices<bool>(const [true, false], settings.pictureInPicture, (v) => v ? 'On' : 'Off',
                       settings.setPictureInPicture),

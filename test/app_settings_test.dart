@@ -49,6 +49,20 @@ void main() {
       expect(s.clockMode, ClockMode.h12);
     });
 
+    test('saves and reloads 24 hour time', () async {
+      SharedPreferences.setMockInitialValues({});
+      final a = AppSettings();
+      await a.setClock24Hour(true);
+      expect(a.clockMode, ClockMode.h24);
+      final b = AppSettings();
+      await b.load();
+      expect(b.clockMode, ClockMode.h24);
+      await b.setClock24Hour(false);
+      final c = AppSettings();
+      await c.load();
+      expect(c.clockMode, ClockMode.h12);
+    });
+
     test('saves and reloads the speed limit choice', () async {
       SharedPreferences.setMockInitialValues({});
       final a = AppSettings();
@@ -166,7 +180,7 @@ void main() {
       expect(OnroadLayout.values.map(onroadLayoutLabel).toList(), ['Classic', 'Enhanced', 'Detailed']);
     });
 
-    Future<void> open(WidgetTester tester, {String? host, bool manual = false, VoidCallback? onChange}) async {
+    Future<AppSettings> open(WidgetTester tester, {String? host, bool manual = false, VoidCallback? onChange}) async {
       tester.view.physicalSize = const Size(1920, 1080);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -186,7 +200,19 @@ void main() {
       ));
       await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
+      return settings;
     }
+
+    testWidgets('the clock choice switches between 12 and 24 hour time', (tester) async {
+      final settings = await open(tester);
+      expect(find.text('CLOCK'), findsOneWidget);
+      await tester.tap(find.text('24 hr'));
+      await tester.pumpAndSettle();
+      expect(settings.clockMode, ClockMode.h24);
+      await tester.tap(find.text('12 hr'));
+      await tester.pumpAndSettle();
+      expect(settings.clockMode, ClockMode.h12);
+    });
 
     testWidgets('shows the comma address, how it was found, and the build', (tester) async {
       await open(tester, host: '192.168.1.50');
@@ -284,13 +310,13 @@ void main() {
       expect(tester.widget<ClockRenderer>(find.byType(ClockRenderer)).mode, ClockMode.h12);
     });
 
-    testWidgets('the menu has no clock setting', (tester) async {
+    testWidgets('the menu offers 12 or 24 hour time, but no way to hide the clock', (tester) async {
       fullHd(tester);
       await tester.pumpWidget(MaterialApp(home: AugmentedRoadView(uiState: connected(), settings: AppSettings())));
       await tester.longPress(find.byType(AugmentedRoadView));
       await tester.pumpAndSettle();
-      expect(find.text('CLOCK'), findsNothing);
-      expect(find.text('24 hour'), findsNothing);
+      expect(find.text('CLOCK'), findsOneWidget);
+      expect(find.text('24 hr'), findsOneWidget);
       expect(find.text('SPEED LIMIT'), findsOneWidget);
       expect(find.text('ROAD NAME'), findsOneWidget);
     });

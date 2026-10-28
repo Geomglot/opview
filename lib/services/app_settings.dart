@@ -71,13 +71,15 @@ const _collapsedKey = 'detailed_collapsed_panels';
 const _roadNameKey = 'show_road_name';
 const _brightnessKey = 'screen_brightness';
 const _pipKey = 'picture_in_picture';
+// a new key: 'clock_mode', from before the clock was always shown, could still say off
+const _clock24Key = 'clock_24_hour';
 String _bottomBarKey(OnroadLayout layout) => 'bottom_bar_${layout.name}';
 
 /// the dimmest the brightness slider goes: still readable at night
 const minBrightness = 0.05;
 
 class AppSettings extends ChangeNotifier {
-  /// the clock is always shown, in 12 hour time; no longer a setting
+  /// the clock is always shown; this picks 12 or 24 hour time
   ClockMode clockMode = ClockMode.h12;
   OnroadLayout layout = OnroadLayout.classic;
   SpeedLimitDisplay speedLimitDisplay = SpeedLimitDisplay.auto;
@@ -108,6 +110,7 @@ class AppSettings extends ChangeNotifier {
     speedLimitDisplay = _byName(SpeedLimitDisplay.values, prefs.getString(_speedLimitKey), SpeedLimitDisplay.auto);
     showRoadName = prefs.getBool(_roadNameKey) ?? true;
     pictureInPicture = prefs.getBool(_pipKey) ?? true;
+    clockMode = (prefs.getBool(_clock24Key) ?? false) ? ClockMode.h24 : ClockMode.h12;
     final savedBrightness = prefs.getDouble(_brightnessKey);
     brightness = savedBrightness == null || savedBrightness < 0 ? null : savedBrightness.clamp(minBrightness, 1.0).toDouble();
     if (savedBrightness != null && savedBrightness >= 0) manualBrightness = brightness!;
@@ -121,6 +124,16 @@ class AppSettings extends ChangeNotifier {
     final savedLayout = prefs.getString(_layoutKey);
     layout = _legacyLayoutNames[savedLayout] ?? _byName(OnroadLayout.values, savedLayout, OnroadLayout.classic);
     notifyListeners();
+  }
+
+  /// 12 or 24 hour time for the clock
+  Future<void> setClock24Hour(bool value) async {
+    final mode = value ? ClockMode.h24 : ClockMode.h12;
+    if (mode == clockMode) return;
+    clockMode = mode;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_clock24Key, value);
   }
 
   Future<void> setSpeedLimitDisplay(SpeedLimitDisplay value) async {

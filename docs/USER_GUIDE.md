@@ -164,6 +164,7 @@ Press and hold anywhere on the driving screen.
 | **Brightness** | Auto follows the device's own setting; a level set here applies while OPRivView is open |
 | **Comma device** | The comma's address, found automatically or entered by hand with **Change** |
 | **Road name** | Show or hide the road name, whatever the comma's own setting |
+| **Clock** | 12 hr or 24 hr time for the clock shown in every layout |
 | **Picture-in-picture** | On: when you leave OPRivView, a small floating view stays on screen (where the device supports it) |
 | **OPRivView updates** | Checks for, downloads and installs new releases |
 
