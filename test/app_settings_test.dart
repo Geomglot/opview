@@ -310,6 +310,32 @@ void main() {
       expect(tester.widget<ClockRenderer>(find.byType(ClockRenderer)).mode, ClockMode.h12);
     });
 
+    for (final (layout, clockKey) in [
+      (OnroadLayout.classic, 'classicClock'),
+      (OnroadLayout.enhanced, 'enhancedClock'),
+      (OnroadLayout.detailed, 'detailedClock'),
+    ]) {
+      testWidgets('${onroadLayoutLabel(layout)}: tapping the clock switches 12 and 24 hour time', (tester) async {
+        fullHd(tester);
+        SharedPreferences.setMockInitialValues({});
+        final settings = AppSettings()..layout = layout;
+        await tester.pumpWidget(MaterialApp(
+          home: ListenableBuilder(
+            listenable: settings,
+            builder: (context, _) => AugmentedRoadView(uiState: connected(), settings: settings),
+          ),
+        ));
+        await tester.tap(find.byKey(ValueKey(clockKey)));
+        await tester.pump();
+        expect(settings.clockMode, ClockMode.h24);
+        expect(find.byType(Dialog), findsNothing, reason: 'a tap is not a long press');
+        await tester.tap(find.byKey(ValueKey(clockKey)));
+        await tester.pump();
+        expect(settings.clockMode, ClockMode.h12);
+        expect(settings.bottomBarFor(layout), defaultBottomBars[layout], reason: 'the bottom bar is left alone');
+      });
+    }
+
     testWidgets('the menu offers 12 or 24 hour time, but no way to hide the clock', (tester) async {
       fullHd(tester);
       await tester.pumpWidget(MaterialApp(home: AugmentedRoadView(uiState: connected(), settings: AppSettings())));

@@ -122,6 +122,9 @@ class EnhancedLayout extends StatelessWidget {
   final SpeedLimitDisplay speedLimitDisplay;
   final BottomBar bottomBar;
 
+  /// a tap on the clock: switches between 12 and 24 hour time
+  final VoidCallback? onClockTap;
+
   /// where the camera image goes and the matching overlay transform, for the whole
   /// screen; the same framing as the Classic layout
   final FrameTransform Function(double w, double h) frameFor;
@@ -133,6 +136,7 @@ class EnhancedLayout extends StatelessWidget {
     required this.clockMode,
     this.speedLimitDisplay = SpeedLimitDisplay.auto,
     this.bottomBar = BottomBar.torque,
+    this.onClockTap,
     required this.frameFor,
     required this.videoBuilder,
   });
@@ -262,7 +266,11 @@ class EnhancedLayout extends StatelessWidget {
               Positioned(
                 right: edge,
                 top: edge,
-                child: EnhancedCornerClock(unit: unit, clockMode: clockMode),
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: onClockTap,
+                  child: EnhancedCornerClock(unit: unit, clockMode: clockMode),
+                ),
               ),
 
             // steering readout, bottom left

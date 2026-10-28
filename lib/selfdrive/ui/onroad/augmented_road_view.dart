@@ -157,6 +157,8 @@ class _AugmentedRoadViewState extends State<AugmentedRoadView> {
         final speedLimitDisplay = settings?.speedLimitDisplay ?? SpeedLimitDisplay.auto;
         final layout = settings?.layout ?? OnroadLayout.classic;
         final bottomBar = settings?.bottomBarFor(layout) ?? defaultBottomBars[layout]!;
+        // a tap on the clock switches between 12 and 24 hour time
+        final onClockTap = settings == null ? null : () => settings.setClock24Hour(settings.clockMode != ClockMode.h24);
         // read by every layout through UIState.showRoadName
         widget.uiState.roadNameEnabled = settings?.showRoadName ?? true;
 
@@ -210,6 +212,7 @@ class _AugmentedRoadViewState extends State<AugmentedRoadView> {
                   bottomBar: bottomBar,
                   collapsedPanels: settings?.collapsedPanels ?? const <String>{},
                   onTogglePanel: settings?.togglePanel,
+                  onClockTap: onClockTap,
                   frameFor: _fullScreenFrame,
                   videoBuilder: _videoLayer,
                 )
@@ -219,6 +222,7 @@ class _AugmentedRoadViewState extends State<AugmentedRoadView> {
                   clockMode: clockMode,
                   speedLimitDisplay: speedLimitDisplay,
                   bottomBar: bottomBar,
+                  onClockTap: onClockTap,
                   frameFor: _fullScreenFrame,
                   videoBuilder: _videoLayer,
                 )
@@ -247,7 +251,7 @@ class _AugmentedRoadViewState extends State<AugmentedRoadView> {
                       fit: StackFit.expand,
                       children: [
                         HudRenderer(uiState: widget.uiState, scale: scale, speedLimitDisplay: speedLimitDisplay),
-                        if (clockMode != ClockMode.off) ClockRenderer(mode: clockMode, scale: scale),
+                        if (clockMode != ClockMode.off) ClockRenderer(mode: clockMode, scale: scale, onTap: onClockTap),
                         ..._classicBottomBar(bottomBar, scale, Size(screenW, screenH)),
                         AlertRenderer(uiState: widget.uiState, scale: scale),
                       ],
@@ -256,12 +260,14 @@ class _AugmentedRoadViewState extends State<AugmentedRoadView> {
                 ),
               ),
 
-              // layer 2: engagement border — always visible
-              CustomPaint(
-                size: Size(screenW, screenH),
-                painter: _EngagementBorderPainter(
-                  status: widget.uiState.status,
-                  borderSize: borderSize,
+              // layer 2: engagement border, always visible; drawn only, so taps reach the clock below
+              IgnorePointer(
+                child: CustomPaint(
+                  size: Size(screenW, screenH),
+                  painter: _EngagementBorderPainter(
+                    status: widget.uiState.status,
+                    borderSize: borderSize,
+                  ),
                 ),
               ),
               ],

@@ -32,6 +32,7 @@ and Rivian additions. No 3D library is needed; all projection is 3x3 matrix math
     lead and second lead) and the comma's health.
 - **Bottom bar, per layout:** the torque bar, the lane centering indicator, Auto, or nothing. Tap the
   bottom center of the screen to step through them.
+- **Clock** in every layout; tap it to switch between 12 and 24 hour time.
 - **Lane centering indicator** for Geomglot's sunnypilot build: how hard and which way it is pushing,
   the distance off center (metric or imperial, following the comma), and One-Line Mode.
 - **Settings** (press and hold): layout, bottom bar, speed limit, brightness, comma address, road

@@ -127,6 +127,9 @@ class DetailedLayout extends StatelessWidget {
   /// called with a panel's name when it is tapped
   final void Function(String name)? onTogglePanel;
 
+  /// a tap on the clock: switches between 12 and 24 hour time
+  final VoidCallback? onClockTap;
+
   const DetailedLayout({
     super.key,
     required this.uiState,
@@ -137,6 +140,7 @@ class DetailedLayout extends StatelessWidget {
     required this.videoBuilder,
     this.collapsedPanels = const {},
     this.onTogglePanel,
+    this.onClockTap,
   });
 
   @override
@@ -236,7 +240,7 @@ class DetailedLayout extends StatelessWidget {
               // readouts refresh about 5 times a second, the camera and path 20
               child: ThrottledByVersion(
                 state: st,
-                builder: (_) => DetailedDeviceGrid(uiState: st, unit: unit, clockMode: clockMode),
+                builder: (_) => DetailedDeviceGrid(uiState: st, unit: unit, clockMode: clockMode, onClockTap: onClockTap),
               ),
             ),
 
@@ -789,8 +793,15 @@ class DetailedDeviceGrid extends StatelessWidget {
   final UIState uiState;
   final double unit;
   final ClockMode clockMode;
+  final VoidCallback? onClockTap;
 
-  const DetailedDeviceGrid({super.key, required this.uiState, required this.unit, required this.clockMode});
+  const DetailedDeviceGrid({
+    super.key,
+    required this.uiState,
+    required this.unit,
+    required this.clockMode,
+    this.onClockTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -839,16 +850,20 @@ class DetailedDeviceGrid extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (clockMode != ClockMode.off) ...[
-          Container(
-            key: const ValueKey('detailedClock'),
-            height: 13 * unit,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(color: _chipColor, borderRadius: BorderRadius.circular(4 * unit)),
-            child: ClockText(
-              mode: clockMode,
-              style: TextStyle(color: Colors.white, fontSize: 9 * unit, fontWeight: FontWeight.bold, height: 1.0),
-              suffixStyle: TextStyle(color: _labelColor, fontSize: 5 * unit, fontWeight: FontWeight.w600, height: 1.0),
-              suffixGap: 2 * unit,
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onClockTap,
+            child: Container(
+              key: const ValueKey('detailedClock'),
+              height: 13 * unit,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(color: _chipColor, borderRadius: BorderRadius.circular(4 * unit)),
+              child: ClockText(
+                mode: clockMode,
+                style: TextStyle(color: Colors.white, fontSize: 9 * unit, fontWeight: FontWeight.bold, height: 1.0),
+                suffixStyle: TextStyle(color: _labelColor, fontSize: 5 * unit, fontWeight: FontWeight.w600, height: 1.0),
+                suffixGap: 2 * unit,
+              ),
             ),
           ),
           SizedBox(height: gap),

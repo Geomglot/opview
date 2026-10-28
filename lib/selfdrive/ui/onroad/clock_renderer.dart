@@ -22,25 +22,40 @@ class ClockRenderer extends StatelessWidget {
   final ClockMode mode;
   final double scale;
 
+  /// a tap on the clock: switches between 12 and 24 hour time
+  final VoidCallback? onTap;
+
   /// time source, replaceable in tests
   final DateTime Function()? now;
 
-  const ClockRenderer({super.key, required this.mode, required this.scale, this.now});
+  const ClockRenderer({super.key, required this.mode, required this.scale, this.onTap, this.now});
+
+  /// extra room around the text that still counts as a tap on the clock
+  static const tapMargin = 24.0;
 
   @override
   Widget build(BuildContext context) {
+    final margin = tapMargin * scale;
     return Positioned(
-      top: 45 * scale,
-      right: 252 * scale,
-      child: ClockText(
-        mode: mode,
-        now: now,
-        style: TextStyle(
-          color: const Color(0xC8FFFFFF),
-          fontSize: _fontClock * scale,
-          fontWeight: FontWeight.w600,
-          height: 1.0,
-          shadows: [Shadow(color: const Color(0x99000000), blurRadius: 8 * scale)],
+      top: 45 * scale - margin,
+      right: 252 * scale - margin,
+      child: GestureDetector(
+        key: const ValueKey('classicClock'),
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Padding(
+          padding: EdgeInsets.all(margin),
+          child: ClockText(
+            mode: mode,
+            now: now,
+            style: TextStyle(
+              color: const Color(0xC8FFFFFF),
+              fontSize: _fontClock * scale,
+              fontWeight: FontWeight.w600,
+              height: 1.0,
+              shadows: [Shadow(color: const Color(0x99000000), blurRadius: 8 * scale)],
+            ),
+          ),
         ),
       ),
     );

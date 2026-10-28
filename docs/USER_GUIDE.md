@@ -75,6 +75,7 @@ own, and it reconnects after the network drops or you switch apps.
 | Open settings | Press and hold anywhere on the driving screen |
 | Change layout | Swipe sideways (left for the next layout, right for the previous) |
 | Change the bottom bar | Tap the bottom center of the screen |
+| Switch the clock between 12 and 24 hour time | Tap the clock |
 | Fold or unfold a panel (Detailed) | Tap the panel |
 
 A swipe that starts right at the edge of the screen is left to Android (for its Back gesture). Start
@@ -164,7 +165,7 @@ Press and hold anywhere on the driving screen.
 | **Brightness** | Auto follows the device's own setting; a level set here applies while OPRivView is open |
 | **Comma device** | The comma's address, found automatically or entered by hand with **Change** |
 | **Road name** | Show or hide the road name, whatever the comma's own setting |
-| **Clock** | 12 hr or 24 hr time for the clock shown in every layout |
+| **Clock** | 12 hr or 24 hr time for the clock shown in every layout. Tapping the clock does the same |
 | **Picture-in-picture** | On: when you leave OPRivView, a small floating view stays on screen (where the device supports it) |
 | **OPRivView updates** | Checks for, downloads and installs new releases |
 
