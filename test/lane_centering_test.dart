@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:opview/selfdrive/ui/onroad/augmented_road_view.dart';
 import 'package:opview/selfdrive/ui/onroad/bottom_bar.dart';
 import 'package:opview/selfdrive/ui/onroad/detailed/detailed_layout.dart';
+import 'package:opview/selfdrive/ui/onroad/enhanced/enhanced_layout.dart';
 import 'package:opview/selfdrive/ui/onroad/lane_centering.dart';
 import 'package:opview/selfdrive/ui/settings/settings_dialog.dart';
 import 'package:opview/selfdrive/ui/ui_state.dart';
@@ -232,6 +233,14 @@ void main() {
       expect(find.text('0.20'), findsOneWidget);
       expect(find.text('12L'), findsOneWidget);
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Enhanced: each half of the figures keeps clear of the centre line', (tester) async {
+      await show(tester, OnroadLayout.enhanced, BottomBar.laneCentering);
+      const centre = 1920 / 2;
+      final gap = LaneCenteringCaption.halfGap * enhancedUnit(const Size(1920, 1080));
+      expect(tester.getRect(find.text('m/s²')).right, lessThanOrEqualTo(centre - gap + 0.5));
+      expect(tester.getRect(find.text('12L')).left, greaterThanOrEqualTo(centre + gap - 0.5));
     });
 
     testWidgets('Enhanced: Torque keeps the torque bar, Off shows neither', (tester) async {

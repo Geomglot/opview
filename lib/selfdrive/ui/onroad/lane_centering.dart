@@ -536,11 +536,14 @@ class LaneCenteringPill extends StatelessWidget {
   }
 }
 
-/// one latched line of figures, for above the arc in the Enhanced layout
+/// one latched line of figures, for above the arc in the Enhanced layout. Each half keeps to
+/// its own side of the centre line, [halfGap] clear of it, so a wide left half never crosses it
 class LaneCenteringCaption extends StatelessWidget {
   final LaneCenteringIndicator lc;
   final bool isMetric;
   final double unit;  // comma four pixels
+
+  static const halfGap = 14.0;
 
   const LaneCenteringCaption({super.key, required this.lc, required this.isMetric, required this.unit});
 
@@ -548,14 +551,23 @@ class LaneCenteringCaption extends StatelessWidget {
   Widget build(BuildContext context) {
     if (!lc.visible) return const SizedBox.shrink();
     final figures = _figures(lc, isMetric: isMetric, size: 11 * unit);
-    return FittedBox(
+    return Row(
       key: const ValueKey('laneCenteringCaption'),
-      fit: BoxFit.scaleDown,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [figures[0], SizedBox(width: 10 * unit), figures[1]],
-      ),
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Expanded(
+          child: Padding(
+            padding: EdgeInsets.only(right: halfGap * unit),
+            child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.bottomRight, child: figures[0]),
+          ),
+        ),
+        Expanded(
+          child: Padding(
+            padding: EdgeInsets.only(left: halfGap * unit),
+            child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.bottomLeft, child: figures[1]),
+          ),
+        ),
+      ],
     );
   }
 }

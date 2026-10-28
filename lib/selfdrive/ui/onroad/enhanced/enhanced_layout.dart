@@ -233,7 +233,7 @@ class EnhancedLayout extends StatelessWidget {
                 right: 0,
                 bottom: bottomArcBottom(unit) + (LaneCenteringArcPainter.thickness + 4) * unit,
                 height: 11 * unit,
-                child: Center(child: LaneCenteringCaption(lc: st.laneCentering, isMetric: st.isMetric, unit: unit)),
+                child: LaneCenteringCaption(lc: st.laneCentering, isMetric: st.isMetric, unit: unit),
               ),
 
             // top row: set speed | speed | speed limit, with the speed centred
