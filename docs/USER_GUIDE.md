@@ -1,7 +1,7 @@
 # OPRivView user guide
 
 OPRivView shows your comma device's driving screen live on an Android phone, tablet or car head
-unit, including the EV Play box that puts Android on a Rivian's centre screen. You see the road
+unit, including the EV Play box that puts Android on a Rivian's center screen. You see the road
 camera with the openpilot / sunnypilot overlay on top: the planned path, lane lines, lead car,
 speeds, alerts and the status of steering and cruise control.
 
@@ -51,7 +51,9 @@ key, so it installs as an update with no need to uninstall first.
 ## Connecting
 
 Put the comma and the Android device on one Wi-Fi network. Common ways:
-- **The comma's hotspot:** on the comma, turn on tethering (Settings, Network). Join that network from
+- **The Rivian's own hotspot,** if it is turned on: join it from both the comma and the EV Play (or
+  phone).
+- **The comma's hotspot:** on the comma, turn on tethering (Settings, Network, Advanced). Join that network from
   the phone or the EV Play.
 - **A phone hotspot:** turn on your phone's hotspot and join it from both the comma and the EV Play.
 - **Home Wi-Fi**, for trying things out in the driveway.
@@ -61,7 +63,7 @@ Open OPRivView. It finds the comma on the network by itself and shows what it is
 on), the camera picture and overlay appear.
 
 If it cannot find the comma, open **Settings**, tap **Change** next to **Comma device**, and type the
-comma's IP address (shown on the comma under Settings, Network). The app remembers it.
+comma's IP address (shown on the comma under Settings, Network, Advanced). The app remembers it.
 
 The connection repairs itself: if the picture or data stalls, OPRivView rebuilds the stream on its
 own, and it reconnects after the network drops or you switch apps.
@@ -72,7 +74,7 @@ own, and it reconnects after the network drops or you switch apps.
 |---|---|
 | Open settings | Press and hold anywhere on the driving screen |
 | Change layout | Swipe sideways (left for the next layout, right for the previous) |
-| Change the bottom bar | Tap the bottom centre of the screen |
+| Change the bottom bar | Tap the bottom center of the screen |
 | Fold or unfold a panel (Detailed) | Tap the panel |
 
 A swipe that starts right at the edge of the screen is left to Android (for its Back gesture). Start
@@ -83,15 +85,15 @@ screen.
 
 ## The three layouts
 
-All three show the road camera, the path and lane lines, alerts, and a coloured border for the
+All three show the road camera, the path and lane lines, alerts, and a colored border for the
 driving state. They differ in how much they add.
 
 ### Classic
 Close to the comma's own screen: set speed and current speed at the top, alerts at the bottom, the
-speed limit sign, road name, steering wheel icon, turn signal arrows, a clock, and MADS border colours.
+speed limit sign, road name, steering wheel icon, turn signal arrows, a clock, and MADS border colors.
 
 ### Enhanced
-Modelled on the comma four's screen, made for a wide display: the picture fills the screen, with
+Modeled on the comma four's screen, made for a wide display: the picture fills the screen, with
 set speed, speed and speed limit along the top, the lead car boxed with its distance, a glow at the
 side when the car reports something in your blind spot, the driver monitoring icon, and a model
 confidence ball.
@@ -111,7 +113,7 @@ Tap any panel to fold it down to its title; tap again to open it. The app rememb
 
 ## The bottom bar
 
-The space at the bottom centre can show one of four things, chosen separately for each layout:
+The space at the bottom center can show one of four things, chosen separately for each layout:
 
 | Choice | Shows |
 |---|---|
@@ -120,7 +122,7 @@ The space at the bottom centre can show one of four things, chosen separately fo
 | **Auto** | Lane centering while it is turned on in the comma's settings, otherwise Torque |
 | **Off** | Nothing |
 
-Change it in **Settings** under **Bottom bar**, or tap the bottom centre of the screen to step through
+Change it in **Settings** under **Bottom bar**, or tap the bottom center of the screen to step through
 the choices. Classic starts with Off, Enhanced and Detailed with Torque.
 
 ### Lane centering
@@ -128,20 +130,20 @@ Lane centering is a feature of Geomglot's sunnypilot build that nudges the car b
 middle of the lane. It must be turned on in the comma's settings for anything to show here. It only
 shows while openpilot is steering.
 
-- **The bar** fills from the centre toward the side the car is being pushed.
-- **The figures** show how hard it is pushing (in m/s2, metres per second squared, with an arrow for the direction) and how far
-  the car is from the centre of the lane (in cm, or inches when the comma is set to imperial units).
+- **The bar** fills from the center toward the side the car is being pushed.
+- **The figures** show how hard it is pushing (in m/s2, meters per second squared, with an arrow for the direction) and how far
+  the car is from the center of the lane (in cm, or inches when the comma is set to imperial units).
   When it is not correcting, a word shows instead: "centered", "clear of line" in One-Line Mode,
   or "no lines".
-- **Colours:**
+- **Colors:**
 
-| Colour | Meaning |
+| Color | Meaning |
 |---|---|
-| Mint | Centring between two lane lines |
+| Mint | Centering between two lane lines |
 | Light blue | One-Line Mode: only one lane line is visible, and "one line" shows instead of the distance |
 | Amber | A hard push |
 | Red | It wanted to push harder than it is allowed to |
-| Grey | Paused: no lane lines to centre on ("no lines") |
+| Gray | Paused: no lane lines to center on ("no lines") |
 | Dim white | Holding: nothing to correct |
 
 Where it appears:
@@ -191,5 +193,5 @@ OPRivView builds on:
 - [Gerrylum/opview](https://github.com/gerrylum/opview): the Enhanced and Detailed layouts, the settings
   menu, swiping between layouts, brightness control, picture-in-picture, in-app updates, signed
   release builds, and the OPRivView name and icon.
-- Geomglot: sunnypilot support, MADS colours, lane centering and the bottom bar, and the Rivian
+- Geomglot: sunnypilot support, MADS colors, lane centering and the bottom bar, and the Rivian
   releases.

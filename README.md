@@ -7,7 +7,7 @@
 **English** | [繁體中文](README_zh-TW.md) (describes the original opview)
 
 OPRivView shows a comma device's driving screen live on an Android phone, tablet or car head unit,
-including the EV Play box on a Rivian's centre screen: the road camera with the openpilot /
+including the EV Play box on a Rivian's center screen: the road camera with the openpilot /
 sunnypilot overlay drawn on top. It is a fork of [eFiniLan/opview](https://github.com/eFiniLan/opview),
 a clone of [openpilot](https://github.com/commaai/openpilot)'s onroad UI built in Flutter, with
 [Gerrylum](https://github.com/gerrylum/opview)'s layouts and app features and Geomglot's sunnypilot
@@ -25,15 +25,15 @@ and Rivian additions. No 3D library is needed; all projection is 3x3 matrix math
 
 - **Three layouts**, switched by swiping sideways:
   - **Classic:** close to the comma's own screen, with sunnypilot's speed limit sign, road name,
-    steering wheel, turn signal arrows and MADS border colours.
-  - **Enhanced:** modelled on the comma four's screen: full-screen camera, lead car box and readout,
+    steering wheel, turn signal arrows and MADS border colors.
+  - **Enhanced:** modeled on the comma four's screen: full-screen camera, lead car box and readout,
     blind spot glow, driver monitoring icon and model confidence ball.
   - **Detailed:** Enhanced plus foldable side panels of live data (steering, driver, longitudinal,
     lead and second lead) and the comma's health.
 - **Bottom bar, per layout:** the torque bar, the lane centering indicator, Auto, or nothing. Tap the
-  bottom centre of the screen to step through them.
+  bottom center of the screen to step through them.
 - **Lane centering indicator** for Geomglot's sunnypilot build: how hard and which way it is pushing,
-  the distance off centre (metric or imperial, following the comma), and One-Line Mode.
+  the distance off center (metric or imperial, following the comma), and One-Line Mode.
 - **Settings** (press and hold): layout, bottom bar, speed limit, brightness, comma address, road
   name, picture-in-picture, updates.
 - **Picture-in-picture:** a small floating view when you leave the app, where Android supports it.
@@ -115,7 +115,7 @@ The [user guide](docs/USER_GUIDE.md) covers phones, tablets and the EV Play.
 │   │       ├── lane_centering.dart        # Lane centering indicator: logic and drawing
 │   │       ├── model_renderer.dart        # Path, lanes, road edges, lead indicators
 │   │       ├── hud_renderer.dart          # Speed display, MAX cruise box, header gradient
-│   │       ├── alert_renderer.dart        # Severity-coloured alert banners
+│   │       ├── alert_renderer.dart        # Severity-colored alert banners
 │   │       ├── top_row.dart               # Shared speed row (Enhanced, Detailed)
 │   │       ├── speed_limit_renderer.dart  # Speed limit sign
 │   │       ├── road_name_renderer.dart    # Road name pill
@@ -202,7 +202,7 @@ copies.
   signed and numbered release builds, the data watchdog, smoother streaming on slow head units, and the
   OPRivView name and icon.
 - **Geomglot**: connection to current sunnypilot / openpilot, sunnypilot's speed limit, road name and
-  MADS colours, lane line alignment, the lane centering indicator and bottom bar, the device-side
+  MADS colors, lane line alignment, the lane centering indicator and bottom bar, the device-side
   streaming changes in Geomglot's sunnypilot build, and the Rivian releases.
 
 ### Ported from
@@ -213,7 +213,7 @@ copies.
 | `openpilot/common/transformations/` | Camera intrinsics, rotFromEuler, view_frame_from_device_frame |
 | `openpilot/system/webrtc/webrtcd.py` | POST /stream API, data channel format |
 | `dashy` | Video-scale-aware calibration, H264 SDP rewriting, NaN handling, }{ splitting, NSD discovery |
-| sunnypilot `lane_centering_indicator.py` (Geomglot's build) | Lane centering indicator logic and colours |
+| sunnypilot `lane_centering_indicator.py` (Geomglot's build) | Lane centering indicator logic and colors |
 
 ## License
 

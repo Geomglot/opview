@@ -6,6 +6,10 @@
 
 [English](README.md) | **繁體中文**
 
+> **注意：** 本頁僅說明 eFiniLan 原始版本的 opview。OPRivView 的 Rivian 相關更新、Gerrylum 的版面與功能，以及最新的安裝與使用說明，請參閱[英文版 README](README.md) 與[使用者指南](docs/USER_GUIDE.md)。
+>
+> **Note:** this page describes only the original opview by eFiniLan. For OPRivView's Rivian updates, Gerrylum's layouts and features, and current install and usage instructions, see the [English README](README.md) and the [user guide](docs/USER_GUIDE.md).
+
 複製 [openpilot](https://github.com/commaai/openpilot) 原廠行車介面，以 Flutter 建構，支援 iOS 與 Android。
 不需要 3D 函式庫，所有投影皆為純 Dart 3x3 矩陣運算。
 
