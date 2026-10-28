@@ -1,7 +1,9 @@
 // in-app updates: version compare, the GitHub release, and the Settings row
 
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -123,6 +125,103 @@ void main() {
       await u.downloadAndInstall();
       expect(u.status, UpdateStatus.failed);
       expect(u.message, contains('404'));
+    });
+  });
+
+  group('reusing a saved download', () {
+    late Directory dir;
+    late int downloads;
+    final apk = List<int>.generate(4000, (i) => i % 251);
+    final apkSha = sha256.convert(apk).toString();
+
+    setUp(() async {
+      dir = await Directory.systemTemp.createTemp('opview-updates-');
+      downloads = 0;
+    });
+    tearDown(() => dir.delete(recursive: true));
+
+    // a release whose APK is [apk], with GitHub's digest unless [digest] is false; [served] is what
+    // the download actually returns
+    Updater updater({bool digest = true, List<int>? served}) => Updater(
+          installed: '0.1.1-mici.4',
+          updateDir: () async => dir,
+          client: () => MockClient.streaming((req, _) async {
+            if (req.url.host == 'api.github.com') {
+              final release = {
+                'tag_name': 'v0.1.1-mici.5',
+                'body': '',
+                'assets': [
+                  {
+                    'name': 'OPRivView-0.1.1-mici.5.apk',
+                    'browser_download_url': 'https://example.invalid/a.apk',
+                    'size': apk.length,
+                    if (digest) 'digest': 'sha256:$apkSha',
+                  },
+                ],
+              };
+              final body = utf8.encode(jsonEncode(release));
+              return http.StreamedResponse(Stream.value(body), 200, contentLength: body.length);
+            }
+            downloads++;
+            final bytes = served ?? apk;
+            return http.StreamedResponse(Stream.value(bytes), 200, contentLength: bytes.length);
+          }),
+        );
+
+    File saved() => File('${dir.path}/OPRivView-0.1.1-mici.5.apk');
+
+    test('the release carries GitHub\'s SHA-256', () async {
+      final u = updater();
+      await u.check();
+      expect(u.latest!.apkSha256, apkSha);
+    });
+
+    test('a second Update after a cancelled install does not download again', () async {
+      final u = updater();
+      await u.check();
+      await u.downloadAndInstall();
+      expect(downloads, 1);
+      expect(await saved().exists(), isTrue);
+      await u.downloadAndInstall();
+      expect(downloads, 1, reason: 'the saved APK matched, so it went straight to the installer');
+      expect(u.message, contains('Install unknown apps'));
+    });
+
+    test('a saved APK that does not match is downloaded again', () async {
+      await saved().writeAsBytes(List.filled(apk.length, 7));  // right size, wrong contents
+      final u = updater();
+      await u.check();
+      await u.downloadAndInstall();
+      expect(downloads, 1);
+      expect(await saved().readAsBytes(), apk);
+    });
+
+    test('a download that does not match GitHub\'s SHA-256 is thrown away', () async {
+      final u = updater(served: List.filled(apk.length, 7));
+      await u.check();
+      await u.downloadAndInstall();
+      expect(u.status, UpdateStatus.failed);
+      expect(u.message, startsWith('Download damaged'));
+      expect(await saved().exists(), isFalse);
+    });
+
+    test('without a digest, a saved APK of the right size is reused', () async {
+      final u = updater(digest: false);
+      await u.check();
+      await u.downloadAndInstall();
+      await u.downloadAndInstall();
+      expect(downloads, 1);
+    });
+
+    test('downloads of other versions are removed', () async {
+      final old = File('${dir.path}/OPRivView-0.1.1-mici.3.apk')..writeAsBytesSync([1, 2, 3]);
+      final legacy = File('${dir.path}/OPRivView-update.apk')..writeAsBytesSync([1, 2, 3]);
+      final u = updater();
+      await u.check();
+      await u.downloadAndInstall();
+      expect(old.existsSync(), isFalse);
+      expect(legacy.existsSync(), isFalse);
+      expect(await saved().exists(), isTrue);
     });
   });
 

@@ -1,11 +1,15 @@
 // in-app updates: compare this build with the newest GitHub release of Geomglot/opview (pre-releases included),
 // download its APK, and hand it to Android's installer (which always asks to confirm).
-// Updates install over the app only when both are signed with the same release key
+// Updates install over the app only when both are signed with the same release key.
+// A downloaded APK is kept, named for its version, so a cancelled install can be retried without
+// downloading again; it is reused only when it matches the release's size and SHA-256
 
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show PlatformException;
 import 'package:http/http.dart' as http;
@@ -24,7 +28,16 @@ class ReleaseInfo {
   final int apkSize;
   final String notes;
 
-  const ReleaseInfo({required this.version, required this.apkUrl, required this.apkSize, required this.notes});
+  /// the APK's SHA-256 in hex, from GitHub's asset digest; null when GitHub gives none
+  final String? apkSha256;
+
+  const ReleaseInfo({
+    required this.version,
+    required this.apkUrl,
+    required this.apkSize,
+    required this.notes,
+    this.apkSha256,
+  });
 
   /// the release from GitHub's JSON, or null when it has no APK
   static ReleaseInfo? fromJson(Map<String, dynamic> json) {
@@ -32,11 +45,13 @@ class ReleaseInfo {
     final assets = (json['assets'] as List? ?? const []).whereType<Map<String, dynamic>>();
     final apk = assets.where((a) => (a['name'] as String? ?? '').endsWith('.apk')).firstOrNull;
     if (tag.isEmpty || apk == null) return null;
+    final digest = apk['digest'] as String? ?? '';
     return ReleaseInfo(
       version: tag.startsWith('v') ? tag.substring(1) : tag,
       apkUrl: apk['browser_download_url'] as String? ?? '',
       apkSize: (apk['size'] as num?)?.toInt() ?? 0,
       notes: json['body'] as String? ?? '',
+      apkSha256: digest.startsWith('sha256:') ? digest.substring(7).toLowerCase() : null,
     );
   }
 }
@@ -82,11 +97,28 @@ List<String> releaseNoteLines(String notes, {int max = 4}) {
 
 enum UpdateStatus { idle, checking, upToDate, available, downloading, installing, failed }
 
+/// a file's SHA-256 in hex, worked out off the UI thread (an APK is tens of MB)
+Future<String> fileSha256(String path) =>
+    Isolate.run(() async => (await sha256.bind(File(path).openRead()).first).toString());
+
+/// whether [file] is [release]'s APK in full: the right size, and the right SHA-256 when GitHub gives one
+Future<bool> isWholeApk(File file, ReleaseInfo release) async {
+  if (!await file.exists()) return false;
+  if (release.apkSize > 0 && await file.length() != release.apkSize) return false;
+  final want = release.apkSha256;
+  return want == null || await fileSha256(file.path) == want;
+}
+
 class Updater extends ChangeNotifier {
   final http.Client Function() _client;
   final String installed;
 
-  Updater({http.Client Function()? client, this.installed = installedVersion}) : _client = client ?? http.Client.new;
+  /// where downloads are kept; null: Android's update folder, or a temp folder elsewhere
+  final Future<Directory> Function()? _updateDir;
+
+  Updater({http.Client Function()? client, this.installed = installedVersion, Future<Directory> Function()? updateDir})
+      : _client = client ?? http.Client.new,
+        _updateDir = updateDir;
 
   UpdateStatus status = UpdateStatus.idle;
   ReleaseInfo? latest;
@@ -128,46 +160,32 @@ class Updater extends ChangeNotifier {
     }
   }
 
-  /// download the latest release's APK, then hand it to Android's installer
+  /// download the latest release's APK (or reuse a whole one already downloaded), then hand it
+  /// to Android's installer
   Future<void> downloadAndInstall() async {
     final release = latest;
-    if (release == null || status == UpdateStatus.downloading) return;
+    if (release == null || status == UpdateStatus.downloading || status == UpdateStatus.installing) return;
     _cancelled = false;
     received = 0;
     total = release.apkSize;
-    _set(UpdateStatus.downloading);
     final client = _client();
     var step = 'Download failed';
     try {
       // Android: the cache folder shared with the installer; tests and other platforms: temp
-      final dir = Directory(await system.updateDir() ?? '${Directory.systemTemp.path}/updates');
+      final dir = await (_updateDir?.call() ??
+          system.updateDir().then((d) => Directory(d ?? '${Directory.systemTemp.path}/updates')));
       await dir.create(recursive: true);
-      final file = File('${dir.path}/OPRivView-update.apk');
-      final response = await client.send(http.Request('GET', Uri.parse(release.apkUrl)));
-      if (response.statusCode != 200) {
-        _set(UpdateStatus.failed, 'Download failed (${response.statusCode})');
-        return;
+      final file = File('${dir.path}/OPRivView-${release.version}.apk');
+      // other versions' downloads, and the single file older builds used, are no longer needed
+      await for (final old in dir.list()) {
+        if (old is File && old.path != file.path && old.path.endsWith('.apk')) await old.delete();
       }
-      if ((response.contentLength ?? 0) > 0) total = response.contentLength!;
-      final sink = file.openWrite();
-      try {
-        await for (final chunk in response.stream) {
-          if (_cancelled) break;
-          sink.add(chunk);
-          received += chunk.length;
-          notifyListeners();
-        }
-      } finally {
-        await sink.close();
-      }
-      if (_cancelled) {
-        if (await file.exists()) await file.delete();
-        _set(UpdateStatus.available);
-        return;
-      }
-      if (total > 0 && received < total) {
-        _set(UpdateStatus.failed, 'Download incomplete (${received ~/ 1048576} of ${total ~/ 1048576} MB)');
-        return;
+      _set(UpdateStatus.installing, 'Checking the saved download');
+      if (await isWholeApk(file, release)) {
+        received = total;
+      } else {
+        _set(UpdateStatus.downloading);
+        if (!await _download(client, release, file)) return;
       }
       step = 'Could not open the installer';
       _set(UpdateStatus.installing);
@@ -186,6 +204,43 @@ class Updater extends ChangeNotifier {
     } finally {
       client.close();
     }
+  }
+
+  /// download [release]'s APK into [file]; false (with the status set) when it did not finish whole
+  Future<bool> _download(http.Client client, ReleaseInfo release, File file) async {
+    final response = await client.send(http.Request('GET', Uri.parse(release.apkUrl)));
+    if (response.statusCode != 200) {
+      _set(UpdateStatus.failed, 'Download failed (${response.statusCode})');
+      return false;
+    }
+    if ((response.contentLength ?? 0) > 0) total = response.contentLength!;
+    final sink = file.openWrite();
+    try {
+      await for (final chunk in response.stream) {
+        if (_cancelled) break;
+        sink.add(chunk);
+        received += chunk.length;
+        notifyListeners();
+      }
+    } finally {
+      await sink.close();
+    }
+    if (_cancelled) {
+      if (await file.exists()) await file.delete();
+      _set(UpdateStatus.available);
+      return false;
+    }
+    if (total > 0 && received < total) {
+      _set(UpdateStatus.failed, 'Download incomplete (${received ~/ 1048576} of ${total ~/ 1048576} MB)');
+      return false;
+    }
+    final want = release.apkSha256;
+    if (want != null && await fileSha256(file.path) != want) {
+      await file.delete();
+      _set(UpdateStatus.failed, 'Download damaged: Update to try again');
+      return false;
+    }
+    return true;
   }
 
   void cancel() => _cancelled = true;

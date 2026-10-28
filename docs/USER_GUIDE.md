@@ -45,6 +45,10 @@ OPRivView checks for new releases itself: open **Settings** (press and hold anyw
 driving screen) and look under **OPRivView updates**. Tap to download, then confirm Android's
 install prompt. Your settings are kept.
 
+If you cancel Android's install prompt by mistake, just tap **Update** again: the app reuses the
+file it already downloaded (after checking it is complete and undamaged) instead of downloading it
+again. This works from version 0.1.2-rivian.6 on.
+
 You can also install a newer `.apk` over the old one by hand. Every release is signed with the same
 key, so it installs as an update with no need to uninstall first.
 
