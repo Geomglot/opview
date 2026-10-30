@@ -33,7 +33,7 @@ and Rivian additions. No 3D library is needed; all projection is 3x3 matrix math
 - **Bottom bar, per layout:** the torque bar, the lane centering indicator, Auto, or nothing. Tap the
   bottom center of the screen to step through them.
 - **Clock** in every layout; tap it to switch between 12 and 24 hour time.
-- **Lane centering indicator** for Geomglot's sunnypilot build: how hard and which way it is pushing,
+- **Lane centering indicator** for AdventurePilot and Geomglot's sunnypilot build: how hard and which way it is pushing,
   the distance off center (metric or imperial, following the comma), and One-Line Mode.
 - **Settings** (press and hold): layout, bottom bar, speed limit, brightness, comma address, road
   name, picture-in-picture, updates.
@@ -48,9 +48,15 @@ and Rivian additions. No 3D library is needed; all projection is 3x3 matrix math
 - **Android 7.0 or later.**
 - **A comma device whose `webrtcd` service runs while driving** and is reachable on port 5001, on the
   same network as the Android device.
-  - **Geomglot's sunnypilot build** (Geomglot/openpilot, branch `dys-a`) does this, and adds the
-    slimmed data stream the app is tuned for, the lane centering data and the device settings the
-    app follows. Recommended.
+  - **[AdventurePilot](https://github.com/AdventurePilotDev/AdventurePilot)** (branches `dev` and
+    `dev-a`) and **Geomglot's sunnypilot build** (Geomglot/openpilot, branch `dys-a`) do this, and add
+    the slimmed data stream the app is tuned for, the lane centering data and the device settings
+    the app follows. Recommended. Turn on **opview Screen Streaming** under Developer (Show Advanced
+    Controls must be on) or **opview streaming** on a comma four; see the
+    [user guide](docs/USER_GUIDE.md#turning-on-streaming-on-the-comma).
+    The two differ: AdventurePilot ignores anything a client sends in while this is on, so
+    `bridge_services_in` is dropped, and it has no cross-site browser access (CORS). The app needs
+    neither.
   - **Stock openpilot** and other builds work with the changes below; sunnypilot-only readouts
     (lane centering, speed limit, road name, MADS) stay blank.
 
@@ -204,7 +210,7 @@ copies.
   OPRivView name and icon.
 - **Geomglot**: connection to current sunnypilot / openpilot, sunnypilot's speed limit, road name and
   MADS colors, lane line alignment, the lane centering indicator and bottom bar, the device-side
-  streaming changes in Geomglot's sunnypilot build, and the Rivian releases.
+  streaming changes in Geomglot's sunnypilot build and AdventurePilot, and the Rivian releases.
 
 ### Ported from
 
@@ -214,7 +220,7 @@ copies.
 | `openpilot/common/transformations/` | Camera intrinsics, rotFromEuler, view_frame_from_device_frame |
 | `openpilot/system/webrtc/webrtcd.py` | POST /stream API, data channel format |
 | `dashy` | Video-scale-aware calibration, H264 SDP rewriting, NaN handling, }{ splitting, NSD discovery |
-| sunnypilot `lane_centering_indicator.py` (Geomglot's build) | Lane centering indicator logic and colors |
+| sunnypilot `lane_centering_indicator.py` (AdventurePilot, Geomglot's build) | Lane centering indicator logic and colors |
 
 ## License
 

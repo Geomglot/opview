@@ -7,18 +7,38 @@ speeds, alerts and the status of steering and cruise control.
 
 It only watches. Nothing you do in OPRivView changes how the car drives or any setting on the comma.
 
-This guide covers version 0.1.2-rivian.4.
+This guide covers version 0.1.2-rivian.7.
 
 ## What you need
 
-- **A comma device** (comma 3X or comma four) running a build that streams to OPRivView. Geomglot's
-  sunnypilot build does (Geomglot/openpilot, branch `dys-a`). Other openpilot and sunnypilot builds
-  work if their streaming service runs while driving; see the README. Some readouts, such as
-  lane centering, need Geomglot's build.
+- **A comma device** (comma 3X or comma four) running a build that streams to OPRivView, with
+  streaming turned on. [AdventurePilot](https://github.com/AdventurePilotDev/AdventurePilot)
+  (branches `dev` and `dev-a`) does; see
+  [Turning on streaming on the comma](#turning-on-streaming-on-the-comma). Other openpilot and
+  sunnypilot builds work if their streaming service runs while driving; see the README. Some
+  readouts, such as lane centering, need AdventurePilot.
 - **An Android device** running Android 7.0 or later: a phone, a tablet, a head unit, or the
   EV Play Max in a Rivian.
 - **One network for both.** The comma and the Android device must be on the same Wi-Fi network.
   See [Connecting](#connecting).
+
+## Turning on streaming on the comma
+
+On AdventurePilot, streaming is off until you turn it on.
+
+**On a comma 3X:** open **Settings**, then **Developer**. Turn on **Show Advanced Controls** if it is
+not already on, then turn on **opview Screen Streaming**.
+
+**On a comma four:** open **developer** in settings and turn on **opview streaming**.
+
+It takes effect the next time the car is turned on. If the switch is not there after an update,
+reboot the comma: a new setting only appears after a full restart.
+
+While this is on, anyone on the same network can watch the stream. There is no login, so use a
+network you trust, such as your own hotspot.
+
+The comma also ignores anything sent to it over the stream while this is on, so a viewer can only
+read. Remote joystick control through comma Connect does not work while it is on.
 
 ## Installing
 
@@ -32,6 +52,11 @@ Download the newest `OPRivView-<version>.apk` from
    allow it, go back, and tap **Install**.
 
 ### On the EV Play
+> **EV Play warning: never set a password on the EV Play while installing OPRivView.** If anything on
+> the EV Play asks you to set a password, PIN or screen lock, do not do it. Back out instead. A password
+> makes the EV Play unreachable, and getting it back takes a tricky recovery process. If it happens,
+> contact EV Play support at alex@evplay.net for recovery instructions.
+
 The EV Play Max is an Android computer, so OPRivView installs on it like any Android app. Either:
 - open the releases page in the EV Play's web browser and download the `.apk` there, or
 - download the `.apk` on a computer, copy it to a USB thumb drive, plug the drive into the EV Play
@@ -62,7 +87,9 @@ Put the comma and the Android device on one Wi-Fi network. Common ways:
 - **A phone hotspot:** turn on your phone's hotspot and join it from both the comma and the EV Play.
 - **Home Wi-Fi**, for trying things out in the driveway.
 
-Open OPRivView. It finds the comma on the network by itself and shows what it is doing on the
+Make sure streaming is turned on (see
+[Turning on streaming on the comma](#turning-on-streaming-on-the-comma)), then open OPRivView. It
+finds the comma on the network by itself and shows what it is doing on the
 **Connecting** screen, along with the installed version. When the comma starts driving (the car is
 on), the camera picture and overlay appear.
 
@@ -131,8 +158,9 @@ Change it in **Settings** under **Bottom bar**, or tap the bottom center of the 
 the choices. Classic starts with Off, Enhanced and Detailed with Torque.
 
 ### Lane centering
-Lane centering is a feature of Geomglot's sunnypilot build that nudges the car back toward the
-middle of the lane. It must be turned on in the comma's settings for anything to show here. It only
+Lane centering is a feature of AdventurePilot that nudges the car back toward the middle of the
+lane. It is explained in the
+[AdventurePilot guide](https://github.com/AdventurePilotDev/AdventurePilot/blob/instructions/lane-centering.md). It must be turned on in the comma's settings for anything to show here. It only
 shows while openpilot is steering.
 
 - **The bar** fills from the center toward the side the car is being pushed.
@@ -147,7 +175,7 @@ shows while openpilot is steering.
 | Mint | Centering between two lane lines |
 | Light blue | One-Line Mode: only one lane line is visible, and "one line" shows instead of the distance |
 | Amber | A hard push, or One-Line Mode pushing as hard as it is allowed to (routine on town streets) |
-| Red | Centering between two lines wanted to push harder than it is allowed to, mostly in bends |
+| Red | Centering between two lines wanted to push harder than it is allowed to, mostly in bends. A few short flashes an hour are normal |
 | Gray | Paused: no lane lines to center on ("no lines") |
 | Dim white | Holding: nothing to correct |
 
@@ -184,10 +212,11 @@ supports this; where it doesn't, the switch has no effect.
 
 | Problem | Try |
 |---|---|
-| Stuck on "searching for comma device" | Check both are on the same Wi-Fi network; enter the comma's IP address under **Comma device** |
+| Stuck on "searching for comma device" | Check both are on the same Wi-Fi network, and that streaming is turned on and the car has been started since; enter the comma's IP address under **Comma device** |
 | Connected but no picture | The picture only appears while the comma is driving (car on). Wait a few seconds after starting the car |
 | Picture freezes | It should recover on its own within a few seconds; if not, leave the app and come back |
-| No lane centering readout | Turn lane centering on in the comma's settings; it shows only while openpilot is steering. The comma needs Geomglot's build |
+| No lane centering readout | Turn lane centering on in the comma's settings; it shows only while openpilot is steering. The comma needs AdventurePilot |
+| No opview switch on the comma | Turn on **Show Advanced Controls** first, then reboot if it is still missing. On AdventurePilot it needs `dev` or `dev-a` |
 | Update won't install | Uninstall only if the old app came from somewhere other than Geomglot's releases (a different signing key) |
 | Swipe doesn't change the layout | Start the swipe a little way in from the edge |
 
@@ -201,3 +230,6 @@ OPRivView builds on:
   release builds, and the OPRivView name and icon.
 - Geomglot: sunnypilot support, MADS colors, lane centering and the bottom bar, and the Rivian
   releases.
+- [AdventurePilot](https://github.com/AdventurePilotDev/AdventurePilot), which carries the comma side
+  of the stream on `dev` and `dev-a`. Its guide to setting this up is
+  [OPRivView](https://github.com/AdventurePilotDev/AdventurePilot/blob/instructions/oprivview.md).
