@@ -124,6 +124,14 @@ void main() {
         ..update(const LaneCenteringSample(active: true, correction: 0.002), 20, _t0);
       expect(hard.shownColor, laneCenteringAmber);
     });
+
+    test('One-Line Mode reaching its limit is amber, not red, with only a gentle push', () {
+      final lc = LaneCenteringIndicator()
+        ..update(const LaneCenteringSample(
+            active: true, correction: 0.0003, clipped: true, singleLine: true, lineSide: -1), 20, _t0);
+      expect(lc.shownColor, laneCenteringAmber);
+      expect(lc.color, laneCenteringAmber);
+    });
   });
 
   group('data', () {

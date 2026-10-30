@@ -98,7 +98,8 @@ class LaneCenteringIndicator {
   DateTime _nextCommit = DateTime.fromMillisecondsSinceEpoch(0);
   final _counts = {for (final s in LaneCenteringState.values) s: 0};
   int _nValid = 0;
-  int _nClipped = 0;
+  int _nClipped = 0;        // with both lines
+  int _nClippedSingle = 0;  // in One-Line Mode
   int _nSingleLine = 0;
   int _sumLineSide = 0;
   double _sumPush = 0.0;
@@ -142,10 +143,12 @@ class LaneCenteringIndicator {
   }
 
   /// live every frame, so a gate dropout of a few frames shows as a flash of gray; the
-  /// One-Line Mode blue follows the latched summary, so it changes no faster than the words
+  /// One-Line Mode blue follows the latched summary, so it changes no faster than the words.
+  /// One-Line Mode reaching its limit is amber, not red, as on the device: there it is the ordinary
+  /// ceiling on a gentle push away from the line, met routinely on town streets
   Color _barColor(LaneCenteringSample lc) {
     if (!lc.active) return laneCenteringGray;
-    if (lc.clipped) return laneCenteringRed;
+    if (lc.clipped) return lc.singleLine ? laneCenteringAmber : laneCenteringRed;
     if (push.abs() >= laneCenteringAmberAbove) return laneCenteringAmber;
     if (shownSingleLine) return laneCenteringLightBlue;
     if (lc.holding) return laneCenteringDimWhite;
@@ -156,6 +159,7 @@ class LaneCenteringIndicator {
     _counts.updateAll((k, v) => 0);
     _nValid = 0;
     _nClipped = 0;
+    _nClippedSingle = 0;
     _nSingleLine = 0;
     _sumLineSide = 0;
     _sumPush = 0.0;
@@ -173,7 +177,11 @@ class LaneCenteringIndicator {
     final s = lc.holding ? LaneCenteringState.holding : LaneCenteringState.correcting;
     _counts[s] = _counts[s]! + 1;
     _nValid++;
-    if (lc.clipped) _nClipped++;
+    if (lc.clipped && lc.singleLine) {
+      _nClippedSingle++;
+    } else if (lc.clipped) {
+      _nClipped++;
+    }
     if (lc.singleLine) {
       _nSingleLine++;
       _sumLineSide += lc.lineSide;
@@ -201,7 +209,7 @@ class LaneCenteringIndicator {
       shownColor = shownSingleLine ? laneCenteringLightBlue : laneCenteringDimWhite;
     } else if (_nClipped * 2 > _nValid) {
       shownColor = laneCenteringRed;
-    } else if (shownPush.abs() >= laneCenteringAmberAbove) {
+    } else if (_nClippedSingle * 2 > _nValid || shownPush.abs() >= laneCenteringAmberAbove) {
       shownColor = laneCenteringAmber;
     } else if (shownSingleLine) {
       shownColor = laneCenteringLightBlue;

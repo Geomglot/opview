@@ -146,8 +146,8 @@ shows while openpilot is steering.
 |---|---|
 | Mint | Centering between two lane lines |
 | Light blue | One-Line Mode: only one lane line is visible, and "one line" shows instead of the distance |
-| Amber | A hard push |
-| Red | It wanted to push harder than it is allowed to |
+| Amber | A hard push, or One-Line Mode pushing as hard as it is allowed to (routine on town streets) |
+| Red | Centering between two lines wanted to push harder than it is allowed to, mostly in bends |
 | Gray | Paused: no lane lines to center on ("no lines") |
 | Dim white | Holding: nothing to correct |
 
