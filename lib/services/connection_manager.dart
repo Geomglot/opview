@@ -17,6 +17,7 @@ import 'package:opview/services/transport.dart';
 import 'package:opview/services/adapter.dart';
 import 'package:opview/services/data_watchdog.dart';
 import 'package:opview/services/impl/mdns_discovery.dart';
+import 'package:opview/services/impl/subnet_scan_discovery.dart';
 import 'package:opview/services/impl/webrtc_transport.dart';
 import 'package:opview/services/impl/cereal_adapter.dart';
 import 'package:opview/services/wake_lock_service.dart' as wake_lock;
@@ -53,7 +54,8 @@ class ConnectionManager {
     Discovery? discovery,
     Transport? transport,
     TelemetryAdapter? adapter,
-  })  : _discovery = discovery ?? MdnsDiscovery(),
+  })  : _discovery = discovery ??
+            MultiDiscovery([MdnsDiscovery(), SubnetScanDiscovery()]),
         _transport = transport ?? WebRTCTransport(),
         _adapter = adapter ?? CerealAdapter();
 
@@ -97,12 +99,16 @@ class ConnectionManager {
   void start() async {
     _listenConnectivity();
 
+    // a typed address is only used on the network it belongs to; on any other, search as usual
     final manualHost = await loadManualHost();
-    if (manualHost != null) {
+    if (manualHost != null && await _isOnSameSubnet(manualHost)) {
       _setStatus('using manual host $manualHost');
       _host = manualHost;
       _connect();
       return;
+    }
+    if (manualHost != null) {
+      _setStatus('manual host $manualHost on different subnet, searching instead');
     }
 
     final cachedHost = await _loadCachedHost();
@@ -151,13 +157,19 @@ class ConnectionManager {
     _discovery.stop();
   }
 
-  /// first device found → connect (or update host if cached attempt is still in-flight)
+  /// first device found → connect, dropping any attempt still waiting on an old address
   void _onDeviceFound(DiscoveredDevice device) {
     if (_uiState.isConnected) return; // already connected via cached host
-    _host = device.host;
-    _setStatus('found ${device.displayName} at ${device.host}');
     _stopDiscovery();
-    if (!_connecting) _connect();
+    if (_connecting && _host == device.host) return; // already trying it
+    _setStatus('found ${device.displayName} at ${device.host}');
+    if (_connecting || _reconnecting) {
+      // the old address can take 20 s to time out; there is no point waiting for it
+      _teardown();
+      _retryCount = 0;
+    }
+    _host = device.host;
+    _connect();
   }
 
   Future<void> _connect() async {
@@ -388,7 +400,7 @@ class ConnectionManager {
     reconnect();
   }
 
-  Future<String?> _loadCachedHost() async {
+  static Future<String?> _loadCachedHost() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_cachedHostKey);
   }

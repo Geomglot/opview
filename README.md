@@ -40,7 +40,8 @@ and Rivian additions. No 3D library is needed; all projection is 3x3 matrix math
 - **Picture-in-picture:** a small floating view when you leave the app, where Android supports it.
 - **In-app updates** from this repository's releases; every release is signed with one key, so
   updates install over the top.
-- **Self-repairing connection:** automatic discovery, a remembered address, and a watchdog that
+- **Self-repairing connection:** automatic discovery (mDNS, and a scan of the phone's own network for
+  when mDNS is slow or blocked), a remembered address, and a watchdog that
   rebuilds a stalled stream.
 
 ## Requirements
@@ -143,6 +144,7 @@ The [user guide](docs/USER_GUIDE.md) covers phones, tablets and the EV Play.
 │   │   ├── discovery.dart / transport.dart / adapter.dart  # Abstract interfaces
 │   │   └── impl/
 │   │       ├── mdns_discovery.dart        # mDNS/NSD auto-discovery (Bonjour)
+│   │       ├── subnet_scan_discovery.dart # Scan of the phone's network when mDNS finds nothing
 │   │       ├── webrtc_transport.dart      # WebRTC video + data channel
 │   │       └── cereal_adapter.dart        # }{ split, NaN sanitize, JSON decode, dispatch
 │   └── data/

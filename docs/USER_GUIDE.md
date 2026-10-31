@@ -90,11 +90,17 @@ Put the comma and the Android device on one Wi-Fi network. Common ways:
 Make sure streaming is turned on (see
 [Turning on streaming on the comma](#turning-on-streaming-on-the-comma)), then open OPRivView. It
 finds the comma on the network by itself and shows what it is doing on the
-**Connecting** screen, along with the installed version. When the comma starts driving (the car is
+**Connecting** screen, along with the installed version. The Rivian hotspot gives the comma a new
+address on most drives, so alongside the usual search the app checks every address on the network it
+is on, counting up from the low numbers the Rivian hands out. It takes a few seconds at most, and
+either way it connects without your help. When the comma starts driving (the car is
 on), the camera picture and overlay appear.
 
 If it cannot find the comma, open **Settings**, tap **Change** next to **Comma device**, and type the
-comma's IP address (shown on the comma under Settings, Network, Advanced). The app remembers it.
+comma's IP address (shown on the comma under Settings, Network, Advanced). The app remembers it and
+uses it whenever it is on that network; on any other network it searches as usual. On the Rivian
+hotspot, where the address changes, a typed address goes stale, so clear it afterward (tap **Change**,
+empty the box and tap **Save**).
 
 The connection repairs itself: if the picture or data stalls, OPRivView rebuilds the stream on its
 own, and it reconnects after the network drops or you switch apps.
