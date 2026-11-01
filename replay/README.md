@@ -31,6 +31,15 @@ Run from `replay/`:
 - `--dry-run` shows the range without fetching video or rendering.
 - If a time happened twice because the clocks went back, add the offset, such as `01:30-04:00`.
 
+## The window
+
+Open `build/macos/Build/Products/Release/OPRivView Replay.app` with no job set and it shows the replay window:
+a list of the drives on the comma, a start and end (each a local time or a segment number), a form for every
+option (built from the list in `params.py`, so a new option appears with no interface work), and a Render button
+with progress. In a development build it starts `python -m oprivview_replay.server` from this folder; set
+`OPRIVVIEW_SERVER_URL` to use a server you started yourself, or `OPRIVVIEW_REPLAY_DIR` if the folder is not found.
+There is no in-window preview yet; Play opens the finished MP4.
+
 ## Adding an option
 
 Add one `Param` to `oprivview_replay/params.py`. If the renderer needs it, read it in `lib/replay/replay_job.dart`.

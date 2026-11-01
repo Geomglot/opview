@@ -8,9 +8,8 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import params, ssh_source
-from .logs import index_segment
-from .timeline import RangeError, RouteTimeline, resolve_range, zone_for
+from . import jobs, params, ssh_source
+from .timeline import RangeError
 
 DEFAULT_CACHE = Path.home() / "Library/Caches/OPRivViewReplay"
 DEFAULT_APP = Path(__file__).resolve().parents[2] / "build/macos/Build/Products/Release/OPRivView Replay.app/Contents/MacOS/OPRivView Replay"
@@ -43,38 +42,18 @@ def main(argv: list[str] | None = None) -> int:
     print("give a route name, or --list to see them", file=sys.stderr)
     return 2
 
-  segments = ssh_source.list_routes(args.host).get(args.route)
-  if not segments:
-    print(f"{args.route} is not on the comma", file=sys.stderr)
-    return 1
-  ssh_source.fetch(args.host, args.route, segments, ("qlog.zst",), args.cache)
-  route_dir = args.cache / args.route
-  index = {s: index_segment(route_dir / str(s) / "qlog.zst") for s in segments}
-  located = next((i for i in index.values() if i.lat is not None), None)
-  if located is None:
-    print("this drive has no GPS position, so its time zone is unknown", file=sys.stderr)
-    return 1
-
   try:
-    timeline = RouteTimeline(index, zone_for(located.lat, located.lon))
-    start, end = resolve_range(timeline, args.start_segment, args.end_segment, args.start_time, args.end_time)
+    r = jobs.resolve(args.host, args.cache, args.route, args.start_segment, args.end_segment, args.start_time, args.end_time)
   except RangeError as e:
     print(e, file=sys.stderr)
     return 1
 
-  print(f"time zone: {timeline.zone.key}")
-  print(f"start: {timeline.describe(start)}")
-  print(f"end:   {timeline.describe(end)}")
+  print(f"time zone: {r.timeline.zone.key}")
+  print(f"start: {r.timeline.describe(r.start)}")
+  print(f"end:   {r.timeline.describe(r.end)}")
   if args.dry_run:
     return 0
-
-  from . import render
-  needed = [s for s in segments if start.segment <= s <= end.segment]
-  earlier = render.preroll_segment(timeline, start)
-  ssh_source.fetch(args.host, args.route, needed, ("rlog.zst", "fcamera.hevc"), args.cache)
-  if earlier is not None:
-    ssh_source.fetch(args.host, args.route, [earlier], ("rlog.zst",), args.cache)
-  render.run(timeline, route_dir, start, end, params.job_settings(args), args.output or Path(f"{args.route}.mp4"), args.app)
+  jobs.render_resolved(r, args.host, args.cache, params.job_settings(args), args.output or Path(f"{args.route}.mp4"), args.app)
   return 0
 
 

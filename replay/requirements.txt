@@ -2,3 +2,6 @@ pycapnp==2.1.0
 zstandard
 timezonefinder
 pytest
+fastapi
+uvicorn
+httpx

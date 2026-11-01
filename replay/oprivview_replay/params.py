@@ -46,3 +46,31 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 
 def job_settings(args: argparse.Namespace) -> dict:
   return {p.name: getattr(args, p.name) for p in PARAMS}
+
+
+def describe() -> list[dict]:
+  """the list as plain data, for the interface to build its form from"""
+  kinds = {str: "text", int: "integer"}
+  return [{"name": p.name, "label": p.name.replace("_", " "), "help": p.help, "default": list(p.default) if p.many else p.default,
+           "choices": list(p.choices) if p.choices else None, "kind": kinds[p.type], "many": p.many} for p in PARAMS]
+
+
+def settings_from_dict(values: dict) -> dict:
+  """job settings from a dict of user choices; anything left out takes its default, anything invalid raises ValueError"""
+  unknown = set(values) - {p.name for p in PARAMS}
+  if unknown:
+    raise ValueError(f"unknown option: {', '.join(sorted(unknown))}")
+  out = {}
+  for p in PARAMS:
+    v = values.get(p.name, list(p.default) if p.many else p.default)
+    if p.many:
+      v = list(v or [])
+      bad = [x for x in v if p.choices and x not in p.choices]
+      if bad:
+        raise ValueError(f"{p.name}: {bad[0]!r} is not one of {', '.join(p.choices)}")
+    elif v is not None:
+      v = p.type(v)
+      if p.choices and v not in p.choices:
+        raise ValueError(f"{p.name}: {v!r} is not one of {', '.join(p.choices)}")
+    out[p.name] = v
+  return out

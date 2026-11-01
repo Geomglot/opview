@@ -1,5 +1,5 @@
 // OPRivView replay: draws a drive through the real onroad layouts and writes it to an MP4
-// the job comes from the replay tool, which sets OPRIVVIEW_JOB (see replay/README.md)
+// with OPRIVVIEW_JOB set (by the replay server) it renders that job; without it, it opens the replay window
 
 import 'dart:async';
 import 'dart:convert';
@@ -16,13 +16,15 @@ import 'package:opview/selfdrive/ui/onroad/augmented_road_view.dart';
 import 'package:opview/selfdrive/ui/ui_state.dart';
 import 'package:opview/services/app_settings.dart';
 import 'package:opview/services/impl/cereal_adapter.dart';
+import 'package:opview/studio/studio_page.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   final path = Platform.environment['OPRIVVIEW_JOB'];
   if (path == null) {
-    stderr.writeln('OPRivView replay runs from the replay tool; OPRIVVIEW_JOB is not set');
-    exit(2);
+    // no job to render: this is the app the user opens
+    runApp(MaterialApp(debugShowCheckedModeBanner: false, theme: ThemeData.dark(useMaterial3: true), home: const StudioPage()));
+    return;
   }
   runApp(MaterialApp(debugShowCheckedModeBanner: false, home: ReplayRender(job: ReplayJob.load(path))));
 }

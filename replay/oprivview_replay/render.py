@@ -95,7 +95,7 @@ def write_clip(tl: RouteTimeline, route_dir: Path, start: FramePos, end: FramePo
   return inputs, count
 
 
-def run(tl: RouteTimeline, route_dir: Path, start: FramePos, end: FramePos, settings: dict, output: Path, app: Path) -> None:
+def run(tl: RouteTimeline, route_dir: Path, start: FramePos, end: FramePos, settings: dict, output: Path, app: Path, progress=print) -> None:
   clip = route_dir / "clip.txt"
   inputs, count = write_clip(tl, route_dir, start, end, clip)
   video_height = round(settings["video_width"] * CAMERA_ASPECT / 2) * 2
@@ -103,5 +103,14 @@ def run(tl: RouteTimeline, route_dir: Path, start: FramePos, end: FramePos, sett
          "video_inputs": inputs, "skip_frames": start.frame, "frame_count": count, "video_height": video_height, "fps": FPS}
   job_path = route_dir / "job.json"
   job_path.write_text(json.dumps(job, indent=1))
-  print(f"rendering {count} frames ({count / FPS:.1f} s of drive) to {output}")
-  subprocess.run([str(app)], check=True, env={**os.environ, "OPRIVVIEW_JOB": str(job_path)})
+  progress(f"rendering {count} frames ({count / FPS:.1f} s of drive) to {output}")
+  proc = subprocess.Popen([str(app)], env={**os.environ, "OPRIVVIEW_JOB": str(job_path)}, stderr=subprocess.PIPE, text=True)
+  tail = []
+  for line in proc.stderr:
+    line = line.rstrip()
+    if line.startswith("frame "):
+      progress(line)
+    else:
+      tail = (tail + [line])[-20:]
+  if proc.wait() != 0:
+    raise subprocess.CalledProcessError(proc.returncode, str(app), stderr="\n".join(tail))
