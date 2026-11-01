@@ -25,6 +25,10 @@ PARAMS = (
   Param("view", "which OPRivView layout to draw", "classic", ("classic", "enhanced", "detailed")),
   Param("bottom_bar", "bottom bar; default is the app's own choice for the view", None,
         ("torque", "laneCentering", "auto", "off")),
+  Param("detail", "full: the complete log and camera video. quick: the small files comma Connect keeps; no path or lane lines "
+        "and a low resolution picture. auto: full when it can be had", "auto", ("auto", "full", "quick")),
+  Param("camera", "picture behind the overlays: auto follows the app (wide camera at low speed in experimental mode)", "auto",
+        ("auto", "road", "wide")),
   Param("collapsed_panels", "Detailed panels to fold shut", (), ("steering", "driver", "longitudinal", "lead"), many=True),
   Param("clock", "clock format", "h12", ("h12", "h24")),
   Param("width", "output width in pixels", 1920, type=int),

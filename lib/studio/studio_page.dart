@@ -73,7 +73,7 @@ class _StudioPageState extends State<StudioPage> {
   Future<void> _loadRoutes() async {
     final r = await _sidecar!.api.routes();
     setState(() {
-      _routes = r.routes ?? [];
+      _routes = r.routes;
       _routesError = r.error;
     });
   }
@@ -164,8 +164,13 @@ class _StudioPageState extends State<StudioPage> {
             ListTile(
               dense: true,
               selected: r == _route,
-              title: Text(r.route),
-              subtitle: Text('segments ${r.first} to ${r.last}'),
+              title: Text(r.localStart ?? r.route),
+              subtitle: Text([
+                if (r.localStart != null) r.route,
+                'segments ${r.first} to ${r.last}${r.km == null ? '' : ', ${r.km!.toStringAsFixed(1)} km'}',
+                r.detail == 'full' ? 'Full detail (on the comma)' : 'Quick detail only (comma Connect)',
+              ].join('\n')),
+              isThreeLine: r.localStart != null,
               onTap: () => setState(() {
                 _route = r;
                 _resolved = null;

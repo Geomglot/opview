@@ -1,13 +1,36 @@
 """The steps shared by the command line and the server: find the drive, resolve a range, render it."""
-import re
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from . import render, ssh_source
+from . import render
 from .logs import index_segment
+from .sources import ConnectSource, DeviceSource, SourceError
 from .timeline import FramePos, RangeError, RouteTimeline, resolve_range, zone_for
+
+FULL = ("rlog.zst", "fcamera.hevc")
+QUICK = ("qlog.zst", "qcamera.ts")
+
+
+@dataclass
+class Sources:
+  device: DeviceSource
+  connect: ConnectSource | None = None
+
+  def listed(self) -> dict[str, tuple[object, list[int]]]:
+    """route -> (source, segments). The comma wins over Connect for a route both have, since it has the full files."""
+    out: dict[str, tuple[object, list[int]]] = {}
+    if self.connect is not None and self.connect.available():
+      try:
+        out.update({r: (self.connect, s) for r, s in self.connect.routes().items()})
+      except SourceError:
+        pass
+    try:
+      out.update({r: (self.device, s) for r, s in self.device.routes().items()})
+    except SourceError:
+      if not out:
+        raise
+    return out
 
 
 @dataclass
@@ -18,21 +41,30 @@ class Resolved:
   timeline: RouteTimeline
   start: FramePos
   end: FramePos
+  source: object
 
   def describe(self) -> dict:
     tl = self.timeline
     seconds = (tl.wall_ms(self.end.segment, self.end.frame) - tl.wall_ms(self.start.segment, self.start.frame)) / 1000
     return {"zone": tl.zone.key, "start": tl.describe(self.start), "end": tl.describe(self.end),
-            "start_segment": self.start.segment, "end_segment": self.end.segment, "seconds": round(seconds, 1)}
+            "start_segment": self.start.segment, "end_segment": self.end.segment, "seconds": round(seconds, 1),
+            "source": self.source.name}
 
 
-def resolve(host: str, cache: Path, route: str, start_segment: int | None = None, end_segment: int | None = None,
+def resolve(sources: Sources, cache: Path, route: str, start_segment: int | None = None, end_segment: int | None = None,
             start_time: str | None = None, end_time: str | None = None) -> Resolved:
   """raises RangeError for anything the user can fix: unknown route, no GPS, a time outside the drive"""
-  segments = ssh_source.list_routes(host).get(route)
-  if not segments:
-    raise RangeError(f"{route} is not on the comma")
-  ssh_source.fetch(host, route, segments, ("qlog.zst",), cache)
+  try:
+    found = sources.listed().get(route)
+  except SourceError as e:
+    raise RangeError(str(e))
+  if not found:
+    raise RangeError(f"{route} is on neither the comma nor comma Connect")
+  source, segments = found
+  try:
+    source.fetch(route, segments, ("qlog.zst",), cache)
+  except SourceError as e:
+    raise RangeError(str(e))
   route_dir = cache / route
   index = {s: index_segment(route_dir / str(s) / "qlog.zst") for s in segments}
   located = next((i for i in index.values() if i.lat is not None), None)
@@ -40,16 +72,57 @@ def resolve(host: str, cache: Path, route: str, start_segment: int | None = None
     raise RangeError("this drive has no GPS position, so its time zone is unknown")
   timeline = RouteTimeline(index, zone_for(located.lat, located.lon))
   start, end = resolve_range(timeline, start_segment, end_segment, start_time, end_time)
-  return Resolved(route, segments, route_dir, timeline, start, end)
+  return Resolved(route, segments, route_dir, timeline, start, end, source)
 
 
-def render_resolved(r: Resolved, host: str, cache: Path, settings: dict, output: Path, app: Path,
+def choose_files(r: Resolved, sources: Sources, needed: list[int], detail: str) -> tuple[object, str]:
+  """(where to get the files, "full" or "quick") for what the user asked for and what exists"""
+  candidates = [r.source]
+  for other in (sources.device, sources.connect):
+    if other is None or other is r.source:
+      continue
+    try:
+      # the comma only counts if it is reachable and has this drive; Connect is checked by its own file list
+      if other is sources.device and sources.listed().get(r.route, (None, []))[0] is not other:
+        continue
+    except SourceError:
+      continue
+    candidates.append(other)
+  if detail in ("auto", "full"):
+    problems = []
+    for source in candidates:
+      try:
+        gone = source.missing(r.route, needed, FULL)
+      except SourceError as e:
+        problems.append(str(e))
+        continue
+      if not gone:
+        return source, "full"
+      problems.append(f"{source.name} lacks {', '.join(gone)}")
+    if detail == "full":
+      raise SourceError("the full files are not available (" + "; ".join(problems) + "). Use quick detail instead.")
+  for source in candidates:
+    try:
+      if not source.missing(r.route, needed, QUICK):
+        return source, "quick"
+    except SourceError:
+      continue
+  raise SourceError("neither the comma nor comma Connect has the files for this drive")
+
+
+def render_resolved(r: Resolved, sources: Sources, cache: Path, settings: dict, output: Path, app: Path,
                     progress: Callable[[str], None] = print) -> None:
   needed = [s for s in r.segments if r.start.segment <= s <= r.end.segment]
   earlier = render.preroll_segment(r.timeline, r.start)
-  progress("fetching logs and video")
-  ssh_source.fetch(host, r.route, needed, ("rlog.zst", "fcamera.hevc"), cache)
+  source, detail = choose_files(r, sources, needed + ([earlier] if earlier is not None else []), settings["detail"])
+  log_name, video_name = ("rlog.zst", "fcamera.hevc") if detail == "full" else ("qlog.zst", "qcamera.ts")
+  progress(f"fetching the {detail} files from {source.name}")
+  source.fetch(r.route, needed, (log_name, video_name), cache)
   if earlier is not None:
-    ssh_source.fetch(host, r.route, [earlier], ("rlog.zst",), cache)
-  progress("rendering")
-  render.run(r.timeline, r.route_dir, r.start, r.end, settings, output, app, progress)
+    source.fetch(r.route, [earlier], (log_name,), cache)
+  wide = render.wide_segments(r.timeline, r.route_dir, r.start, r.end, settings["camera"], detail)
+  if wide:
+    progress("fetching wide camera video")
+    source.fetch(r.route, wide, ("ecamera.hevc",), cache)
+  progress(f"rendering ({detail} detail)")
+  render.run(r.timeline, r.route_dir, r.start, r.end, settings, output, app, progress, detail)

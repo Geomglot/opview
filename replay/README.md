@@ -52,6 +52,23 @@ The app is ad-hoc signed, which is enough on the Mac that built it. Copying it t
 signing and notarizing, or right-click Open. The bundled ffmpeg is the Homebrew build, which includes GPL
 encoders, so it is for personal use rather than redistribution.
 
+## Where files come from, and how much detail
+
+Drives are listed from the comma (over SSH) and from comma Connect (the token in `~/.comma/jwt`) together. A drive
+on the comma gets full detail: the complete log and camera video, so the path, lane lines and lead markers appear.
+A drive that exists only on Connect gets quick detail: Connect keeps just the small files (qlog and qcamera), which
+have no path or lane data and a low resolution picture, but the speed, assist state, clock, road name, speed limit
+and steering readouts all work. `--detail full|quick|auto` chooses (auto means full when it can be had); quick can
+also be used on the comma for a fast draft. Connect never has the wide camera, so quick detail is road camera only.
+
+## Wide camera
+
+`--camera auto` follows the app: in experimental mode the wide camera is shown below 10 m/s and the road camera
+above 15 m/s, keeping the current one in between (`replay/oprivview_replay/camera.py`, mirroring
+`ConnectionManager._switchStreamIfNeeded`). `road` and `wide` force one camera. The live app takes a second or two to
+reconnect when it switches; the replay switches at once. Auto has not yet been seen on a real experimental mode
+drive, because none of the drives on the comma had it on; `--camera wide` has been checked against a normal drive.
+
 ## Adding an option
 
 Add one `Param` to `oprivview_replay/params.py`. If the renderer needs it, read it in `lib/replay/replay_job.dart`.

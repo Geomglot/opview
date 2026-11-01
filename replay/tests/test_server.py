@@ -4,7 +4,7 @@ from oprivview_replay import params, server
 
 
 def client():
-  return TestClient(server.make_app(host="nonexistent-host-for-test"))
+  return TestClient(server.make_app(host="nonexistent-host-for-test", connect=None))
 
 
 def test_params_list_matches_the_single_source():

@@ -25,7 +25,10 @@ void main() {
         if (req.uri.path == '/params') {
           body = _params;
         } else if (req.uri.path == '/routes') {
-          body = {'online': true, 'routes': [{'route': '0000005a--f16da7af40', 'segments': [0, 1], 'first': 0, 'last': 1}]};
+          body = {'online': true, 'routes': [
+            {'route': '0000005a--f16da7af40', 'segments': [0, 1], 'first': 0, 'last': 1, 'on_device': true, 'on_connect': true, 'detail': 'full', 'local_start': '2026-10-31 09:18 EDT', 'km': 3.6},
+            {'route': '00000001--aaaaaaaaaa', 'segments': [0], 'first': 0, 'last': 0, 'on_device': false, 'on_connect': true, 'detail': 'quick'},
+          ]};
         } else if (req.uri.path == '/jobs' && req.method == 'POST') {
           posted.add(jsonDecode(await utf8.decoder.bind(req).join()));
           body = {'id': 'a', 'state': 'done', 'message': 'finished', 'progress': 1.0, 'output': '/tmp/x.mp4', 'error': null};
@@ -43,14 +46,16 @@ void main() {
 
     final api = StudioApi(Uri.parse('http://127.0.0.1:${server.port}'));
     await tester.pumpWidget(MaterialApp(home: StudioPage(start: () async => Sidecar(null, api))));
-    for (var i = 0; i < 20 && find.text('0000005a--f16da7af40').evaluate().isEmpty; i++) {
+    for (var i = 0; i < 20 && find.text('2026-10-31 09:18 EDT').evaluate().isEmpty; i++) {
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
       await tester.pump();
     }
     expect(find.text('Lane keeping'), findsOneWidget);
     expect(find.text('Torque bar'), findsOneWidget);
 
-    await tester.tap(find.text('0000005a--f16da7af40'));
+    expect(find.textContaining('Quick detail only (comma Connect)'), findsOneWidget);
+    expect(find.textContaining('Full detail (on the comma)'), findsOneWidget);
+    await tester.tap(find.text('2026-10-31 09:18 EDT'));
     await tester.pump();
     await tester.tap(find.text('Lane keeping'));
     await tester.tap(find.text('Detailed'));

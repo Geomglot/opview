@@ -65,19 +65,27 @@ class _ReplayRenderState extends State<ReplayRender> {
 
   Future<void> _run() async {
     final job = widget.job;
-    final decoder = await Process.start(job.ffmpeg, [
-      '-v', 'error', '-f', 'hevc', '-framerate', '${job.fps}', '-i', 'concat:${job.videoInputs.join('|')}',
-      '-vf', 'trim=start_frame=${job.skipFrames},setpts=PTS-STARTPTS,scale=${job.videoWidth}:${job.videoHeight}',
-      '-frames:v', '${job.frameCount}', '-pix_fmt', 'rgba', '-f', 'rawvideo', '-',
-    ]);
+    Future<Process> decode(List<String> files) => Process.start(job.ffmpeg, [
+          '-v', 'error', '-f', job.videoFormat, if (job.videoFormat == 'hevc') ...['-framerate', '${job.fps}'],
+          '-i', 'concat:${files.join('|')}',
+          '-vf', 'trim=start_frame=${job.skipFrames},setpts=PTS-STARTPTS,scale=${job.videoWidth}:${job.videoHeight}',
+          '-frames:v', '${job.frameCount}', '-pix_fmt', 'rgba', '-f', 'rawvideo', '-',
+        ]);
+    final decoder = await decode(job.videoInputs);
     decoder.stderr.listen(stderr.add);
+    // the wide camera is read in step with the road camera, so either picture is ready for any frame
+    final wideInputs = job.wideInputs;
+    final wideDecoder = wideInputs == null ? null : await decode(wideInputs);
+    wideDecoder?.stderr.listen(stderr.add);
     final encoder = await Process.start(job.ffmpeg, [
       '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', '${job.width}x${job.height}',
       '-r', '${job.fps}', '-i', '-', '-c:v', job.encoder, '-b:v', job.bitrate, '-pix_fmt', 'yuv420p', job.output,
     ]);
     encoder.stderr.listen(stderr.add);
 
-    final frames = RawFrameReader(decoder.stdout, job.videoWidth * job.videoHeight * 4);
+    final frameBytes = job.videoWidth * job.videoHeight * 4;
+    final frames = RawFrameReader(decoder.stdout, frameBytes);
+    final wideFrames = wideDecoder == null ? null : RawFrameReader(wideDecoder.stdout, frameBytes);
     final lines = StreamIterator(File(job.clip).openRead().transform(utf8.decoder).transform(const LineSplitter()));
     var done = 0;
     final clock = Stopwatch()..start();
@@ -87,12 +95,17 @@ class _ReplayRenderState extends State<ReplayRender> {
         _adapter.apply(_uiState, line);
         continue;
       }
-      final pixels = await frames.next();
+      final parts = line.split(' ');
+      final wide = parts.length > 2 && parts[2] == 'W';
+      final road = await frames.next();
+      final widePixels = await wideFrames?.next();
+      final pixels = wide ? widePixels : road;
       if (pixels == null) throw 'the video ended after $done frames, expected ${job.frameCount}';
       final picture = await _toImage(pixels, job.videoWidth, job.videoHeight);
       final previous = _picture;
       setState(() {
-        _time = DateTime.fromMillisecondsSinceEpoch(int.parse(line.substring(2)), isUtc: true);
+        _time = DateTime.fromMillisecondsSinceEpoch(int.parse(parts[1]), isUtc: true);
+        _uiState.streamType = wide ? 'wideRoad' : 'road';
         _picture = picture;
       });
       await WidgetsBinding.instance.endOfFrame;
@@ -110,6 +123,7 @@ class _ReplayRenderState extends State<ReplayRender> {
     await encoder.stdin.close();
     final code = await encoder.exitCode;
     decoder.kill();
+    wideDecoder?.kill();
     if (code != 0) throw 'ffmpeg could not write ${job.output}';
     if (done != job.frameCount) throw 'drew $done frames, expected ${job.frameCount}';
   }

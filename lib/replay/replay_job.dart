@@ -11,6 +11,10 @@ class ReplayJob {
   final String ffmpeg;
   final String encoder;
   final List<String> videoInputs;
+  /// 'hevc' for the raw camera files, 'mpegts' for the small qcamera files
+  final String videoFormat;
+  /// the wide camera files for the same segments, or null when no frame uses the wide camera
+  final List<String>? wideInputs;
   final int skipFrames;
   final int frameCount;
   final int videoWidth;
@@ -30,6 +34,8 @@ class ReplayJob {
         ffmpeg = j['ffmpeg'] as String,
         encoder = j['encoder'] as String,
         videoInputs = (j['video_inputs'] as List).cast<String>(),
+        videoFormat = j['video_format'] as String? ?? 'hevc',
+        wideInputs = (j['wide_inputs'] as List?)?.cast<String>(),
         skipFrames = j['skip_frames'] as int,
         frameCount = j['frame_count'] as int,
         videoWidth = j['video_width'] as int,

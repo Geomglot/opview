@@ -126,10 +126,12 @@ def decode_rlog(rlog: Path) -> Decoded:
   return out
 
 
-def load_decoded(segment_dir: Path) -> Decoded:
-  cached = segment_dir / f"decoded-v{DECODED_VERSION}.json"
+def load_decoded(segment_dir: Path, log_name: str = "rlog.zst") -> Decoded:
+  """decode a segment's log, or read the saved result. qlog results are kept apart from rlog results."""
+  stem = "decoded" if log_name == "rlog.zst" else "decoded-" + log_name.split(".")[0]
+  cached = segment_dir / f"{stem}-v{DECODED_VERSION}.json"
   if cached.exists():
     return Decoded(**json.loads(cached.read_text()))
-  decoded = decode_rlog(segment_dir / "rlog.zst")
+  decoded = decode_rlog(segment_dir / log_name)
   cached.write_text(json.dumps(asdict(decoded), separators=(",", ":")))
   return decoded

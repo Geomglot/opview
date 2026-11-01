@@ -27,6 +27,11 @@ void main() {
   });
 
   group('ReplayJob settings', () {
+    test('wide camera files are optional', () {
+      expect(ReplayJob.fromJson(job({})).wideInputs, isNull);
+      expect(ReplayJob.fromJson(job({'wide_inputs': ['w']})).wideInputs, ['w']);
+    });
+
     test('the chosen view is used', () {
       expect(ReplayJob.fromJson(job({'view': 'detailed'})).settings().layout, OnroadLayout.detailed);
     });

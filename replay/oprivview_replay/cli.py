@@ -8,7 +8,8 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import jobs, params, ssh_source
+from . import jobs, params
+from .sources import ConnectSource, DeviceSource, SourceError
 from .timeline import RangeError
 
 DEFAULT_CACHE = Path.home() / "Library/Caches/OPRivViewReplay"
@@ -26,6 +27,7 @@ def build_parser() -> argparse.ArgumentParser:
   p.add_argument("--output", "-o", type=Path, help="MP4 to write; default <route>.mp4")
   p.add_argument("--dry-run", action="store_true", help="show the range without fetching video or rendering")
   p.add_argument("--host", default="comma", help="SSH host of the comma")
+  p.add_argument("--no-connect", action="store_true", help="do not use comma Connect")
   p.add_argument("--cache", type=Path, default=DEFAULT_CACHE, help="where downloaded drives are kept")
   p.add_argument("--app", type=Path, default=DEFAULT_APP, help="the built renderer")
   params.add_arguments(p)
@@ -34,16 +36,21 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
   args = build_parser().parse_args(argv)
+  sources = jobs.Sources(DeviceSource(args.host), None if args.no_connect else ConnectSource())
   if args.list:
-    for route, segments in ssh_source.list_routes(args.host).items():
-      print(f"{route}  segments {segments[0]}-{segments[-1]}")
+    try:
+      for route, (source, segments) in sorted(sources.listed().items(), reverse=True):
+        print(f"{route}  segments {segments[0]}-{segments[-1]}  ({source.name})")
+    except SourceError as e:
+      print(e, file=sys.stderr)
+      return 1
     return 0
   if not args.route:
     print("give a route name, or --list to see them", file=sys.stderr)
     return 2
 
   try:
-    r = jobs.resolve(args.host, args.cache, args.route, args.start_segment, args.end_segment, args.start_time, args.end_time)
+    r = jobs.resolve(sources, args.cache, args.route, args.start_segment, args.end_segment, args.start_time, args.end_time)
   except RangeError as e:
     print(e, file=sys.stderr)
     return 1
@@ -53,7 +60,11 @@ def main(argv: list[str] | None = None) -> int:
   print(f"end:   {r.timeline.describe(r.end)}")
   if args.dry_run:
     return 0
-  jobs.render_resolved(r, args.host, args.cache, params.job_settings(args), args.output or Path(f"{args.route}.mp4"), args.app)
+  try:
+    jobs.render_resolved(r, sources, args.cache, params.job_settings(args), args.output or Path(f"{args.route}.mp4"), args.app)
+  except SourceError as e:
+    print(e, file=sys.stderr)
+    return 1
   return 0
 
 
