@@ -100,8 +100,9 @@ class StudioApi {
 
   Future<Map<String, dynamic>> resolve(RangeRequest r) async => await _call('POST', '/resolve', r.toJson());
 
-  Future<Map<String, dynamic>> startJob(RangeRequest r, Map<String, Object?> options, String? output) async =>
-      await _call('POST', '/jobs', {...r.toJson(), 'options': options, 'output': output});
+  /// [preview] prepares the drive for the window to play instead of encoding an MP4
+  Future<Map<String, dynamic>> startJob(RangeRequest r, Map<String, Object?> options, String? output, {bool preview = false}) async =>
+      await _call('POST', '/jobs', {...r.toJson(), 'options': options, 'output': output, 'preview': preview});
 
   Future<Map<String, dynamic>> job(String id) async => await _call('GET', '/jobs/$id');
 

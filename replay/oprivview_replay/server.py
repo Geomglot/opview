@@ -31,6 +31,7 @@ class Range(BaseModel):
 class RenderRequest(Range):
   options: dict = {}
   output: str | None = None
+  preview: bool = False  # prepare the drive for the window to play, without encoding an MP4
 
 
 def make_app(host: str = "comma", cache: Path = DEFAULT_CACHE, renderer: Path = DEFAULT_APP, output_dir: Path = Path.home() / "Movies",
@@ -102,7 +103,7 @@ def make_app(host: str = "comma", cache: Path = DEFAULT_CACHE, renderer: Path = 
     resolved = _resolve(req)
     output = Path(req.output) if req.output else output_dir / f"{req.route}.mp4"
     job_id = uuid.uuid4().hex[:8]
-    state[job_id] = {"id": job_id, "state": "running", "message": "starting", "progress": None, "output": str(output), "error": None,
+    state[job_id] = {"id": job_id, "state": "running", "message": "starting", "progress": None, "output": str(output), "error": None, "preview": req.preview, "job_file": None,
                      "range": resolved.describe()}
 
     def progress(text: str):
@@ -114,10 +115,12 @@ def make_app(host: str = "comma", cache: Path = DEFAULT_CACHE, renderer: Path = 
 
     def work():
       try:
-        output.parent.mkdir(parents=True, exist_ok=True)
-        jobs.render_resolved(resolved, sources, cache, settings, output, renderer, progress)
+        if not req.preview:
+          output.parent.mkdir(parents=True, exist_ok=True)
+        job_file = jobs.render_resolved(resolved, sources, cache, settings, output, renderer, progress, preview=req.preview)
         with lock:
-          state[job_id].update(state="done", message="finished", progress=1.0)
+          state[job_id].update(state="done", message="ready" if req.preview else "finished", progress=1.0,
+                               job_file=str(job_file) if job_file else None)
       except Exception as e:  # report anything to the interface rather than lose it in the thread
         detail = getattr(e, "stderr", None) or str(e)
         with lock:

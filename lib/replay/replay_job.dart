@@ -16,6 +16,8 @@ class ReplayJob {
   /// the wide camera files for the same segments, or null when no frame uses the wide camera
   final List<String>? wideInputs;
   final int skipFrames;
+  /// frames to drop from the start of the wide camera files; they can start at a different keyframe
+  final int wideSkipFrames;
   final int frameCount;
   final int videoWidth;
   final int videoHeight;
@@ -37,6 +39,7 @@ class ReplayJob {
         videoFormat = j['video_format'] as String? ?? 'hevc',
         wideInputs = (j['wide_inputs'] as List?)?.cast<String>(),
         skipFrames = j['skip_frames'] as int,
+        wideSkipFrames = (j['wide_skip_frames'] ?? j['skip_frames']) as int,
         frameCount = j['frame_count'] as int,
         videoWidth = j['video_width'] as int,
         videoHeight = j['video_height'] as int,

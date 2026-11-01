@@ -38,7 +38,16 @@ a list of the drives on the comma, a start and end (each a local time or a segme
 option (built from the list in `params.py`, so a new option appears with no interface work), and a Render button
 with progress. In a development build it starts `python -m oprivview_replay.server` from this folder; set
 `OPRIVVIEW_SERVER_URL` to use a server you started yourself, or `OPRIVVIEW_REPLAY_DIR` if the folder is not found.
-There is no in-window preview yet; Play opens the finished MP4.
+Preview prepares the range and plays it in the window at the drive's own speed, through the same layouts the export uses
+(pause and restart; no scrubbing yet). Play after a render opens the finished MP4.
+
+To check the preview in the real engine, prepare a job (POST /jobs with `"preview": true`) and run
+`flutter drive --profile -d macos --driver=test_driver/integration_test.dart --target=integration_test/preview_test.dart
+--dart-define=PREVIEW_JOB=<preview-job.json> --dart-define=PREVIEW_PNG=<png to write>`.
+
+Starting in the middle of a segment no longer costs a 20 second wait: the camera file is copied from the keyframe before
+the start (`keyframe_cut` in render.py), which gives identical pictures. These copies (`fcamera-from-N.hevc`) stay in the
+cache until the cache cap exists.
 
 ## Building the app
 

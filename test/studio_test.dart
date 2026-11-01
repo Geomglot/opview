@@ -61,6 +61,14 @@ void main() {
     await tester.tap(find.text('Detailed'));
     await tester.tap(find.text('Lead'));
     await tester.pump();
+    await tester.tap(find.text('Preview'));
+    for (var i = 0; i < 20 && posted.isEmpty; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pump();
+    }
+    expect(posted.single['preview'], true);
+    posted.clear();
+    await tester.pump(const Duration(seconds: 2)); // let the job poll finish
     await tester.tap(find.text('Render MP4'));
     for (var i = 0; i < 20 && posted.isEmpty; i++) {
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));

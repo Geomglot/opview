@@ -38,6 +38,55 @@ def _tool(name: str) -> str:
   return found
 
 
+def _is_idr(src, pos: int) -> bool:
+  src.seek(pos)
+  head = src.read(8192)
+  i = 0
+  while (i := head.find(b"\x00\x00\x01", i)) != -1 and i + 3 < len(head):
+    nal = (head[i + 3] >> 1) & 0x3F
+    if nal < 32:  # the first picture NAL unit: parameter sets and the like come before it
+      return nal in (19, 20)
+    i += 3
+  return False
+
+
+def keyframe_cut(video: Path, frame: int) -> tuple[Path, int]:
+  """A raw camera file can only be decoded from a keyframe, so starting at frame 900 would mean decoding and throwing away
+  900 frames first (20 seconds). The file has a keyframe about every 30 frames: copy from the one before [frame], with the
+  stream's parameter sets put back in front, and say how many frames of the copy to skip. The pictures come out identical."""
+  if video.suffix != ".hevc" or frame == 0:
+    return video, frame
+  out = subprocess.run([_tool("ffprobe"), "-v", "error", "-f", "hevc", "-framerate", str(FPS), "-select_streams", "v:0",
+                        "-show_entries", "packet=pos,flags", "-of", "csv=p=0", str(video)], check=True, capture_output=True, text=True).stdout
+  keys = [(n, int(line.split(",")[0])) for n, line in enumerate(out.split()) if "K" in line.split(",")[1]]
+  # only a clean IDR picture is safe to start from; an open-GOP keyframe has pictures that lean on earlier ones
+  with open(video, "rb") as src:
+    safe = [key for key in keys if key[0] <= frame and _is_idr(src, key[1])]
+  k, pos = max(safe, default=(0, 0))
+  if k == 0:
+    return video, frame
+  cut = video.with_name(f"{video.stem}-from-{k}.hevc")
+  if not cut.exists():
+    with open(video, "rb") as src:
+      head = src.read(4096)
+      # the parameter sets are the NAL units before the first picture (types 32 to 34); copy up to the first one that is not
+      i = 0
+      while True:
+        i = head.index(b"\x00\x00\x01", i)
+        if (head[i + 3] >> 1) & 0x3F < 32:
+          break
+        i += 3
+      header = head[:i - 1] if i > 0 and head[i - 1] == 0 else head[:i]
+      tmp = cut.with_name(cut.name + ".part")
+      with open(tmp, "wb") as dst:
+        dst.write(header)
+        src.seek(pos)
+        while chunk := src.read(1 << 20):
+          dst.write(chunk)
+    tmp.rename(cut)
+  return cut, frame - k
+
+
 def by_frame(decoded: Decoded) -> list[tuple[int, str]]:
   """(frame, message) in delivery order. The path and lanes go with the exact frame they were worked out from;
   everything else goes with the first frame finished after it was sent, which is when a viewer could have seen it"""
@@ -129,16 +178,35 @@ def wide_segments(tl: RouteTimeline, route_dir: Path, start: FramePos, end: Fram
   return [s for s in tl.segments if start.segment <= s <= end.segment] if wide else []
 
 
-def run(tl: RouteTimeline, route_dir: Path, start: FramePos, end: FramePos, settings: dict, output: Path, app: Path, progress=print,
-        detail: str = "full") -> None:
-  clip = route_dir / "clip.txt"
+def _cut(video: str, frame: int) -> tuple[str, int]:
+  path, skip = keyframe_cut(Path(video), frame)
+  return str(path), skip
+
+
+def prepare(tl: RouteTimeline, route_dir: Path, start: FramePos, end: FramePos, settings: dict, output: Path, progress=print,
+            detail: str = "full", name: str = "job.json") -> Path:
+  """write the clip and the job file the renderer reads, and return the job file"""
+  clip = route_dir / name.replace("job", "clip").replace(".json", ".txt")
   inputs, count, wide_inputs = write_clip(tl, route_dir, start, end, clip, settings["camera"], detail=detail)
   video_height = round(settings["video_width"] * CAMERA_ASPECT / 2) * 2
+  skip, wide_skip = start.frame, start.frame
+  if inputs:
+    inputs[0], skip = _cut(inputs[0], start.frame)
+  if wide_inputs:
+    wide_inputs[0], wide_skip = _cut(wide_inputs[0], start.frame)
   job = {**settings, "clip": str(clip), "output": str(output.resolve()), "ffmpeg": _tool("ffmpeg"), "encoder": "h264_videotoolbox",
-         "video_format": "hevc" if detail == "full" else "mpegts", "video_inputs": inputs, "wide_inputs": wide_inputs, "skip_frames": start.frame, "frame_count": count, "video_height": video_height, "fps": FPS}
-  job_path = route_dir / "job.json"
+         "video_format": "hevc" if detail == "full" else "mpegts", "video_inputs": inputs, "wide_inputs": wide_inputs,
+         "skip_frames": skip, "wide_skip_frames": wide_skip, "frame_count": count, "video_height": video_height, "fps": FPS}
+  job_path = route_dir / name
   job_path.write_text(json.dumps(job, indent=1))
-  progress(f"rendering {count} frames ({count / FPS:.1f} s of drive) to {output}")
+  progress(f"{count} frames ({count / FPS:.1f} s of drive)")
+  return job_path
+
+
+def run(tl: RouteTimeline, route_dir: Path, start: FramePos, end: FramePos, settings: dict, output: Path, app: Path, progress=print,
+        detail: str = "full") -> None:
+  job_path = prepare(tl, route_dir, start, end, settings, output, progress, detail)
+  progress(f"rendering to {output}")
   proc = subprocess.Popen([str(app)], env={**os.environ, "OPRIVVIEW_JOB": str(job_path)}, stderr=subprocess.PIPE, text=True)
   tail = []
   for line in proc.stderr:

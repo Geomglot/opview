@@ -33,3 +33,32 @@ def test_unreachable_comma_is_reported_not_raised():
 def test_bad_option_is_a_422():
   r = client().post("/jobs", json={"route": "0000005a--f16da7af40", "options": {"view": "fancy"}})
   assert r.status_code == 422
+
+
+def test_preview_job_returns_the_job_file_and_makes_no_mp4(monkeypatch, tmp_path):
+  import time
+  from pathlib import Path
+
+  from oprivview_replay import jobs
+
+  class R:
+    def describe(self):
+      return {"zone": "UTC"}
+
+  monkeypatch.setattr(jobs, "resolve", lambda *a, **k: R())
+  seen = {}
+
+  def fake_render(resolved, sources, cache, settings, output, app, progress, preview=False):
+    seen["preview"], seen["output"] = preview, output
+    return tmp_path / "preview-job.json" if preview else None
+
+  monkeypatch.setattr(jobs, "render_resolved", fake_render)
+  c = TestClient(server.make_app(host="x", connect=None, output_dir=tmp_path / "movies"))
+  job = c.post("/jobs", json={"route": "0000005a--f16da7af40", "preview": True}).json()
+  for _ in range(50):
+    job = c.get(f"/jobs/{job['id']}").json()
+    if job["state"] != "running":
+      break
+    time.sleep(0.05)
+  assert job["state"] == "done" and job["preview"] is True and job["job_file"] == str(tmp_path / "preview-job.json")
+  assert seen["preview"] is True and not (tmp_path / "movies").exists()

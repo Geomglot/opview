@@ -2,17 +2,15 @@
 // with OPRIVVIEW_JOB set (by the replay server) it renders that job; without it, it opens the replay window
 
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:opview/common/app_clock.dart';
-import 'package:opview/replay/raw_frames.dart';
+import 'package:opview/replay/replay_feed.dart';
 import 'package:opview/replay/replay_job.dart';
-import 'package:opview/selfdrive/ui/onroad/augmented_road_view.dart';
+import 'package:opview/replay/replay_scene.dart';
 import 'package:opview/selfdrive/ui/ui_state.dart';
 import 'package:opview/services/app_settings.dart';
 import 'package:opview/services/impl/cereal_adapter.dart';
@@ -57,56 +55,23 @@ class _ReplayRenderState extends State<ReplayRender> {
     exit(1);
   }
 
-  Future<ui.Image> _toImage(Uint8List rgba, int w, int h) {
-    final done = Completer<ui.Image>();
-    ui.decodeImageFromPixels(rgba, w, h, ui.PixelFormat.rgba8888, done.complete);
-    return done.future;
-  }
-
   Future<void> _run() async {
     final job = widget.job;
-    Future<Process> decode(List<String> files) => Process.start(job.ffmpeg, [
-          '-v', 'error', '-f', job.videoFormat, if (job.videoFormat == 'hevc') ...['-framerate', '${job.fps}'],
-          '-i', 'concat:${files.join('|')}',
-          '-vf', 'trim=start_frame=${job.skipFrames},setpts=PTS-STARTPTS,scale=${job.videoWidth}:${job.videoHeight}',
-          '-frames:v', '${job.frameCount}', '-pix_fmt', 'rgba', '-f', 'rawvideo', '-',
-        ]);
-    final decoder = await decode(job.videoInputs);
-    decoder.stderr.listen(stderr.add);
-    // the wide camera is read in step with the road camera, so either picture is ready for any frame
-    final wideInputs = job.wideInputs;
-    final wideDecoder = wideInputs == null ? null : await decode(wideInputs);
-    wideDecoder?.stderr.listen(stderr.add);
+    final feed = await ReplayFeed.open(job, _uiState, _adapter);
     final encoder = await Process.start(job.ffmpeg, [
       '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', '${job.width}x${job.height}',
       '-r', '${job.fps}', '-i', '-', '-c:v', job.encoder, '-b:v', job.bitrate, '-pix_fmt', 'yuv420p', job.output,
     ]);
     encoder.stderr.listen(stderr.add);
 
-    final frameBytes = job.videoWidth * job.videoHeight * 4;
-    final frames = RawFrameReader(decoder.stdout, frameBytes);
-    final wideFrames = wideDecoder == null ? null : RawFrameReader(wideDecoder.stdout, frameBytes);
-    final lines = StreamIterator(File(job.clip).openRead().transform(utf8.decoder).transform(const LineSplitter()));
     var done = 0;
     final clock = Stopwatch()..start();
-    while (await lines.moveNext()) {
-      final line = lines.current;
-      if (!line.startsWith('F ')) {
-        _adapter.apply(_uiState, line);
-        continue;
-      }
-      final parts = line.split(' ');
-      final wide = parts.length > 2 && parts[2] == 'W';
-      final road = await frames.next();
-      final widePixels = await wideFrames?.next();
-      final pixels = wide ? widePixels : road;
-      if (pixels == null) throw 'the video ended after $done frames, expected ${job.frameCount}';
-      final picture = await _toImage(pixels, job.videoWidth, job.videoHeight);
+    FeedFrame? frame;
+    while ((frame = await feed.next()) != null) {
       final previous = _picture;
       setState(() {
-        _time = DateTime.fromMillisecondsSinceEpoch(int.parse(parts[1]), isUtc: true);
-        _uiState.streamType = wide ? 'wideRoad' : 'road';
-        _picture = picture;
+        _time = DateTime.fromMillisecondsSinceEpoch(frame!.timeMs, isUtc: true);
+        _picture = frame.picture;
       });
       await WidgetsBinding.instance.endOfFrame;
       previous?.dispose();
@@ -119,11 +84,9 @@ class _ReplayRenderState extends State<ReplayRender> {
       await encoder.stdin.flush();
       if (++done % job.fps == 0) stderr.writeln('frame $done of ${job.frameCount} after ${clock.elapsed.inSeconds} s');
     }
-    await lines.cancel();
+    await feed.close();
     await encoder.stdin.close();
     final code = await encoder.exitCode;
-    decoder.kill();
-    wideDecoder?.kill();
     if (code != 0) throw 'ffmpeg could not write ${job.output}';
     if (done != job.frameCount) throw 'drew $done frames, expected ${job.frameCount}';
   }
@@ -132,24 +95,13 @@ class _ReplayRenderState extends State<ReplayRender> {
   Widget build(BuildContext context) {
     final job = widget.job;
     final w = job.width.toDouble(), h = job.height.toDouble();
-    final picture = _picture;
-    // laid out at the output size whatever the window size, so the layouts see the screen they will be recorded at
+    // laid out at the output size whatever the window size
     return OverflowBox(
       alignment: Alignment.topLeft,
       minWidth: w, maxWidth: w, minHeight: h, maxHeight: h,
       child: RepaintBoundary(
         key: _boundary,
-        child: MediaQuery(
-          data: MediaQueryData(size: ui.Size(w, h)),
-          child: Scaffold(
-            backgroundColor: Colors.black,
-            body: AugmentedRoadView(
-              uiState: _uiState,
-              settings: _settings,
-              videoChild: picture == null ? const SizedBox.shrink() : RawImage(image: picture, fit: BoxFit.cover),
-            ),
-          ),
-        ),
+        child: ReplayScene(job: job, uiState: _uiState, settings: _settings, picture: _picture),
       ),
     );
   }

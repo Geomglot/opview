@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:opview/studio/preview_player.dart';
 import 'package:opview/studio/sidecar.dart';
 import 'package:opview/studio/studio_api.dart';
 
@@ -45,6 +46,7 @@ class _StudioPageState extends State<StudioPage> {
   final Map<String, Object?> _options = {};
   String? _resolved, _resolveError;
   Map<String, dynamic>? _job;
+  String? _previewFile; // set once the server has prepared a preview, which starts playing
   Timer? _poll;
 
   @override
@@ -109,21 +111,25 @@ class _StudioPageState extends State<StudioPage> {
     }
   }
 
-  Future<void> _render() async {
+  Future<void> _render({bool preview = false}) async {
     final r = _request();
     if (r == null) return;
     setState(() {
-      _job = {'state': 'running', 'message': 'starting'};
+      _job = {'state': 'running', 'message': 'starting', 'preview': preview};
       _resolveError = null;
+      _previewFile = null;
     });
     try {
       final out = _output.text.trim().isEmpty ? null : _output.text.trim();
-      final j = await _sidecar!.api.startJob(r, _options, out);
+      final j = await _sidecar!.api.startJob(r, _options, out, preview: preview);
       setState(() => _job = j);
       _poll?.cancel();
       _poll = Timer.periodic(const Duration(seconds: 1), (t) async {
         final j = await _sidecar!.api.job(_job!['id']);
-        setState(() => _job = j);
+        setState(() {
+          _job = j;
+          if (j['state'] == 'done' && j['preview'] == true) _previewFile = j['job_file'] as String?;
+        });
         if (j['state'] != 'running') t.cancel();
       });
     } catch (e) {
@@ -203,7 +209,16 @@ class _StudioPageState extends State<StudioPage> {
               controller: _output,
               decoration: const InputDecoration(labelText: 'Output file', hintText: '~/Movies/<route>.mp4'))),
       const SizedBox(height: 16),
-      FilledButton(onPressed: _route == null || running ? null : _render, child: const Text('Render MP4')),
+      Row(children: [
+        OutlinedButton(onPressed: _route == null || running ? null : () => _render(preview: true), child: const Text('Preview')),
+        const SizedBox(width: 12),
+        FilledButton(onPressed: _route == null || running ? null : _render, child: const Text('Render MP4')),
+      ]),
+      if (_previewFile != null)
+        Padding(
+            padding: const EdgeInsets.only(top: 16),
+            child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 900), child: PreviewPlayer(key: ValueKey(_previewFile), jobFile: _previewFile!))),
       if (_resolveError != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(_resolveError!, style: const TextStyle(color: Colors.red))),
       if (_job != null) _jobStatus(),
     ]);
@@ -283,7 +298,7 @@ class _StudioPageState extends State<StudioPage> {
           const SizedBox(height: 6),
           Text(state == 'failed' ? 'Failed: ${j['error']}' : '${j['message']}',
               style: TextStyle(color: state == 'failed' ? Colors.red : null)),
-          if (state == 'done')
+          if (state == 'done' && j['preview'] != true)
             Row(children: [
               Expanded(child: SelectableText(j['output'])),
               TextButton(onPressed: () => Process.run('open', ['-R', j['output']]), child: const Text('Show in Finder')),
