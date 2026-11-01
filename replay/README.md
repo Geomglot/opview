@@ -3,8 +3,8 @@
 Renders a drive as an MP4 of the OPRivView screen. The real onroad layouts draw the drive, fed the same messages
 the comma sent the app live, so the result looks as it did in the car.
 
-Currently a command-line tool that fetches from the comma over SSH. The desktop interface and packaged app come next.
-The full plan is in `OpenpilotTools/plans/oprivview-replay-mac-app.md`.
+To use the Mac app, see the [install guide](docs/INSTALL.md) and the [user guide](docs/USER_GUIDE.md). The rest of this page
+is for working on the code.
 
 ## Setup
 
@@ -39,7 +39,7 @@ option (built from the list in `params.py`, so a new option appears with no inte
 with progress. In a development build it starts `python -m oprivview_replay.server` from this folder; set
 `OPRIVVIEW_SERVER_URL` to use a server you started yourself, or `OPRIVVIEW_REPLAY_DIR` if the folder is not found.
 Preview prepares the range and plays it in the window at the drive's own speed, through the same layouts the export uses
-(pause and restart; no scrubbing yet). Play after a render opens the finished MP4.
+(see In the preview, below). Play after a render opens the finished MP4.
 
 To check the preview in the real engine, prepare a job (POST /jobs with `"preview": true`) and run
 `flutter drive --profile -d macos --driver=test_driver/integration_test.dart --target=integration_test/preview_test.dart
@@ -52,14 +52,23 @@ cache until the cache cap exists.
 ## Building the app
 
 `make app` (in this folder) builds `dist/OPRivView Replay.app` with everything inside: the window, the server
-(PyInstaller) and ffmpeg with its libraries (copied from the ffmpeg on the build Mac and re-pointed to sit beside
-it). It runs from any folder on a Mac with no Python or ffmpeg installed. `make install` copies it to
-/Applications; `make clean` removes the build and the installed copy. It still needs `ssh` and `rsync` (both ship
-with macOS) and an SSH host named `comma`.
+(PyInstaller) and ffmpeg. It runs from any folder on a Mac with no Python or ffmpeg installed. `make install` copies it
+to /Applications; `make clean` removes the build and the installed copy. It still needs `ssh` and `rsync`, both of
+which ship with macOS.
 
-The app is ad-hoc signed, which is enough on the Mac that built it. Copying it to another Mac would need proper
-signing and notarizing, or right-click Open. The bundled ffmpeg is the Homebrew build, which includes GPL
-encoders, so it is for personal use rather than redistribution.
+`make dmg` also puts it in one file for release, `dist/OPRivView-Replay-<version>-macOS-Intel.dmg`, with a shortcut to
+Applications and a read-me. The version comes from `pubspec.yaml`. A first build needs `brew install nasm`.
+
+ffmpeg is built from the official source by `packaging/build_ffmpeg.sh`, holding only what the app uses: decoding H.265
+and H.264, encoding through Apple's VideoToolbox, and the file types involved. That makes it LGPL, not GPL, so it can be
+given away, with no libraries beside it. If the app starts asking ffmpeg for something new, add it to the list in that
+script. The licences and the ffmpeg source travel in the app, in `Contents/Resources/licenses`
+(`packaging/write_notices.py`).
+
+Limits of the release file:
+- Intel Macs only so far, and macOS 14 or later, which is what the bundled numpy needs. Apple Silicon is untested.
+- It is ad-hoc signed and not notarized, as that needs a paid Apple Developer account. macOS refuses it the first time
+  and the user allows it once in System Settings, Privacy & Security. The read-me in the disk image explains this.
 
 ## Where files come from, and how much detail
 

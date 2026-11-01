@@ -23,7 +23,9 @@ class Sidecar {
     final packaged = File('$resources/oprivview-replay-server/oprivview-replay-server');
     final Process p;
     if (packaged.existsSync()) {
-      // an installed app carries its own server and ffmpeg
+      // an installed app carries its own server and ffmpeg. A downloaded app has every file marked as downloaded, and
+      // macOS stops each marked program with a dialog; the user has approved this app by now, so its parts need no more
+      await Process.run('/usr/bin/xattr', ['-dr', 'com.apple.quarantine', File(resources).parent.path]);
       p = await Process.start(packaged.path, args, environment: {'OPRIVVIEW_FFMPEG_DIR': '$resources/ffmpeg'});
     } else {
       final dir = _replayDir();

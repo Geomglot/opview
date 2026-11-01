@@ -1,0 +1,20 @@
+OPRivView Replay
+
+Needs a Mac with an Intel processor and macOS 14 or later.
+
+To install
+1. Drag OPRivView Replay onto the Applications folder.
+2. Eject this disk.
+
+The first time you open it
+This app is not notarized by Apple, so macOS will refuse it the first time and say it cannot check it.
+1. Open the app from Applications and click Done (not Move to Trash).
+2. Open System Settings, then Privacy & Security, and scroll down to Security.
+3. Click Open Anyway beside OPRivView Replay, and confirm with your password or Touch ID.
+You only need to do this once.
+
+Using it
+Open the app's settings to find your comma on the network, or to add a comma Connect token. Public drives need neither:
+paste the drive's address into the app.
+
+Licences for the software inside are in the app: Contents/Resources/licenses.
