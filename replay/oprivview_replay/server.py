@@ -3,8 +3,10 @@
   python -m oprivview_replay.server --port 8765
 """
 import argparse
+import os
 import subprocess
 import threading
+import time
 import uuid
 from pathlib import Path
 
@@ -113,7 +115,17 @@ def main() -> None:
   p.add_argument("--host", default="comma", help="SSH host of the comma")
   p.add_argument("--cache", type=Path, default=DEFAULT_CACHE)
   p.add_argument("--app", type=Path, default=DEFAULT_APP, help="the built renderer")
+  p.add_argument("--exit-with-parent", action="store_true", help="stop when the program that started this server ends")
   a = p.parse_args()
+  if a.exit_with_parent:
+    parent = os.getppid()
+
+    def watch():
+      while os.getppid() == parent:
+        time.sleep(1)
+      os._exit(0)
+
+    threading.Thread(target=watch, daemon=True).start()
   uvicorn.run(make_app(a.host, a.cache, a.app), host="127.0.0.1", port=a.port, log_level="warning")
 
 

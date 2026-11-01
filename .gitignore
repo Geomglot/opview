@@ -59,3 +59,5 @@ android/key.properties
 # replay tool
 replay/.venv/
 __pycache__/
+replay/dist/
+replay/build/

@@ -40,6 +40,18 @@ with progress. In a development build it starts `python -m oprivview_replay.serv
 `OPRIVVIEW_SERVER_URL` to use a server you started yourself, or `OPRIVVIEW_REPLAY_DIR` if the folder is not found.
 There is no in-window preview yet; Play opens the finished MP4.
 
+## Building the app
+
+`make app` (in this folder) builds `dist/OPRivView Replay.app` with everything inside: the window, the server
+(PyInstaller) and ffmpeg with its libraries (copied from the ffmpeg on the build Mac and re-pointed to sit beside
+it). It runs from any folder on a Mac with no Python or ffmpeg installed. `make install` copies it to
+/Applications; `make clean` removes the build and the installed copy. It still needs `ssh` and `rsync` (both ship
+with macOS) and an SSH host named `comma`.
+
+The app is ad-hoc signed, which is enough on the Mac that built it. Copying it to another Mac would need proper
+signing and notarizing, or right-click Open. The bundled ffmpeg is the Homebrew build, which includes GPL
+encoders, so it is for personal use rather than redistribution.
+
 ## Adding an option
 
 Add one `Param` to `oprivview_replay/params.py`. If the renderer needs it, read it in `lib/replay/replay_job.dart`.

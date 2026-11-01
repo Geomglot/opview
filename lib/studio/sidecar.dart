@@ -10,17 +10,25 @@ class Sidecar {
   final StudioApi api;
   Sidecar(this.process, this.api);
 
-  /// OPRIVVIEW_SERVER_URL uses a server you started yourself. Otherwise the server starts from the replay folder,
+  /// OPRIVVIEW_SERVER_URL uses a server you started yourself. Otherwise the server inside the app is used, or in a
+  /// development build the one in the replay folder,
   /// found from OPRIVVIEW_REPLAY_DIR or by walking up from this app (a development build sits inside the repo).
   static Future<Sidecar> start() async {
     final url = Platform.environment['OPRIVVIEW_SERVER_URL'];
     if (url != null) return Sidecar(null, StudioApi(Uri.parse(url)));
 
-    final dir = _replayDir();
-    final python = '${dir.path}/.venv/bin/python';
     final port = await _freePort();
-    final p = await Process.start(python, ['-m', 'oprivview_replay.server', '--port', '$port', '--app', Platform.resolvedExecutable],
-        workingDirectory: dir.path);
+    final args = ['--port', '$port', '--app', Platform.resolvedExecutable, '--exit-with-parent'];
+    final resources = '${File(Platform.resolvedExecutable).parent.parent.path}/Resources';
+    final packaged = File('$resources/oprivview-replay-server/oprivview-replay-server');
+    final Process p;
+    if (packaged.existsSync()) {
+      // an installed app carries its own server and ffmpeg
+      p = await Process.start(packaged.path, args, environment: {'OPRIVVIEW_FFMPEG_DIR': '$resources/ffmpeg'});
+    } else {
+      final dir = _replayDir();
+      p = await Process.start('${dir.path}/.venv/bin/python', ['-m', 'oprivview_replay.server', ...args], workingDirectory: dir.path);
+    }
     p.stderr.drain<void>();
     p.stdout.drain<void>();
     final api = StudioApi(Uri.parse('http://127.0.0.1:$port'));

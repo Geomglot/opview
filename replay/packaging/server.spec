@@ -1,0 +1,19 @@
+# PyInstaller spec for the replay server, one-directory mode.
+# Run from the replay folder:  pyinstaller packaging/server.spec --distpath dist --workpath build -y
+from PyInstaller.utils.hooks import collect_all, collect_data_files
+
+datas = [("../oprivview_replay/vendor", "oprivview_replay/vendor")]  # capnp schemas are read as files at run time
+binaries = []
+hidden = ["uvicorn.logging", "uvicorn.loops.auto", "uvicorn.protocols.http.auto", "uvicorn.protocols.websockets.auto",
+          "uvicorn.lifespan.on", "anyio._backends._asyncio"]
+for pkg in ("capnp", "timezonefinder", "zstandard"):
+  d, b, h = collect_all(pkg)
+  datas += d
+  binaries += b
+  hidden += h
+
+a = Analysis(["sidecar_main.py"], pathex=[SPECPATH + "/.."], binaries=binaries, datas=datas, hiddenimports=hidden,
+             excludes=["tkinter", "pytest"], noarchive=False)
+pyz = PYZ(a.pure)
+exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="oprivview-replay-server", console=True, upx=False)
+coll = COLLECT(exe, a.binaries, a.datas, name="oprivview-replay-server", upx=False)

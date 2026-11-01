@@ -22,6 +22,10 @@ def video_frames(path: Path) -> int:
 
 
 def _tool(name: str) -> str:
+  """the ffmpeg folder the app ships with (OPRIVVIEW_FFMPEG_DIR) first, then whatever is installed on this Mac"""
+  bundled = os.environ.get("OPRIVVIEW_FFMPEG_DIR")
+  if bundled and (Path(bundled) / name).exists():
+    return str(Path(bundled) / name)
   found = shutil.which(name) or shutil.which(name, path="/usr/local/bin:/opt/homebrew/bin")
   if found is None:
     raise FileNotFoundError(f"{name} was not found")
