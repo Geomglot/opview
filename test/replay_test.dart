@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:opview/replay/raw_frames.dart';
 import 'package:opview/replay/replay_job.dart';
 import 'package:opview/services/app_settings.dart';
+import 'package:opview/selfdrive/ui/ui_state.dart';
+import 'package:opview/studio/preview_player.dart';
 
 Map<String, dynamic> job(Map<String, dynamic> over) => {
       'clip': 'c', 'output': 'o', 'ffmpeg': 'f', 'encoder': 'e', 'video_inputs': ['a'], 'skip_frames': 0, 'frame_count': 1,
@@ -46,6 +48,36 @@ void main() {
       expect(s.bottomBarFor(OnroadLayout.detailed), BottomBar.laneCentering);
       expect(s.collapsedPanels, {'lead'});
       expect(s.clockMode, ClockMode.h24);
+    });
+  });
+
+  group('changes made on the preview', () {
+    test('reach the option form in its own terms', () {
+      final s = AppSettings()
+        ..layout = OnroadLayout.detailed
+        ..clockMode = ClockMode.h24
+        ..speedLimitDisplay = SpeedLimitDisplay.always
+        ..showRoadName = false;
+      s.bottomBars[OnroadLayout.detailed] = BottomBar.off;
+      s.collapsedPanels.add('lead');
+      expect(optionsFrom(s), {
+        'view': 'detailed',
+        'bottom_bar': 'off',
+        'collapsed_panels': ['lead'],
+        'clock': 'h24',
+        'speed_limit': 'always',
+        'road_name': 'hide',
+      });
+    });
+
+    test('leave the app default as the app default', () {
+      expect(optionsFrom(AppSettings())['bottom_bar'], isNull);
+    });
+
+    test('a speed limit and road name choice carries through to a render', () {
+      final s = ReplayJob.fromJson(job({'speed_limit': 'off', 'road_name': 'hide'})).settings();
+      expect(s.speedLimitDisplay, SpeedLimitDisplay.off);
+      expect(s.showRoadName, isFalse);
     });
   });
 }

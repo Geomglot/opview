@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:opview/services/app_settings.dart';
+import 'package:opview/selfdrive/ui/ui_state.dart';
 
 class ReplayJob {
   final String clip;
@@ -29,9 +30,21 @@ class ReplayJob {
   final BottomBar? bottomBar;
   final List<String> collapsedPanels;
   final ClockMode clock;
+  final SpeedLimitDisplay speedLimit;
+  final bool showRoadName;
+  /// where in the clip to start reading, and how many frames there to read past without drawing: set when jumping
+  final int clipOffset;
+  final int framesBefore;
+  /// lines to apply first, which a clip read from the middle would otherwise miss
+  final List<String> firstLines;
+  final Map<String, dynamic> _json;
 
   ReplayJob.fromJson(Map<String, dynamic> j)
-      : clip = j['clip'] as String,
+      : _json = j,
+        clipOffset = j['clip_offset'] as int? ?? 0,
+        framesBefore = j['frames_before'] as int? ?? 0,
+        firstLines = (j['first_lines'] as List?)?.cast<String>() ?? const [],
+        clip = j['clip'] as String,
         output = j['output'] as String,
         ffmpeg = j['ffmpeg'] as String,
         encoder = j['encoder'] as String,
@@ -50,7 +63,12 @@ class ReplayJob {
         view = OnroadLayout.values.byName(j['view'] as String),
         bottomBar = j['bottom_bar'] == null ? null : BottomBar.values.byName(j['bottom_bar'] as String),
         collapsedPanels = (j['collapsed_panels'] as List).cast<String>(),
-        clock = ClockMode.values.byName(j['clock'] as String);
+        clock = ClockMode.values.byName(j['clock'] as String),
+        speedLimit = SpeedLimitDisplay.values.byName(j['speed_limit'] as String? ?? 'auto'),
+        showRoadName = (j['road_name'] as String? ?? 'show') == 'show';
+
+  /// this job with some of its fields replaced, as the server gives them for a jump
+  ReplayJob withChanges(Map<String, dynamic> changes) => ReplayJob.fromJson({..._json, ...changes});
 
   static ReplayJob load(String path) =>
       ReplayJob.fromJson(jsonDecode(File(path).readAsStringSync()) as Map<String, dynamic>);
@@ -59,7 +77,9 @@ class ReplayJob {
   AppSettings settings() {
     final s = AppSettings()
       ..layout = view
-      ..clockMode = clock;
+      ..clockMode = clock
+      ..speedLimitDisplay = speedLimit
+      ..showRoadName = showRoadName;
     if (bottomBar != null) s.bottomBars[view] = bottomBar!;
     s.collapsedPanels.addAll(collapsedPanels);
     return s;

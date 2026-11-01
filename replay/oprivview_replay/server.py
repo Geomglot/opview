@@ -5,6 +5,7 @@
 import argparse
 import os
 import subprocess
+import tempfile
 import threading
 import time
 import uuid
@@ -14,10 +15,16 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-from . import jobs, params
-from .sources import ConnectSource, DeviceSource, SourceError
+from . import admin, jobs, params, places, render
+from .settings import Settings
+from .sources import ConnectSource, DeviceSource, SourceError, parse_drive_ref
 from .cli import DEFAULT_APP, DEFAULT_CACHE
+from .logs import index_segment
 from .timeline import RangeError
+
+
+class Cancelled(Exception):
+  """the user stopped this job; raised out of its progress report, which every long step makes"""
 
 
 class Range(BaseModel):
@@ -32,6 +39,29 @@ class RenderRequest(Range):
   options: dict = {}
   output: str | None = None
   preview: bool = False  # prepare the drive for the window to play, without encoding an MP4
+
+
+class SettingsChange(BaseModel):
+  host: str | None = None
+  dongle: str | None = None
+  output_dir: str | None = None
+
+
+class Address(BaseModel):
+  address: str
+
+
+class Token(BaseModel):
+  token: str
+
+
+class Drive(BaseModel):
+  text: str
+
+
+class Seek(BaseModel):
+  job_file: str
+  frame: int
 
 
 def default_output(folder: Path, range_: dict, route: str) -> Path:
@@ -51,11 +81,17 @@ def _chosen_output(text: str) -> Path:
   return path if path.suffix.lower() == ".mp4" else path.with_name(path.name + ".mp4")
 
 
-def make_app(host: str = "comma", cache: Path = DEFAULT_CACHE, renderer: Path = DEFAULT_APP, output_dir: Path = Path.home() / "Movies",
-             connect: ConnectSource | None = ConnectSource()) -> FastAPI:
+def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Path = DEFAULT_APP, output_dir: Path = Path.home() / "Movies",
+             connect: ConnectSource | None = ConnectSource(), settings: Settings | None = None) -> FastAPI:
+  """[settings] is the user's saved choices; [host] is one given on the command line, which wins over them"""
   app = FastAPI(title="OPRivView replay")
-  sources = jobs.Sources(DeviceSource(host), connect)
+  settings = settings or Settings(Path(tempfile.mkdtemp()) / "settings.json")
+  sources = jobs.Sources(DeviceSource(host or settings["host"]), connect)
+  if connect is not None and settings["dongle"]:
+    connect.use_device(settings["dongle"])
+  public_sources: dict[str, ConnectSource] = {}
   state: dict[str, dict] = {}
+  renderers: dict[str, object] = {}  # job -> its running renderer process
   lock = threading.Lock()
 
   @app.get("/health")
@@ -83,24 +119,67 @@ def make_app(host: str = "comma", cache: Path = DEFAULT_CACHE, renderer: Path = 
       try:
         for route, info in sources.connect.listing().items():
           row = rows.setdefault(route, {"route": route, "segments": info["segments"], "on_device": False})
-          row.update(on_connect=True, start_ms=info["start_ms"], end_ms=info["end_ms"], km=info["km"], lat=info["lat"], lon=info["lon"])
+          _connect_details(row, info)
       except SourceError as e:
         problems.append(str(e))
+    problems += _add_public_rows(rows)
     for row in rows.values():
       segs = row["segments"]
       row["first"], row["last"] = segs[0], segs[-1]
       row["local_start"] = _local_start(row)
       # what a replay can show: everything if the comma has it, otherwise only what Connect keeps
-      row["detail"] = "full" if row["on_device"] else "quick"
-    ordered = sorted(rows.values(), key=lambda r: r["route"], reverse=True)
+      row["detail"] = "full" if row["on_device"] else row.get("detail", "small")
+    # drives added by hand first, where they can be found, and then the user's own, newest first
+    ordered = sorted(sorted(rows.values(), key=lambda r: r["route"], reverse=True), key=lambda r: not r.get("public"))
     return {"online": device_up, "metric": metric, "error": "; ".join(problems) or None, "routes": ordered}
 
+  def _connect_details(row: dict, info: dict) -> None:
+    row.update(on_connect=True, start_ms=info["start_ms"], end_ms=info["end_ms"], km=info["km"], lat=info["lat"], lon=info["lon"],
+               place=places.journey(info["start"], info["end"]))
+
+  def _public_source(dongle: str) -> ConnectSource:
+    return public_sources.setdefault(dongle, ConnectSource(dongle=dongle, public=True))
+
+  def _add_public_rows(rows: dict[str, dict]) -> list[str]:
+    """someone else's drives the user has added; anything that has stopped being public is reported, not fatal"""
+    problems = []
+    sources.added.clear()
+    for entry in settings["added"]:
+      try:
+        dongle, route = parse_drive_ref(entry)
+        source = _public_source(dongle)
+        found = {route: source.route_info(route)} if route else source.listing()
+        for name, info in found.items():
+          if name in rows:
+            continue  # the user's own comma or account has it, with more files
+          sources.added[name] = source
+          rows[name] = {"route": name, "segments": info["segments"], "on_device": False, "public": True, "entry": entry, "dongle": dongle,
+                        "detail": source.best_detail(name, info["segments"])}
+          _connect_details(rows[name], info)
+      except SourceError as e:
+        problems.append(f"{entry}: {e}")
+    return problems
+
   def _local_start(row: dict) -> str | None:
-    if row.get("start_ms") is None or row.get("lat") is None:
+    if row.get("start_ms") is None:
       return None
     from datetime import datetime
     from .timeline import zone_for
-    return datetime.fromtimestamp(row["start_ms"] / 1000, zone_for(row["lat"], row["lon"])).strftime("%Y-%m-%d %H:%M %Z")
+    when = datetime.fromtimestamp(row["start_ms"] / 1000)
+    place = _position(row)
+    if place is None:
+      return when.astimezone().strftime("%Y-%m-%d %H:%M %Z") + " (Mac time)"  # where the drive was is not known
+    return when.astimezone(zone_for(*place)).strftime("%Y-%m-%d %H:%M %Z")
+
+  def _position(row: dict) -> tuple[float, float] | None:
+    """where the drive was, for its time zone: from Connect, which has none for some drives, or from a log already here"""
+    if row.get("lat") or row.get("lon"):
+      return row["lat"], row["lon"]
+    for log in sorted((cache / row["route"]).glob("*/qlog.zst"))[:3]:
+      i = index_segment(log)
+      if i.lat is not None:
+        return i.lat, i.lon
+    return None
 
   def _resolve(r: Range):
     try:
@@ -115,17 +194,20 @@ def make_app(host: str = "comma", cache: Path = DEFAULT_CACHE, renderer: Path = 
   @app.post("/jobs")
   def start_job(req: RenderRequest):
     try:
-      settings = params.settings_from_dict(req.options)
+      options = params.settings_from_dict(req.options)
     except ValueError as e:
       raise HTTPException(422, str(e))
     resolved = _resolve(req)
-    output = _chosen_output(req.output) if req.output else default_output(output_dir, resolved.describe(), req.route)
+    folder = Path(settings["output_dir"]).expanduser() if settings["output_dir"] else output_dir
+    output = _chosen_output(req.output) if req.output else default_output(folder, resolved.describe(), req.route)
     job_id = uuid.uuid4().hex[:8]
     state[job_id] = {"id": job_id, "state": "running", "message": "starting", "progress": None, "output": str(output), "error": None, "preview": req.preview, "job_file": None,
                      "range": resolved.describe()}
 
     def progress(text: str):
       with lock:
+        if state[job_id]["state"] == "cancelled":
+          raise Cancelled()
         state[job_id]["message"] = text
         if text.startswith("frame "):
           parts = text.split()
@@ -135,17 +217,119 @@ def make_app(host: str = "comma", cache: Path = DEFAULT_CACHE, renderer: Path = 
       try:
         if not req.preview:
           output.parent.mkdir(parents=True, exist_ok=True)
-        job_file = jobs.render_resolved(resolved, sources, cache, settings, output, renderer, progress, preview=req.preview)
+        job_file = jobs.render_resolved(resolved, sources, cache, options, output, renderer, progress, preview=req.preview,
+                                        started=lambda p: renderers.__setitem__(job_id, p))
         with lock:
-          state[job_id].update(state="done", message="ready" if req.preview else "finished", progress=1.0,
-                               job_file=str(job_file) if job_file else None)
+          if state[job_id]["state"] == "running":
+            state[job_id].update(state="done", message="ready" if req.preview else "finished", progress=1.0,
+                                 job_file=str(job_file) if job_file else None)
+      except Cancelled:
+        pass
       except Exception as e:  # report anything to the interface rather than lose it in the thread
         detail = getattr(e, "stderr", None) or str(e)
         with lock:
-          state[job_id].update(state="failed", error=str(detail)[-2000:])
+          if state[job_id]["state"] == "running":
+            state[job_id].update(state="failed", error=str(detail)[-2000:])
+      finally:
+        renderers.pop(job_id, None)
 
     threading.Thread(target=work, daemon=True).start()
     return state[job_id]
+
+  @app.post("/jobs/{job_id}/cancel")
+  def cancel(job_id: str):
+    if job_id not in state:
+      raise HTTPException(404, "no such job")
+    with lock:
+      if state[job_id]["state"] == "running":
+        state[job_id].update(state="cancelled", message="stopped")
+      running = renderers.get(job_id)
+    if running is not None:
+      running.kill()
+    with lock:
+      return dict(state[job_id])
+
+  @app.post("/preview/seek")
+  def preview_seek(s: Seek):
+    job_file = Path(s.job_file)
+    if job_file.name != "preview-job.json" or cache.resolve() not in job_file.resolve().parents:
+      raise HTTPException(422, "that is not a prepared preview")
+    return render.seek(job_file, s.frame)
+
+  @app.get("/settings")
+  def get_settings():
+    devices, signed_in = [], connect is not None and admin.token_status(connect)["state"] == "ok"
+    if signed_in:
+      try:
+        devices = [{"dongle": d["dongle_id"], "name": d.get("alias") or d["dongle_id"]} for d in connect.devices()]
+      except SourceError:
+        pass
+    return {"host": sources.device.host, "dongle": connect.dongle() if devices else settings["dongle"], "devices": devices,
+            "output_dir": settings["output_dir"] or str(output_dir), "token": admin.token_status(connect) if connect else None,
+            "key": admin.key_info(), "cache_bytes": admin.cache_size(cache), "cache_path": str(cache)}
+
+  @app.put("/settings")
+  def put_settings(c: SettingsChange):
+    changes = c.model_dump(exclude_unset=True)
+    if "host" in changes:
+      changes["host"] = admin.host_for(changes["host"])
+      sources.device.host = changes["host"]
+    if "dongle" in changes and connect is not None:
+      connect.use_device(changes["dongle"])
+    settings.update(**changes)
+    return get_settings()
+
+  @app.post("/settings/check-host")
+  def check_host(a: Address):
+    return admin.check_host(admin.host_for(a.address))
+
+  @app.post("/settings/find-comma")
+  def find_comma():
+    return admin.find_commas()
+
+  @app.post("/settings/ssh-key")
+  def ssh_key():
+    return admin.create_key()
+
+  @app.post("/settings/token")
+  def set_token(t: Token):
+    if connect is None:
+      raise HTTPException(422, "comma Connect is turned off")
+    try:
+      admin.save_token(connect, t.token)
+    except SourceError as e:
+      raise HTTPException(422, str(e))
+    return admin.token_status(connect)
+
+  @app.post("/settings/clear-cache")
+  def clear_cache():
+    with lock:
+      busy = any(j["state"] == "running" for j in state.values())
+    if busy:
+      raise HTTPException(409, "wait for the job in progress to finish")
+    admin.clear_cache(cache)
+    return {"cache_bytes": admin.cache_size(cache)}
+
+  @app.post("/drives/add")
+  def add_drive(d: Drive):
+    """a public drive of someone else's, from a Connect link, or every public drive of a device from its id"""
+    try:
+      dongle, route = parse_drive_ref(d.text)
+      source = _public_source(dongle)
+      found = [route] if route else list(source.listing())
+      if route:
+        source.route_info(route)
+    except SourceError as e:
+      raise HTTPException(422, str(e))
+    entry = f"{dongle}|{route}" if route else dongle
+    if entry not in settings["added"]:
+      settings.update(added=[*settings["added"], entry])
+    return {"entry": entry, "routes": found}
+
+  @app.post("/drives/remove")
+  def remove_drive(d: Drive):
+    settings.update(added=[e for e in settings["added"] if e != d.text])
+    return {"ok": True}
 
   @app.get("/jobs/{job_id}")
   def job(job_id: str):
@@ -160,7 +344,7 @@ def make_app(host: str = "comma", cache: Path = DEFAULT_CACHE, renderer: Path = 
 def main() -> None:
   p = argparse.ArgumentParser()
   p.add_argument("--port", type=int, default=8765)
-  p.add_argument("--host", default="comma", help="SSH host of the comma")
+  p.add_argument("--host", help="SSH host of the comma; without this, the one chosen in the app's settings")
   p.add_argument("--cache", type=Path, default=DEFAULT_CACHE)
   p.add_argument("--app", type=Path, default=DEFAULT_APP, help="the built renderer")
   p.add_argument("--no-connect", action="store_true", help="do not use comma Connect")
@@ -175,7 +359,7 @@ def main() -> None:
       os._exit(0)
 
     threading.Thread(target=watch, daemon=True).start()
-  uvicorn.run(make_app(a.host, a.cache, a.app, connect=None if a.no_connect else ConnectSource()), host="127.0.0.1", port=a.port, log_level="warning")
+  uvicorn.run(make_app(a.host, a.cache, a.app, connect=None if a.no_connect else ConnectSource(), settings=Settings()), host="127.0.0.1", port=a.port, log_level="warning")
 
 
 if __name__ == "__main__":

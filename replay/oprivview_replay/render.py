@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Callable
 
 from .logs import Decoded, load_decoded
 from .camera import CameraPicker
@@ -15,8 +16,10 @@ PREROLL_FRAMES = 5 * FPS
 CAMERA_ASPECT = 1208 / 1928
 
 
-LOGS = {"full": "rlog.zst", "quick": "qlog.zst"}
-VIDEOS = {"full": "fcamera.hevc", "quick": "qcamera.ts"}
+# "logs" is what comma Connect often has: the complete log, which has the path and lane lines, with the small video
+LOGS = {"full": "rlog.zst", "logs": "rlog.zst", "quick": "qlog.zst"}
+VIDEOS = {"full": "fcamera.hevc", "logs": "qcamera.ts", "quick": "qcamera.ts"}
+SEEK_PREROLL_FRAMES = PREROLL_FRAMES
 
 
 def video_frames(path: Path) -> int:
@@ -115,14 +118,15 @@ def local_ms(tl: RouteTimeline, segment: int, mono: int) -> int:
 
 
 def write_clip(tl: RouteTimeline, route_dir: Path, start: FramePos, end: FramePos, path: Path, camera: str = "auto",
-               wide_checked: bool = True, detail: str = "full") -> tuple[list[str], int, list[str] | None]:
+               wide_checked: bool = True, detail: str = "full", index: dict | None = None) -> tuple[list[str], int, list[str] | None]:
   """write the clip file: messages in order, with an `F <time> <R or W>` line wherever a frame should be drawn
   (R: road camera picture, W: wide camera picture). Returns the road video files, the frame count, and the wide video
-  files, or None when no frame uses the wide camera. [wide_checked] False skips reading the wide files, to plan a fetch."""
+  files, or None when no frame uses the wide camera. [wide_checked] False skips reading the wide files, to plan a fetch.
+  [index] is filled with what a jump to any frame needs: see [seek]."""
   segments = [s for s in tl.segments if start.segment <= s <= end.segment]
   log_name, video_name = LOGS[detail], VIDEOS[detail]
-  if detail == "quick":
-    camera = "road"  # there is no wide camera video in the quick files
+  if VIDEOS[detail] != "fcamera.hevc":
+    camera = "road"  # the wide camera has no small version
   inputs = []
   wide_inputs = []
   count = 0
@@ -130,7 +134,10 @@ def write_clip(tl: RouteTimeline, route_dir: Path, start: FramePos, end: FramePo
   used_wide = False
   with open(path, "w") as f:
     def params(decoded: Decoded) -> None:
-      f.write(json.dumps({"type": "opviewParams", "valid": True, "data": decoded.params}, separators=(",", ":")) + "\n")
+      line = json.dumps({"type": "opviewParams", "valid": True, "data": decoded.params}, separators=(",", ":"))
+      f.write(line + "\n")
+      if index is not None:
+        index["params"].append([count, line])
 
     earlier = preroll_segment(tl, start)
     if earlier is not None:
@@ -154,7 +161,11 @@ def write_clip(tl: RouteTimeline, route_dir: Path, start: FramePos, end: FramePo
       stop = min(end.frame if seg == end.segment else available - 1, available - 1)
       messages = by_frame(decoded)
       n = 0
+      if index is not None:
+        index["segments"].append({"first": count, "skip": first, "video": str(video), "wide": str(wide)})
       for frame in range(first, stop + 1):
+        if index is not None:
+          index["offsets"].append(f.tell())  # where the messages for this frame start
         while n < len(messages) and messages[n][0] <= frame:
           if messages[n][0] > first - PREROLL_FRAMES:
             f.write(messages[n][1] + "\n")
@@ -172,7 +183,7 @@ def write_clip(tl: RouteTimeline, route_dir: Path, start: FramePos, end: FramePo
 
 def wide_segments(tl: RouteTimeline, route_dir: Path, start: FramePos, end: FramePos, camera: str, detail: str = "full") -> list[int]:
   """segments whose wide camera file is needed. Every segment of the range is read in step, so it is all or none."""
-  if camera == "road" or detail == "quick":
+  if camera == "road" or VIDEOS[detail] != "fcamera.hevc":
     return []
   _, _, wide = write_clip(tl, route_dir, start, end, Path(os.devnull), camera, wide_checked=False, detail=detail)
   return [s for s in tl.segments if start.segment <= s <= end.segment] if wide else []
@@ -187,7 +198,8 @@ def prepare(tl: RouteTimeline, route_dir: Path, start: FramePos, end: FramePos, 
             detail: str = "full", name: str = "job.json") -> Path:
   """write the clip and the job file the renderer reads, and return the job file"""
   clip = route_dir / name.replace("job", "clip").replace(".json", ".txt")
-  inputs, count, wide_inputs = write_clip(tl, route_dir, start, end, clip, settings["camera"], detail=detail)
+  index: dict = {"params": [], "segments": [], "offsets": []}
+  inputs, count, wide_inputs = write_clip(tl, route_dir, start, end, clip, settings["camera"], detail=detail, index=index)
   video_height = round(settings["video_width"] * CAMERA_ASPECT / 2) * 2
   skip, wide_skip = start.frame, start.frame
   if inputs:
@@ -195,25 +207,70 @@ def prepare(tl: RouteTimeline, route_dir: Path, start: FramePos, end: FramePos, 
   if wide_inputs:
     wide_inputs[0], wide_skip = _cut(wide_inputs[0], start.frame)
   job = {**settings, "clip": str(clip), "output": str(output.resolve()), "ffmpeg": _tool("ffmpeg"), "encoder": "h264_videotoolbox",
-         "video_format": "hevc" if detail == "full" else "mpegts", "video_inputs": inputs, "wide_inputs": wide_inputs,
+         "video_format": "hevc" if VIDEOS[detail].endswith(".hevc") else "mpegts", "video_inputs": inputs, "wide_inputs": wide_inputs,
          "skip_frames": skip, "wide_skip_frames": wide_skip, "frame_count": count, "video_height": video_height, "fps": FPS}
   job_path = route_dir / name
   job_path.write_text(json.dumps(job, indent=1))
+  _index_file(job_path).write_text(json.dumps(index, separators=(",", ":")))
   progress(f"{count} frames ({count / FPS:.1f} s of drive)")
   return job_path
 
 
+def _index_file(job_path: Path) -> Path:
+  return job_path.with_name(job_path.name.replace("job", "index"))
+
+
+def seek(job_path: Path, frame: int) -> dict:
+  """what changes in a job to play it from [frame] of its clip. The clip is read from a few seconds earlier without drawing,
+  as a render does before its first frame, so calibration and the rest are right on the picture the jump lands on."""
+  job = json.loads(job_path.read_text())
+  index = json.loads(_index_file(job_path).read_text())
+  frame = max(0, min(frame, job["frame_count"] - 1))
+  starts = [s["first"] for s in index["segments"]]
+  at = bisect.bisect_right(starts, frame) - 1
+  here, later = index["segments"][at], index["segments"][at + 1:]
+  local = here["skip"] + frame - here["first"]
+  video, skip = _cut(here["video"], local)
+  wide = {"wide_inputs": None, "wide_skip_frames": 0}
+  if job.get("wide_inputs"):
+    first_wide, wide_skip = _cut(here["wide"], local)
+    wide = {"wide_inputs": [first_wide] + [s["wide"] for s in later], "wide_skip_frames": wide_skip}
+  read_from = max(0, frame - SEEK_PREROLL_FRAMES)
+  params = [line for first, line in index["params"] if first <= frame][-1:]
+  return {"video_inputs": [video] + [s["video"] for s in later], "skip_frames": skip, **wide, "frame_count": job["frame_count"] - frame,
+          "clip_offset": index["offsets"][read_from], "frames_before": frame - read_from, "first_lines": params}
+
+
+def part_file(output: Path) -> Path:
+  """where a clip is written until it is complete; ffmpeg goes by the last part of the name, so that stays .mp4"""
+  return output.with_name(output.stem + ".part" + output.suffix)
+
+
 def run(tl: RouteTimeline, route_dir: Path, start: FramePos, end: FramePos, settings: dict, output: Path, app: Path, progress=print,
-        detail: str = "full") -> None:
-  job_path = prepare(tl, route_dir, start, end, settings, output, progress, detail)
+        detail: str = "full", started: Callable[[subprocess.Popen], None] | None = None) -> None:
+  """the clip only appears at [output] once every frame is in it. [started] is given the renderer, so it can be stopped."""
+  part = part_file(output)
+  job_path = prepare(tl, route_dir, start, end, settings, part, progress, detail)
+  wanted = json.loads(job_path.read_text())["frame_count"]
   progress(f"rendering to {output}")
-  proc = subprocess.Popen([str(app)], env={**os.environ, "OPRIVVIEW_JOB": str(job_path)}, stderr=subprocess.PIPE, text=True)
+  # the pipe to its stdin closes when this process ends, however it ends, and the renderer stops on that
+  proc = subprocess.Popen([str(app)], env={**os.environ, "OPRIVVIEW_JOB": str(job_path), "OPRIVVIEW_WATCH_STDIN": "1"},
+                          stdin=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+  if started:
+    started(proc)
   tail = []
-  for line in proc.stderr:
-    line = line.rstrip()
-    if line.startswith("frame "):
-      progress(line)
-    else:
-      tail = (tail + [line])[-20:]
-  if proc.wait() != 0:
-    raise subprocess.CalledProcessError(proc.returncode, str(app), stderr="\n".join(tail))
+  try:
+    for line in proc.stderr:
+      line = line.rstrip()
+      if line.startswith("frame "):
+        progress(line)
+      else:
+        tail = (tail + [line])[-20:]
+    if proc.wait() != 0:
+      raise subprocess.CalledProcessError(proc.returncode, str(app), stderr="\n".join(tail))
+    written = video_frames(part)
+    if written != wanted:
+      raise RuntimeError(f"the render stopped early: {written} of {wanted} frames were written")
+    part.replace(output)
+  finally:
+    part.unlink(missing_ok=True)

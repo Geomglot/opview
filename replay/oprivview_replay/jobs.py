@@ -1,21 +1,19 @@
 """The steps shared by the command line and the server: find the drive, resolve a range, render it."""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
 from . import render
 from .logs import index_segment
-from .sources import ConnectSource, DeviceSource, SourceError
+from .sources import FULL_FILES as FULL, LOGS_FILES as LOGS, QUICK_FILES as QUICK, ConnectSource, DeviceSource, SourceError
 from .timeline import FramePos, RangeError, RouteTimeline, resolve_range, zone_for
-
-FULL = ("rlog.zst", "fcamera.hevc")
-QUICK = ("qlog.zst", "qcamera.ts")
 
 
 @dataclass
 class Sources:
   device: DeviceSource
   connect: ConnectSource | None = None
+  added: dict[str, ConnectSource] = field(default_factory=dict)  # someone else's public drives, by route
 
   def listed(self) -> dict[str, tuple[object, list[int]]]:
     """route -> (source, segments). The comma wins over Connect for a route both have, since it has the full files."""
@@ -30,6 +28,9 @@ class Sources:
     except SourceError:
       if not out:
         raise
+    for route, source in self.added.items():
+      if route not in out:
+        out[route] = (source, source.route_info(route)["segments"])
     return out
 
 
@@ -76,9 +77,10 @@ def resolve(sources: Sources, cache: Path, route: str, start_segment: int | None
 
 
 def choose_files(r: Resolved, sources: Sources, needed: list[int], detail: str) -> tuple[object, str]:
-  """(where to get the files, "full" or "quick") for what the user asked for and what exists"""
+  """(where to get the files, and "full", "logs" or "quick") for what the user asked for and what exists"""
   candidates = [r.source]
-  for other in (sources.device, sources.connect):
+  public = getattr(r.source, "public", False)  # someone else's drive: neither of this user's own sources has it
+  for other in () if public else (sources.device, sources.connect):
     if other is None or other is r.source:
       continue
     try:
@@ -101,23 +103,27 @@ def choose_files(r: Resolved, sources: Sources, needed: list[int], detail: str) 
       problems.append(f"{source.name} lacks {', '.join(gone)}")
     if detail == "full":
       raise SourceError("the full files are not available (" + "; ".join(problems) + "). Use quick detail instead.")
-  for source in candidates:
-    try:
-      if not source.missing(r.route, needed, QUICK):
-        return source, "quick"
-    except SourceError:
+  for name, files in (("logs", LOGS), ("quick", QUICK)):
+    if detail not in ("auto", name):
       continue
+    for source in candidates:
+      try:
+        if not source.missing(r.route, needed, files):
+          return source, name
+      except SourceError:
+        continue
   raise SourceError("neither the comma nor comma Connect has the files for this drive")
 
 
 def render_resolved(r: Resolved, sources: Sources, cache: Path, settings: dict, output: Path, app: Path,
-                    progress: Callable[[str], None] = print, preview: bool = False) -> Path | None:
+                    progress: Callable[[str], None] = print, preview: bool = False,
+                    started: Callable[[object], None] | None = None) -> Path | None:
   """fetch what is needed and render. With [preview] it stops after writing the job file, which it returns, so the window
   can play the drive itself instead of encoding it."""
   needed = [s for s in r.segments if r.start.segment <= s <= r.end.segment]
   earlier = render.preroll_segment(r.timeline, r.start)
   source, detail = choose_files(r, sources, needed + ([earlier] if earlier is not None else []), settings["detail"])
-  log_name, video_name = ("rlog.zst", "fcamera.hevc") if detail == "full" else ("qlog.zst", "qcamera.ts")
+  log_name, video_name = render.LOGS[detail], render.VIDEOS[detail]
   progress(f"fetching the {detail} files from {source.name}")
   source.fetch(r.route, needed, (log_name, video_name), cache)
   if earlier is not None:
@@ -126,8 +132,9 @@ def render_resolved(r: Resolved, sources: Sources, cache: Path, settings: dict, 
   if wide:
     progress("fetching wide camera video")
     source.fetch(r.route, wide, ("ecamera.hevc",), cache)
+  progress("preparing the drive")  # also where a job cancelled during a long fetch stops, before it writes anything
   if preview:
     return render.prepare(r.timeline, r.route_dir, r.start, r.end, settings, output, progress, detail, name="preview-job.json")
   progress(f"rendering ({detail} detail)")
-  render.run(r.timeline, r.route_dir, r.start, r.end, settings, output, app, progress, detail)
+  render.run(r.timeline, r.route_dir, r.start, r.end, settings, output, app, progress, detail, started)
   return None

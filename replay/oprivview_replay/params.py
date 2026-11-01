@@ -26,12 +26,15 @@ PARAMS = (
   Param("view", "Which OPRivView screen layout to draw", "classic", ("classic", "enhanced", "detailed")),
   Param("bottom_bar", "App default is what the app normally shows for this view", None,
         ("torque", "laneCentering", "auto", "off")),
-  Param("detail", "Full uses the complete log and camera video. Quick uses the small files comma Connect keeps, with no path "
-        "or lane lines and a lower resolution picture. Automatic uses Full when it can", "auto", ("auto", "full", "quick")),
+  Param("detail", "Full uses the complete log and camera video. Log with small video has the path and lane lines over a lower "
+        "resolution picture. Quick uses only the small files, with no path or lane lines. Automatic uses the best the drive has",
+        "auto", ("auto", "full", "logs", "quick")),
   Param("camera", "Automatic follows the app, which uses the wide camera at low speed in experimental mode", "auto",
         ("auto", "road", "wide")),
   Param("collapsed_panels", "Detailed view only: the panels to fold shut", (), ("steering", "driver", "longitudinal", "lead"), many=True),
   Param("clock", "", "h12", ("h12", "h24")),
+  Param("speed_limit", "Automatic shows it once the comma has a speed limit", "auto", ("auto", "always", "off")),
+  Param("road_name", "", "show", ("show", "hide")),
   Param("width", "Width of the MP4 in pixels", 1920, type=int, advanced=True),
   Param("height", "Height of the MP4 in pixels", 1080, type=int, advanced=True),
   Param("video_width", "Width of the camera picture behind the overlays. The live stream is 1152", 1152, type=int, advanced=True),

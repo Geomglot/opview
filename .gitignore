@@ -61,3 +61,6 @@ replay/.venv/
 __pycache__/
 replay/dist/
 replay/build/
+
+# handoff notes between sessions; they stay on this machine
+RESUME*.md

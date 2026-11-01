@@ -96,3 +96,36 @@ replay/.venv/bin/python replay/tools/sync_vendor.py /path/to/openpilot--dys-a
 cd replay && .venv/bin/python -m pytest tests
 flutter test test/replay_test.dart
 ```
+
+## App settings
+
+The gear above the drive list opens the app's settings: which device on the comma account to use, the comma's address on the
+local network (with a search of the networks this Mac is on), SSH setup, the comma Connect token, the folder clips are saved
+in, and how much the stored drives take up, with a button to clear them. Choices are kept in
+`~/Library/Application Support/OPRivViewReplay/settings.json`. The token stays in `~/.comma/jwt`, readable only by this user.
+Stored drives are in `~/Library/Caches/OPRivViewReplay`. Stalls of 200 ms or more are noted in
+`~/Library/Logs/OPRivViewReplay/preview.log`.
+
+## Other people's public drives
+
+Paste a comma Connect link, `device/route`, or a device id on its own into the box above the drive list; a device id adds all
+of that device's public drives. No token is needed. Connect rarely has their full camera files, so these usually play as
+**Log and small video**: the complete log, so path and lane lines are drawn, over the small video.
+
+## In the preview
+
+Click or drag along the progress bar to go to that part of the clip. It takes a second or two, and the Detailed graphs start
+again from there. Speed runs from 0.25x to 4x. Above 1x, frames are skipped if they cannot be drawn in time. The full screen
+button leaves only the picture and controls; Esc comes back. Swipes, taps and the settings screen update the option form.
+
+## Why the Mac app does not use Impeller
+
+`FLTEnableImpeller` is off in `macos/Runner/Info.plist`. Flutter ties Impeller to the integrated GPU on Macs with two, and on
+an Intel MacBook Pro it reached 2.3 GB against that chip's 1.5 GB budget and hung it. macOS then restarted the chip, which
+wiped the app's text and video from it until the app was reopened. Skia peaked at 359 MB on the same drive. It still runs on
+the integrated GPU. This setting is for the Mac app only.
+
+## Credits
+
+Town names come from [GeoNames](https://www.geonames.org), used under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). `packaging/build_places.py` rebuilds the list.

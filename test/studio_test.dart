@@ -54,7 +54,7 @@ void main() {
     expect(find.text('Lane keeping'), findsOneWidget);
     expect(find.text('Torque bar'), findsOneWidget);
 
-    expect(find.textContaining('Quick detail only (comma Connect)'), findsOneWidget);
+    expect(find.textContaining('Quick detail only'), findsOneWidget);
     expect(find.textContaining('Full detail (on the comma)'), findsOneWidget);
     await tester.tap(find.text('2026-10-31 09:18 EDT'));
     await tester.pump();

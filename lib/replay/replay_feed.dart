@@ -32,12 +32,15 @@ class ReplayFeed {
   final RawFrameReader? _wideFrames;
   final StreamIterator<String> _lines;
   int framesRead = 0;
+  int _framesToPass; // frames in the clip ahead of the first one to draw, there only for their messages
 
-  ReplayFeed._(this.job, this.uiState, this.adapter, this._decoder, this._wideDecoder, this._frames, this._wideFrames, this._lines);
+  ReplayFeed._(this.job, this.uiState, this.adapter, this._decoder, this._wideDecoder, this._frames, this._wideFrames, this._lines)
+      : _framesToPass = job.framesBefore;
 
   static Future<ReplayFeed> open(ReplayJob job, UIState uiState, CerealAdapter adapter) async {
     Future<Process> decode(List<String> files, int skip) => Process.start(job.ffmpeg, [
-          '-v', 'error', '-f', job.videoFormat, if (job.videoFormat == 'hevc') ...['-framerate', '${job.fps}'],
+          // twice as fast as decoding on the processor, which is what makes 4x possible; ffmpeg falls back if it cannot
+          '-v', 'error', if (Platform.isMacOS) ...['-hwaccel', 'videotoolbox'], '-f', job.videoFormat, if (job.videoFormat == 'hevc') ...['-framerate', '${job.fps}'],
           '-i', 'concat:${files.join('|')}',
           '-vf', 'trim=start_frame=$skip,setpts=PTS-STARTPTS,scale=${job.videoWidth}:${job.videoHeight}',
           '-frames:v', '${job.frameCount}', '-pix_fmt', 'rgba', '-f', 'rawvideo', '-',
@@ -49,11 +52,14 @@ class ReplayFeed {
     final wideDecoder = wideInputs == null ? null : await decode(wideInputs, job.wideSkipFrames);
     wideDecoder?.stderr.listen(stderr.add);
     final bytes = job.videoWidth * job.videoHeight * 4;
+    for (final line in job.firstLines) {
+      adapter.apply(uiState, line);
+    }
     return ReplayFeed._(
       job, uiState, adapter, decoder, wideDecoder,
       RawFrameReader(decoder.stdout, bytes),
       wideDecoder == null ? null : RawFrameReader(wideDecoder.stdout, bytes),
-      StreamIterator(File(job.clip).openRead().transform(utf8.decoder).transform(const LineSplitter())),
+      StreamIterator(File(job.clip).openRead(job.clipOffset).transform(utf8.decoder).transform(const LineSplitter())),
     );
   }
 
@@ -65,10 +71,23 @@ class ReplayFeed {
 
   /// the next frame, with every message logged before it already applied; null at the end of the drive
   Future<FeedFrame?> next() async {
+    final read = await _read();
+    if (read == null) return null;
+    return FeedFrame(await _toImage(read.pixels), read.timeMs, read.wide);
+  }
+
+  /// moves past a frame without making its picture, which is the slow part; false at the end of the drive
+  Future<bool> skip() async => await _read() != null;
+
+  Future<({Uint8List pixels, int timeMs, bool wide})?> _read() async {
     while (await _lines.moveNext()) {
       final line = _lines.current;
       if (!line.startsWith('F ')) {
         adapter.apply(uiState, line);
+        continue;
+      }
+      if (_framesToPass > 0) {
+        _framesToPass--;
         continue;
       }
       final parts = line.split(' ');
@@ -79,7 +98,7 @@ class ReplayFeed {
       if (pixels == null) throw 'the video ended after $framesRead frames, expected ${job.frameCount}';
       framesRead++;
       uiState.streamType = wide ? 'wideRoad' : 'road';
-      return FeedFrame(await _toImage(pixels), int.parse(parts[1]), wide);
+      return (pixels: pixels, timeMs: int.parse(parts[1]), wide: wide);
     }
     return null;
   }

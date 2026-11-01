@@ -28,6 +28,31 @@ def test_time_with_fraction_of_a_second():
   assert timeline(MORNING, 13).resolve_time("09:18:31.500") == FramePos(0, 10)
 
 
+def bad_first_clock(count: int = 5) -> RouteTimeline:
+  """the first segment's clock is three months out; real time starts with the second"""
+  base = int(MORNING.timestamp() * 1e9)
+  index = {n: SegmentIndex(frames=1200, first_mono=n * 60 * 10**9, wall_offset_ns=base) for n in range(count)}
+  index[0] = SegmentIndex(frames=1170, first_mono=0, wall_offset_ns=base - 95 * 86400 * 10**9)
+  return RouteTimeline(index, TORONTO)
+
+
+def test_a_wrong_clock_at_the_start_of_a_drive_takes_its_time_from_the_next_segment():
+  tl = bad_first_clock()
+  assert tl.local(FramePos(0, 0)) == MORNING
+  assert tl.resolve_time("09:18:31") == FramePos(0, 0)
+
+
+def test_a_time_outside_a_drive_that_began_with_a_wrong_clock_is_reported_as_outside():
+  with pytest.raises(RangeError, match="outside this drive, which ran 09:18:31 EDT"):
+    bad_first_clock().resolve_time("09:30:00")
+
+
+def test_a_wrong_clock_does_not_change_the_saved_index():
+  index = {0: SegmentIndex(frames=1200, first_mono=0, wall_offset_ns=0), 1: SegmentIndex(frames=1200, first_mono=60 * 10**9, wall_offset_ns=10**15)}
+  RouteTimeline(index, TORONTO)
+  assert index[0].wall_offset_ns == 0
+
+
 def test_segment_range_covers_whole_segments():
   tl = timeline(MORNING, 13)
   assert resolve_range(tl, 5, 6, None, None) == (FramePos(5, 0), FramePos(6, 1199))

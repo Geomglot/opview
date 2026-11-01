@@ -64,5 +64,5 @@ def test_connect_distance_is_miles_and_is_listed_in_km(monkeypatch, tmp_path):
 def test_no_saved_km_setting_means_miles_as_on_the_comma(monkeypatch):
   from oprivview_replay import ssh_source
   for saved, metric in (("1\n", True), ("0", False), ("", False)):
-    monkeypatch.setattr(ssh_source, "_ssh", lambda host, command: saved)
+    monkeypatch.setattr(ssh_source, "run", lambda host, command: saved)
     assert ssh_source.is_metric("comma") is metric

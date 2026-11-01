@@ -41,13 +41,22 @@ class _ReplayRenderState extends State<ReplayRender> {
   final _adapter = CerealAdapter();
   late final AppSettings _settings = widget.job.settings();
   ui.Image? _picture;
+  Process? _encoder;
   DateTime _time = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
 
   @override
   void initState() {
     super.initState();
     appNow = () => _time;
+    // when the server that asked for this render goes away, so does the render
+    if (Platform.environment['OPRIVVIEW_WATCH_STDIN'] != null) stdin.listen(null, onDone: _abandon);
     WidgetsBinding.instance.addPostFrameCallback((_) => _run().then((_) => exit(0), onError: _fail));
+  }
+
+  void _abandon() {
+    _encoder?.kill(ProcessSignal.sigkill);
+    File(widget.job.output).deleteSync();
+    exit(1);
   }
 
   Never _fail(Object e, StackTrace s) {
@@ -58,7 +67,7 @@ class _ReplayRenderState extends State<ReplayRender> {
   Future<void> _run() async {
     final job = widget.job;
     final feed = await ReplayFeed.open(job, _uiState, _adapter);
-    final encoder = await Process.start(job.ffmpeg, [
+    final encoder = _encoder = await Process.start(job.ffmpeg, [
       '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', '${job.width}x${job.height}',
       '-r', '${job.fps}', '-i', '-', '-c:v', job.encoder, '-b:v', job.bitrate, '-pix_fmt', 'yuv420p', job.output,
     ]);
@@ -73,7 +82,11 @@ class _ReplayRenderState extends State<ReplayRender> {
         _time = DateTime.fromMillisecondsSinceEpoch(frame!.timeMs, isUtc: true);
         _picture = frame.picture;
       });
-      await WidgetsBinding.instance.endOfFrame;
+      // drawn here rather than when the screen asks for a frame, which it stops doing for a hidden window. Time on screen
+      // moves with the drive, so animations run at the speed they did in the car however long a frame takes to make.
+      final binding = WidgetsBinding.instance;
+      binding.handleBeginFrame(Duration(microseconds: done * 1000000 ~/ job.fps));
+      binding.handleDrawFrame();
       previous?.dispose();
 
       final boundary = _boundary.currentContext!.findRenderObject()! as RenderRepaintBoundary;

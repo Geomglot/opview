@@ -32,8 +32,13 @@ class RouteInfo {
   final bool onDevice, onConnect;
   final String? localStart;
   final double? km;
-  /// 'full' when the comma still has the drive, 'quick' when only comma Connect's small files exist
+  /// 'full' when the comma or Connect has everything, 'logs' for the full log with the small video, 'quick' for the
+  /// small files only, 'small' for a drive on Connect whose files have not been looked at yet
   final String detail;
+  /// the towns it started and ended in, when they are known
+  final String? place;
+  /// set on someone else's public drive: what to give [StudioApi.removeDrive] to take it off the list
+  final String? addedAs;
   RouteInfo(Map<String, dynamic> j)
       : route = j['route'],
         first = j['first'],
@@ -42,7 +47,9 @@ class RouteInfo {
         onConnect = j['on_connect'] == true,
         localStart = j['local_start'] as String?,
         km = (j['km'] as num?)?.toDouble(),
-        detail = j['detail'] as String? ?? 'full';
+        detail = j['detail'] as String? ?? 'full',
+        place = j['place'] as String?,
+        addedAs = j['entry'] as String?;
 }
 
 class RangeRequest {
@@ -107,6 +114,29 @@ class StudioApi {
       await _call('POST', '/jobs', {...r.toJson(), 'options': options, 'output': output, 'preview': preview});
 
   Future<Map<String, dynamic>> job(String id) async => await _call('GET', '/jobs/$id');
+
+  Future<Map<String, dynamic>> seek(String jobFile, int frame) async =>
+      (await _call('POST', '/preview/seek', {'job_file': jobFile, 'frame': frame})) as Map<String, dynamic>;
+
+  Future<void> addDrive(String text) async => await _call('POST', '/drives/add', {'text': text});
+
+  Future<void> removeDrive(String entry) async => await _call('POST', '/drives/remove', {'text': entry});
+
+  Future<Map<String, dynamic>> settings() async => await _call('GET', '/settings');
+
+  Future<Map<String, dynamic>> changeSettings(Map<String, Object?> changes) async => await _call('PUT', '/settings', changes);
+
+  Future<Map<String, dynamic>> checkHost(String address) async => await _call('POST', '/settings/check-host', {'address': address});
+
+  Future<List<dynamic>> findComma() async => await _call('POST', '/settings/find-comma', {});
+
+  Future<Map<String, dynamic>> createSshKey() async => await _call('POST', '/settings/ssh-key', {});
+
+  Future<Map<String, dynamic>> saveToken(String token) async => await _call('POST', '/settings/token', {'token': token});
+
+  Future<Map<String, dynamic>> clearCache() async => await _call('POST', '/settings/clear-cache', {});
+
+  Future<Map<String, dynamic>> cancel(String id) async => await _call('POST', '/jobs/$id/cancel', {});
 
   void close() => _client.close(force: true);
 }

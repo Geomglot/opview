@@ -1,13 +1,16 @@
 """Times of day and frames: where the drive was, and which frames a start and end mean."""
 import bisect
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from .logs import SegmentIndex
 
 FPS = 20
+SEGMENT_MS = 60_000
+# a comma can start a drive with a clock that looks set but is months out, and correct it a segment or two later
+MAX_CLOCK_SLIP_MS = 5 * SEGMENT_MS
 _TIME = re.compile(r"^(\d{1,2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?\s*([+-]\d{2}:?\d{2})?$")
 
 
@@ -23,6 +26,19 @@ def zone_for(lat: float, lon: float) -> ZoneInfo:
   return ZoneInfo(name)
 
 
+def settle_clocks(index: dict[int, SegmentIndex]) -> dict[int, SegmentIndex]:
+  """A drive's segments run one after another, so a segment far from where the next one puts it has a wrong clock. The last
+  segment is trusted, as the clock only ever gets corrected, and a wrong one takes its time from the segment after it."""
+  out = dict(index)
+  timed = sorted(s for s, i in index.items() if i.frames and i.wall_offset_ns is not None)
+  for earlier, later in zip(reversed(timed[:-1]), reversed(timed[1:])):
+    a, b = out[earlier], out[later]
+    expected_ns = b.first_mono + b.wall_offset_ns - (later - earlier) * SEGMENT_MS * 10**6
+    if abs(a.first_mono + a.wall_offset_ns - expected_ns) > MAX_CLOCK_SLIP_MS * 10**6:
+      out[earlier] = replace(a, wall_offset_ns=expected_ns - a.first_mono)
+  return out
+
+
 @dataclass(frozen=True)
 class FramePos:
   segment: int
@@ -34,7 +50,7 @@ class RouteTimeline:
     self.segments = sorted(s for s, i in index.items() if i.frames and i.wall_offset_ns is not None)
     if not self.segments:
       raise RangeError("no segment of this route has both video frames and a set clock")
-    self.index = index
+    self.index = settle_clocks(index)
     self.zone = zone
     self._starts_ms = [self.wall_ms(s, 0) for s in self.segments]
 
@@ -95,7 +111,7 @@ class RouteTimeline:
       raise RangeError(f"{text} is outside this drive, which ran {self._describe(self.first())} to {self._describe(self.last())}")
     if len(inside) > 1:
       a, b = (datetime.fromtimestamp(ms / 1000, self.zone) for ms in inside[:2])
-      raise RangeError(f"{text} happened twice in this drive, because the clocks went back. "
+      raise RangeError(f"{text} happened twice in this drive because the clocks went back. "
                        f"Add the offset: {text}{a.strftime('%z')} or {text}{b.strftime('%z')}")
     return self.at_wall_ms(inside[0])
 

@@ -7,8 +7,12 @@ REMOTE_ROOT = "/data/media/0/realdata"
 _SEGMENT = re.compile(r"^(?P<route>[0-9a-f]{8}--[0-9a-f]{10})--(?P<seg>\d+)$")
 
 
-def _ssh(host: str, command: str) -> str:
-  return subprocess.run(["ssh", "-o", "ConnectTimeout=5", host, command], check=True, capture_output=True, text=True).stdout
+# never stop to ask anything: nobody is at a terminal to answer. A comma not seen before is trusted on first contact.
+OPTIONS = ("-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "-o", "StrictHostKeyChecking=accept-new")
+
+
+def run(host: str, command: str) -> str:
+  return subprocess.run(["ssh", *OPTIONS, host, command], check=True, capture_output=True, text=True, timeout=20).stdout
 
 
 def parse_listing(listing: str) -> dict[str, list[int]]:
@@ -21,12 +25,12 @@ def parse_listing(listing: str) -> dict[str, list[int]]:
 
 
 def list_routes(host: str) -> dict[str, list[int]]:
-  return parse_listing(_ssh(host, f"ls -1 {REMOTE_ROOT}"))
+  return parse_listing(run(host, f"ls -1 {REMOTE_ROOT}"))
 
 
 def is_metric(host: str) -> bool:
   """the comma's own km or miles setting; as on the comma itself, no saved setting means miles"""
-  return _ssh(host, "cat /data/params/d/IsMetric 2>/dev/null; true").strip() == "1"
+  return run(host, "cat /data/params/d/IsMetric 2>/dev/null; true").strip() == "1"
 
 
 def fetch(host: str, route: str, segments: list[int], files: tuple[str, ...], cache: Path) -> None:
@@ -35,4 +39,4 @@ def fetch(host: str, route: str, segments: list[int], files: tuple[str, ...], ca
     local = cache / route / str(seg)
     local.mkdir(parents=True, exist_ok=True)
     sources = [f"{host}:{REMOTE_ROOT}/{route}--{seg}/{name}" for name in files]
-    subprocess.run(["rsync", "-a", "--partial", "--timeout=30", *sources, f"{local}/"], check=True)
+    subprocess.run(["rsync", "-a", "--partial", "--timeout=30", "-e", " ".join(("ssh", *OPTIONS)), *sources, f"{local}/"], check=True)

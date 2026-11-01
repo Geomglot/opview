@@ -5,6 +5,7 @@ Connect usually has only the small files (qlog and qcamera); the comma has every
 import json
 import os
 import re
+from datetime import datetime, timezone
 import subprocess
 import urllib.error
 import urllib.request
@@ -17,6 +18,8 @@ JWT_FILE = Path.home() / ".comma" / "jwt"
 # which Connect file list holds each file
 KINDS = {"qlog.zst": "qlogs", "qcamera.ts": "qcameras", "rlog.zst": "logs", "fcamera.hevc": "cameras", "ecamera.hevc": "ecameras"}
 _SEGMENT_IN_URL = re.compile(r"/(\d+)/[^/?]+(?:\?|$)")
+_DONGLE = re.compile(r"\b[0-9a-f]{16}\b")
+_ROUTE = re.compile(r"\b[0-9a-f]{8}--[0-9a-f]{10}\b")
 
 
 def _km(miles: float | None) -> float | None:
@@ -24,15 +27,28 @@ def _km(miles: float | None) -> float | None:
   return None if miles is None else miles * 1.609344
 
 
+FULL_FILES = ("rlog.zst", "fcamera.hevc")
+LOGS_FILES = ("rlog.zst", "qcamera.ts")
+QUICK_FILES = ("qlog.zst", "qcamera.ts")
+
+
 class SourceError(Exception):
   """something the user can act on: no network, no token, a file that was never uploaded"""
+
+
+def parse_drive_ref(text: str) -> tuple[str, str | None]:
+  """(device, route or None) from a Connect link, or "device/route", "device|route" or a device id on its own"""
+  dongle, route = _DONGLE.search(text), _ROUTE.search(text)
+  if dongle is None:
+    raise SourceError("that does not contain a comma device id, which is 16 letters and digits")
+  return dongle[0], route[0] if route else None
 
 
 class DeviceSource:
   name = "device"
 
   def __init__(self, host: str):
-    self.host = host
+    self.host = host  # changes when the user picks another address in the settings
 
   def routes(self) -> dict[str, list[int]]:
     try:
@@ -58,26 +74,49 @@ class DeviceSource:
 
 
 class ConnectSource:
+  """the user's own device with their token, or with [public] someone else's device, for what its owner has made public"""
   name = "connect"
 
-  def __init__(self, jwt_file: Path = JWT_FILE):
+  def __init__(self, jwt_file: Path = JWT_FILE, dongle: str | None = None, public: bool = False):
     self.jwt_file = jwt_file
-    self._dongle: str | None = None
+    self.public = public
+    self._dongle = dongle
     self._files: dict[str, dict] = {}
+    self._infos: dict[str, dict] = {}
 
   def available(self) -> bool:
-    return self.jwt_file.exists()
+    return self.public or self.jwt_file.exists()
+
+  def forget(self) -> None:
+    """a new token or device: what was looked up with the old one no longer applies"""
+    self._files.clear()
+    self._infos.clear()
+
+  def use_device(self, dongle: str | None) -> None:
+    self._dongle = dongle
+    self.forget()
+
+  def check_token(self, token: str) -> None:
+    """raises SourceError unless comma Connect accepts [token]"""
+    self._request("/v1/me/", token)
 
   def _get(self, path: str):
+    if self.public:
+      return self._request(path, None)
     try:
       token = self.jwt_file.read_text().strip()
     except OSError:
       raise SourceError(f"no comma token at {self.jwt_file}")
-    req = urllib.request.Request(API + path, headers={"Authorization": f"JWT {token}"})
+    return self._request(path, token)
+
+  def _request(self, path: str, token: str | None):
+    req = urllib.request.Request(API + path, headers={"Authorization": f"JWT {token}"} if token else {})
     try:
       with urllib.request.urlopen(req, timeout=20) as r:
         return json.loads(r.read())
     except urllib.error.HTTPError as e:
+      if self.public and e.code in (401, 403, 404):
+        raise SourceError("comma Connect says this is not public; its owner can turn on Public Access for it")
       hint = " (the token may have expired; get a new one from jwt.comma.ai)" if e.code in (401, 403) else ""
       raise SourceError(f"comma Connect answered {e.code}{hint}")
     except (urllib.error.URLError, TimeoutError, OSError) as e:
@@ -85,16 +124,19 @@ class ConnectSource:
 
   def dongle(self) -> str:
     if self._dongle is None:
-      devices = self._get("/v1/me/devices/")
+      devices = self.devices()
       mine = [d for d in devices if d.get("is_owner")] or devices
       if not mine:
         raise SourceError("no device on this comma account")
       self._dongle = os.environ.get("COMMA_DONGLE") or mine[0]["dongle_id"]
     return self._dongle
 
+  def devices(self) -> list[dict]:
+    return self._get("/v1/me/devices/")
+
   def device_online(self, within_s: int = 300) -> bool:
     import time
-    devices = self._get("/v1/me/devices/")
+    devices = self.devices()
     ping = next((d.get("last_athena_ping") for d in devices if d["dongle_id"] == self.dongle()), None)
     return bool(ping) and time.time() - ping < within_s
 
@@ -102,10 +144,41 @@ class ConnectSource:
     """route name -> {segments, start_ms, end_ms, lat, lon, km}, newest first"""
     out = {}
     for r in self._get(f"/v1/devices/{self.dongle()}/routes_segments?limit={limit}"):
-      name = r["fullname"].split("|", 1)[1]
-      out[name] = {"segments": r["segment_numbers"], "start_ms": r["start_time_utc_millis"], "end_ms": r["end_time_utc_millis"],
-                   "lat": r.get("start_lat"), "lon": r.get("start_lng"), "km": _km(r.get("distance"))}
+      out[r["fullname"].split("|", 1)[1]] = {"segments": r["segment_numbers"], "start_ms": r["start_time_utc_millis"],
+                                             "end_ms": r["end_time_utc_millis"], **self._place(r)}
     return out
+
+  @staticmethod
+  def _place(r: dict) -> dict:
+    # some drives start before GPS has a fix; Connect gives 0, 0 then
+    start = (r.get("start_lat"), r.get("start_lng"))
+    end = (r.get("end_lat"), r.get("end_lng"))
+    lat, lon = start if any(start) else end
+    return {"lat": lat, "lon": lon, "start": start, "end": end, "km": _km(r.get("distance"))}
+
+  def route_info(self, route: str) -> dict:
+    """the same as one entry of [listing], for a drive named directly, which may be too old to be in that list"""
+    if route not in self._infos:
+      self._infos[route] = self._lookup(route)
+    return self._infos[route]
+
+  def _lookup(self, route: str) -> dict:
+    r = self._get(f"/v1/route/{self.dongle()}|{route}/")
+    urls = self._urls(route)
+    segments = sorted(set(urls.get("qlogs", {})) | set(urls.get("logs", {})))
+    if not segments:
+      raise SourceError(f"comma Connect has no files for {route}")
+
+    def ms(text: str | None) -> int | None:
+      return int(datetime.fromisoformat(text).replace(tzinfo=timezone.utc).timestamp() * 1000) if text else None
+
+    return {"segments": segments, "start_ms": ms(r.get("start_time")), "end_ms": ms(r.get("end_time")), **self._place(r)}
+
+  def best_detail(self, route: str, segments: list[int]) -> str:
+    """the most this drive's files on Connect can show"""
+    if not self.missing(route, segments, FULL_FILES):
+      return "full"
+    return "logs" if not self.missing(route, segments, LOGS_FILES) else "quick"
 
   def routes(self) -> dict[str, list[int]]:
     return {name: info["segments"] for name, info in self.listing().items()}

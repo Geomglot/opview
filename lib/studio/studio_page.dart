@@ -4,6 +4,8 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:opview/studio/admin_page.dart';
 import 'package:opview/studio/preview_player.dart';
 import 'package:opview/studio/sidecar.dart';
 import 'package:opview/studio/studio_api.dart';
@@ -16,6 +18,10 @@ const choiceLabels = {
   'off': 'Off',
   'h12': '12 hour',
   'h24': '24 hour',
+  'logs': 'Log and small video',
+  'always': 'Always',
+  'show': 'Show',
+  'hide': 'Hide',
 };
 
 String choiceLabel(String c) => choiceLabels[c] ?? '${c[0].toUpperCase()}${c.substring(1)}';
@@ -38,8 +44,24 @@ class StudioPage extends StatefulWidget {
   State<StudioPage> createState() => _StudioPageState();
 }
 
+// the native side of full screen: macos/Runner/MainFlutterWindow.swift
+const _window = MethodChannel('oprivview/window');
+
+/// what a drive in the list can show
+String detailLabel(String detail) => switch (detail) {
+      'full' => 'Full detail (on the comma)',
+      'logs' => 'Log and small video',
+      'quick' => 'Quick detail only',
+      _ => 'On comma Connect',
+    };
+
 class _StudioPageState extends State<StudioPage> {
   Sidecar? _sidecar;
+  final _addDrive = TextEditingController();
+  String? _addError;
+  bool _adding = false;
+  bool _fullScreen = false;
+  final _preview = GlobalKey(); // keeps the preview playing as it moves in and out of full screen
   String? _fatal;
   List<ParamSpec> _specs = [];
   List<RouteInfo> _routes = [];
@@ -60,7 +82,55 @@ class _StudioPageState extends State<StudioPage> {
     super.initState();
     _start.text.addListener(_rangeChanged);
     _end.text.addListener(_rangeChanged);
+    // macOS's own green button or Esc can end full screen too
+    _window.setMethodCallHandler((call) async {
+      if (call.method == 'exitedFullScreen' && mounted) setState(() => _fullScreen = false);
+    });
     _boot();
+  }
+
+  Future<void> _toggleFullScreen() async {
+    final on = !_fullScreen;
+    setState(() => _fullScreen = on);
+    try {
+      await _window.invokeMethod('setFullScreen', on);
+    } on MissingPluginException {
+      // no native window under a widget test; the layout still changes
+    }
+  }
+
+  Future<void> _addDriveFromField() async {
+    final text = _addDrive.text.trim();
+    if (text.isEmpty) return;
+    setState(() {
+      _adding = true;
+      _addError = null;
+    });
+    try {
+      await _sidecar!.api.addDrive(text);
+      _addDrive.clear();
+      await _loadRoutes();
+    } catch (e) {
+      setState(() => _addError = '$e');
+    } finally {
+      setState(() => _adding = false);
+    }
+  }
+
+  Future<void> _removeDrive(RouteInfo r) async {
+    await _sidecar!.api.removeDrive(r.addedAs!);
+    if (_route?.addedAs == r.addedAs) {
+      setState(() {
+        _route = null;
+        _previewFile = null;
+      });
+    }
+    await _loadRoutes();
+  }
+
+  Future<void> _openAdmin() async {
+    await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AdminPage(api: _sidecar!.api)));
+    await _loadRoutes(); // the comma or the account may have changed
   }
 
   // a result from Check range only describes the range it was checked with
@@ -169,6 +239,12 @@ class _StudioPageState extends State<StudioPage> {
     }
   }
 
+  Future<void> _cancel() async {
+    _poll?.cancel();
+    final j = await _sidecar!.api.cancel(_job!['id'] as String);
+    setState(() => _job = j);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -176,7 +252,9 @@ class _StudioPageState extends State<StudioPage> {
           ? Center(child: Text(_fatal!, style: const TextStyle(color: Colors.red)))
           : _sidecar == null || _specs.isEmpty
               ? const Center(child: CircularProgressIndicator())
-              : Row(children: [
+              : _fullScreen && _previewFile != null
+                  ? _fullScreenPreview()
+                  : Row(children: [
                   SizedBox(width: 280, child: _routeList()),
                   const VerticalDivider(width: 1),
                   SizedBox(width: 420, child: SingleChildScrollView(padding: const EdgeInsets.all(20), child: _form())),
@@ -186,7 +264,47 @@ class _StudioPageState extends State<StudioPage> {
     );
   }
 
+  Widget _previewPlayer() => PreviewPlayer(
+        key: _preview,
+        jobFile: _previewFile!,
+        onOptionsChanged: (o) => setState(() => _options.addAll(o)),
+        seek: _sidecar!.api.seek,
+        fullScreen: _fullScreen,
+        onToggleFullScreen: _toggleFullScreen,
+      );
+
+  // nothing but the picture and its controls; Esc comes back out
+  Widget _fullScreenPreview() => Focus(
+        autofocus: true,
+        onKeyEvent: (_, event) {
+          if (event is! KeyDownEvent || event.logicalKey != LogicalKeyboardKey.escape) return KeyEventResult.ignored;
+          _toggleFullScreen();
+          return KeyEventResult.handled;
+        },
+        child: ColoredBox(color: Colors.black, child: _previewPlayer()),
+      );
+
   Widget _routeList() => Column(children: [
+        Padding(
+            padding: const EdgeInsets.fromLTRB(12, 4, 4, 0),
+            child: Row(children: [
+              Expanded(
+                  child: TextField(
+                      controller: _addDrive,
+                      onSubmitted: (_) => _addDriveFromField(),
+                      style: Theme.of(context).textTheme.bodySmall,
+                      decoration: InputDecoration(
+                        hintText: 'Paste a public drive or device',
+                        isDense: true,
+                        errorText: _addError,
+                        errorMaxLines: 3,
+                      ))),
+              _adding
+                  ? const Padding(
+                      padding: EdgeInsets.all(12), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)))
+                  : IconButton(tooltip: 'Add', icon: const Icon(Icons.add), onPressed: _addDriveFromField),
+              IconButton(tooltip: 'App settings', icon: const Icon(Icons.settings), onPressed: _openAdmin),
+            ])),
         if (_routesError != null)
           Padding(
               padding: const EdgeInsets.all(12),
@@ -203,11 +321,21 @@ class _StudioPageState extends State<StudioPage> {
               title: Text(r.localStart ?? r.route),
               subtitle: Text([
                 if (r.localStart != null) r.route,
+                if (r.place != null) r.place!,
                 'segments ${r.first} to ${r.last}${r.km == null ? '' : ', ${distanceLabel(r.km!, _metric)}'}',
-                r.detail == 'full' ? 'Full detail (on the comma)' : 'Quick detail only (comma Connect)',
+                if (r.addedAs != null) 'Public drive: ${detailLabel(r.detail)}' else detailLabel(r.detail),
               ].join('\n')),
               isThreeLine: r.localStart != null,
-              onTap: () => setState(() {
+              trailing: r.addedAs == null
+                  ? null
+                  : IconButton(tooltip: 'Remove from the list', icon: const Icon(Icons.close, size: 18), onPressed: () => _removeDrive(r)),
+              // a job in progress keeps the window on its drive, so its progress and Cancel stay in view
+              onTap: _job?['state'] == 'running' ? null : () => setState(() {
+                if (r.route != _route?.route) {
+                  // a range only means something for the drive it was typed for
+                  _start.text.clear();
+                  _end.text.clear();
+                }
                 _route = r;
                 _resolved = null;
                 _resolveError = null;
@@ -257,7 +385,7 @@ class _StudioPageState extends State<StudioPage> {
               child: SingleChildScrollView(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             _previewFile != null
-                ? PreviewPlayer(key: ValueKey(_previewFile), jobFile: _previewFile!)
+                ? _previewPlayer()
                 : AspectRatio(
                     aspectRatio: 16 / 9,
                     child: Container(
@@ -288,6 +416,10 @@ class _StudioPageState extends State<StudioPage> {
             OutlinedButton(onPressed: _route == null || running ? null : () => _render(preview: true), child: const Text('Preview')),
             const SizedBox(width: 12),
             FilledButton(onPressed: _route == null || running ? null : _render, child: const Text('Render MP4')),
+            if (running && _job?['id'] != null) ...[
+              const SizedBox(width: 12),
+              TextButton(onPressed: _cancel, child: const Text('Cancel')),
+            ],
           ]),
         ]));
   }
@@ -366,7 +498,7 @@ class _StudioPageState extends State<StudioPage> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           if (state == 'running') LinearProgressIndicator(value: (j['progress'] as num?)?.toDouble()),
           const SizedBox(height: 6),
-          Text(state == 'failed' ? 'Failed: ${j['error']}' : j['preview'] == true && state == 'done' ? '' : '${j['message']}',
+          Text(state == 'failed' ? 'Failed: ${j['error']}' : state == 'cancelled' ? 'Stopped. No clip was saved.' : j['preview'] == true && state == 'done' ? '' : '${j['message']}',
               style: TextStyle(color: state == 'failed' ? Colors.red : null)),
           if (state == 'done' && j['preview'] != true)
             Row(children: [

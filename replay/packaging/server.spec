@@ -2,7 +2,8 @@
 # Run from the replay folder:  pyinstaller packaging/server.spec --distpath dist --workpath build -y
 from PyInstaller.utils.hooks import collect_all, collect_data_files
 
-datas = [("../oprivview_replay/vendor", "oprivview_replay/vendor")]  # capnp schemas are read as files at run time
+# capnp schemas and the town list are read as files at run time
+datas = [("../oprivview_replay/vendor", "oprivview_replay/vendor"), ("../oprivview_replay/places.tsv.gz", "oprivview_replay")]
 binaries = []
 hidden = ["uvicorn.logging", "uvicorn.loops.auto", "uvicorn.protocols.http.auto", "uvicorn.protocols.websockets.auto",
           "uvicorn.lifespan.on", "anyio._backends._asyncio"]
