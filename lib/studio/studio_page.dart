@@ -20,6 +20,10 @@ const choiceLabels = {
 
 String choiceLabel(String c) => choiceLabels[c] ?? '${c[0].toUpperCase()}${c.substring(1)}';
 
+/// A drive's distance in the comma's own units; km when the comma cannot be reached to ask
+String distanceLabel(double km, bool? metric) =>
+    metric == false ? '${(km / 1.609344).toStringAsFixed(1)} miles' : '${km.toStringAsFixed(1)} km';
+
 /// One end of the range: a segment number or a local time of day
 class RangeEnd {
   bool byTime = true;
@@ -40,11 +44,13 @@ class _StudioPageState extends State<StudioPage> {
   List<ParamSpec> _specs = [];
   List<RouteInfo> _routes = [];
   String? _routesError;
+  bool? _metric;
   RouteInfo? _route;
   final _start = RangeEnd(), _end = RangeEnd();
   final _output = TextEditingController();
   final Map<String, Object?> _options = {};
   String? _resolved, _resolveError;
+  bool _checking = false;
   Map<String, dynamic>? _job;
   String? _previewFile; // set once the server has prepared a preview, which starts playing
   Timer? _poll;
@@ -52,7 +58,19 @@ class _StudioPageState extends State<StudioPage> {
   @override
   void initState() {
     super.initState();
+    _start.text.addListener(_rangeChanged);
+    _end.text.addListener(_rangeChanged);
     _boot();
+  }
+
+  // a result from Check range only describes the range it was checked with
+  void _rangeChanged() {
+    if (_resolved != null || _resolveError != null) {
+      setState(() {
+        _resolved = null;
+        _resolveError = null;
+      });
+    }
   }
 
   Future<void> _boot() async {
@@ -77,6 +95,7 @@ class _StudioPageState extends State<StudioPage> {
     setState(() {
       _routes = r.routes;
       _routesError = r.error;
+      _metric = r.metric;
     });
   }
 
@@ -102,13 +121,23 @@ class _StudioPageState extends State<StudioPage> {
     setState(() {
       _resolved = null;
       _resolveError = null;
+      _checking = true;
     });
     try {
       final j = await _sidecar!.api.resolve(r);
       setState(() => _resolved = 'Zone ${j['zone']}\nFrom ${j['start']}\nTo     ${j['end']}\n${j['seconds']} seconds');
     } catch (e) {
       setState(() => _resolveError = '$e');
+    } finally {
+      setState(() => _checking = false);
     }
+  }
+
+  // the Mac's own save dialog, which also asks before replacing a file; no plugin needed
+  Future<void> _chooseOutput() async {
+    final name = _route == null ? 'replay.mp4' : '${_route!.route}.mp4';
+    final r = await Process.run('osascript', ['-e', 'POSIX path of (choose file name with prompt "Save the MP4 as" default name "$name")']);
+    if (r.exitCode == 0) _output.text = (r.stdout as String).trim();
   }
 
   Future<void> _render({bool preview = false}) async {
@@ -143,15 +172,16 @@ class _StudioPageState extends State<StudioPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('OPRivView Replay')),
       body: _fatal != null
           ? Center(child: Text(_fatal!, style: const TextStyle(color: Colors.red)))
           : _sidecar == null || _specs.isEmpty
               ? const Center(child: CircularProgressIndicator())
               : Row(children: [
-                  SizedBox(width: 300, child: _routeList()),
+                  SizedBox(width: 280, child: _routeList()),
                   const VerticalDivider(width: 1),
-                  Expanded(child: SingleChildScrollView(padding: const EdgeInsets.all(20), child: _form())),
+                  SizedBox(width: 420, child: SingleChildScrollView(padding: const EdgeInsets.all(20), child: _form())),
+                  const VerticalDivider(width: 1),
+                  Expanded(child: _outputPane()),
                 ]),
     );
   }
@@ -173,7 +203,7 @@ class _StudioPageState extends State<StudioPage> {
               title: Text(r.localStart ?? r.route),
               subtitle: Text([
                 if (r.localStart != null) r.route,
-                'segments ${r.first} to ${r.last}${r.km == null ? '' : ', ${r.km!.toStringAsFixed(1)} km'}',
+                'segments ${r.first} to ${r.last}${r.km == null ? '' : ', ${distanceLabel(r.km!, _metric)}'}',
                 r.detail == 'full' ? 'Full detail (on the comma)' : 'Quick detail only (comma Connect)',
               ].join('\n')),
               isThreeLine: r.localStart != null,
@@ -182,46 +212,84 @@ class _StudioPageState extends State<StudioPage> {
                 _resolved = null;
                 _resolveError = null;
                 _job = null;
+                _previewFile = null; // the old preview belongs to the drive that was selected before
               }),
             ),
         ])),
       ]);
 
+  // the drive, the range and the options; this column scrolls on its own
   Widget _form() {
-    final running = _job?['state'] == 'running';
+    final route = _route;
+    final small = Theme.of(context).textTheme.bodySmall;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(_route?.route ?? 'Choose a drive from the list', style: Theme.of(context).textTheme.titleLarge),
+      Text(route == null ? 'Choose a drive from the list' : route.localStart ?? route.route, style: Theme.of(context).textTheme.titleLarge),
+      if (route?.localStart != null) Text(route!.route, style: small),
       const SizedBox(height: 16),
       _rangeRow('Start', _start),
       _rangeRow('End', _end),
       const SizedBox(height: 4),
-      Text('Leave a field empty for the start or end of the drive. Times are local to where the drive happened.',
-          style: Theme.of(context).textTheme.bodySmall),
+      Text('Leave a field empty for the start or end of the drive. Times are local to where the drive happened.', style: small),
       const SizedBox(height: 8),
-      OutlinedButton(onPressed: _route == null ? null : _resolve, child: const Text('Check range')),
-      if (_resolved != null) Padding(padding: const EdgeInsets.only(top: 8), child: SelectableText(_resolved!, style: const TextStyle(fontFamily: 'Menlo'))),
-      const Divider(height: 40),
-      for (final p in _specs) _option(p),
-      const Divider(height: 40),
-      SizedBox(
-          width: 520,
-          child: TextField(
-              controller: _output,
-              decoration: const InputDecoration(labelText: 'Output file', hintText: '~/Movies/<route>.mp4'))),
-      const SizedBox(height: 16),
       Row(children: [
-        OutlinedButton(onPressed: _route == null || running ? null : () => _render(preview: true), child: const Text('Preview')),
-        const SizedBox(width: 12),
-        FilledButton(onPressed: _route == null || running ? null : _render, child: const Text('Render MP4')),
+        OutlinedButton(onPressed: route == null || _checking ? null : _resolve, child: Text(_checking ? 'Checking...' : 'Check range')),
+        if (_checking) const Padding(padding: EdgeInsets.only(left: 12), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))),
       ]),
-      if (_previewFile != null)
-        Padding(
-            padding: const EdgeInsets.only(top: 16),
-            child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 900), child: PreviewPlayer(key: ValueKey(_previewFile), jobFile: _previewFile!))),
-      if (_resolveError != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(_resolveError!, style: const TextStyle(color: Colors.red))),
-      if (_job != null) _jobStatus(),
+      const Divider(height: 32),
+      for (final p in _specs.where((p) => !p.advanced)) _option(p),
+      ExpansionTile(
+        title: const Text('Advanced'),
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: EdgeInsets.zero,
+        expandedCrossAxisAlignment: CrossAxisAlignment.start,
+        children: [for (final p in _specs.where((p) => p.advanced)) _option(p)],
+      ),
     ]);
+  }
+
+  // what comes out: always on screen, so progress and the finished clip are never out of sight
+  Widget _outputPane() {
+    final running = _job?['state'] == 'running';
+    return Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Expanded(
+              child: SingleChildScrollView(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            _previewFile != null
+                ? PreviewPlayer(key: ValueKey(_previewFile), jobFile: _previewFile!)
+                : AspectRatio(
+                    aspectRatio: 16 / 9,
+                    child: Container(
+                        alignment: Alignment.center,
+                        color: Colors.white10,
+                        child: Text(running ? 'Working on it...' : 'The preview plays here'))),
+            if (_resolved != null) Padding(padding: const EdgeInsets.only(top: 12), child: SelectableText(_resolved!, style: const TextStyle(fontFamily: 'Menlo', fontSize: 12))),
+            if (_resolveError != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(_resolveError!, style: const TextStyle(color: Colors.red))),
+            if (_job != null) _jobStatus(),
+          ]))),
+          const SizedBox(height: 12),
+          Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            Expanded(
+                child: TextField(
+                    controller: _output,
+                    decoration: const InputDecoration(
+                        labelText: 'Output file',
+                        hintText: 'Leave empty to save in Movies',
+                        floatingLabelBehavior: FloatingLabelBehavior.always,
+                        isDense: true))),
+            if (Platform.isMacOS) ...[
+              const SizedBox(width: 8),
+              TextButton(onPressed: _chooseOutput, child: const Text('Choose...')),
+            ],
+          ]),
+          const SizedBox(height: 12),
+          Row(children: [
+            OutlinedButton(onPressed: _route == null || running ? null : () => _render(preview: true), child: const Text('Preview')),
+            const SizedBox(width: 12),
+            FilledButton(onPressed: _route == null || running ? null : _render, child: const Text('Render MP4')),
+          ]),
+        ]));
   }
 
   Widget _rangeRow(String label, RangeEnd e) => Padding(
@@ -229,6 +297,7 @@ class _StudioPageState extends State<StudioPage> {
       child: Row(children: [
         SizedBox(width: 50, child: Text(label)),
         SegmentedButton<bool>(
+          showSelectedIcon: false, // a tick would widen the selected side and push the field along
           segments: const [ButtonSegment(value: true, label: Text('Time')), ButtonSegment(value: false, label: Text('Segment'))],
           selected: {e.byTime},
           onSelectionChanged: (s) => setState(() {
@@ -237,11 +306,10 @@ class _StudioPageState extends State<StudioPage> {
           }),
         ),
         const SizedBox(width: 12),
-        SizedBox(
-            width: 200,
+        Expanded(
             child: TextField(
                 controller: e.text,
-                decoration: InputDecoration(hintText: e.byTime ? 'HH:MM:SS' : 'segment number', isDense: true))),
+                decoration: InputDecoration(hintText: e.byTime ? 'HH:MM:SS' : 'number', isDense: true))),
       ]));
 
   Widget _option(ParamSpec p) {
@@ -260,15 +328,17 @@ class _StudioPageState extends State<StudioPage> {
     } else if (p.choices != null) {
       // a null default means "the app's own choice"; show it as the first option
       final hasDefault = p.defaultValue == null;
-      control = SegmentedButton<String?>(
-        showSelectedIcon: false,
-        segments: [
-          if (hasDefault) const ButtonSegment(value: null, label: Text('App default')),
-          for (final c in p.choices!) ButtonSegment(value: c, label: Text(choiceLabel(c))),
-        ],
-        selected: {_options[p.name] as String?},
-        onSelectionChanged: (s) => setState(() => _options[p.name] = s.first),
-      );
+      Widget chip(String? value, String label) => ChoiceChip(
+            label: Text(label),
+            selected: _options[p.name] == value,
+            onSelected: (on) {
+              if (on) setState(() => _options[p.name] = value);
+            },
+          );
+      control = Wrap(spacing: 8, runSpacing: 4, children: [
+        if (hasDefault) chip(null, 'App default'),
+        for (final c in p.choices!) chip(c, choiceLabel(c)),
+      ]);
     } else {
       control = SizedBox(
           width: 160,
@@ -282,7 +352,7 @@ class _StudioPageState extends State<StudioPage> {
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(title),
-          Text(p.help, style: Theme.of(context).textTheme.bodySmall),
+          if (p.help.isNotEmpty) Text(p.help, style: Theme.of(context).textTheme.bodySmall),
           const SizedBox(height: 6),
           control,
         ]));
@@ -296,7 +366,7 @@ class _StudioPageState extends State<StudioPage> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           if (state == 'running') LinearProgressIndicator(value: (j['progress'] as num?)?.toDouble()),
           const SizedBox(height: 6),
-          Text(state == 'failed' ? 'Failed: ${j['error']}' : '${j['message']}',
+          Text(state == 'failed' ? 'Failed: ${j['error']}' : j['preview'] == true && state == 'done' ? '' : '${j['message']}',
               style: TextStyle(color: state == 'failed' ? Colors.red : null)),
           if (state == 'done' && j['preview'] != true)
             Row(children: [

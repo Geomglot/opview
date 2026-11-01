@@ -15,6 +15,7 @@ class Param:
   choices: tuple | None = None
   type: type = str
   many: bool = False
+  advanced: bool = False  # kept out of the way in the window, under Advanced
 
   @property
   def flag(self) -> str:
@@ -22,19 +23,19 @@ class Param:
 
 
 PARAMS = (
-  Param("view", "which OPRivView layout to draw", "classic", ("classic", "enhanced", "detailed")),
-  Param("bottom_bar", "bottom bar; default is the app's own choice for the view", None,
+  Param("view", "Which OPRivView screen layout to draw", "classic", ("classic", "enhanced", "detailed")),
+  Param("bottom_bar", "App default is what the app normally shows for this view", None,
         ("torque", "laneCentering", "auto", "off")),
-  Param("detail", "full: the complete log and camera video. quick: the small files comma Connect keeps; no path or lane lines "
-        "and a low resolution picture. auto: full when it can be had", "auto", ("auto", "full", "quick")),
-  Param("camera", "picture behind the overlays: auto follows the app (wide camera at low speed in experimental mode)", "auto",
+  Param("detail", "Full uses the complete log and camera video. Quick uses the small files comma Connect keeps, with no path "
+        "or lane lines and a lower resolution picture. Automatic uses Full when it can", "auto", ("auto", "full", "quick")),
+  Param("camera", "Automatic follows the app, which uses the wide camera at low speed in experimental mode", "auto",
         ("auto", "road", "wide")),
-  Param("collapsed_panels", "Detailed panels to fold shut", (), ("steering", "driver", "longitudinal", "lead"), many=True),
-  Param("clock", "clock format", "h12", ("h12", "h24")),
-  Param("width", "output width in pixels", 1920, type=int),
-  Param("height", "output height in pixels", 1080, type=int),
-  Param("video_width", "camera picture width fed to the layouts; the live stream is 1152", 1152, type=int),
-  Param("bitrate", "output video bitrate", "8M"),
+  Param("collapsed_panels", "Detailed view only: the panels to fold shut", (), ("steering", "driver", "longitudinal", "lead"), many=True),
+  Param("clock", "", "h12", ("h12", "h24")),
+  Param("width", "Width of the MP4 in pixels", 1920, type=int, advanced=True),
+  Param("height", "Height of the MP4 in pixels", 1080, type=int, advanced=True),
+  Param("video_width", "Width of the camera picture behind the overlays. The live stream is 1152", 1152, type=int, advanced=True),
+  Param("bitrate", "MP4 video bitrate, for example 8M", "8M", advanced=True),
 )
 
 
@@ -56,7 +57,8 @@ def describe() -> list[dict]:
   """the list as plain data, for the interface to build its form from"""
   kinds = {str: "text", int: "integer"}
   return [{"name": p.name, "label": p.name.replace("_", " "), "help": p.help, "default": list(p.default) if p.many else p.default,
-           "choices": list(p.choices) if p.choices else None, "kind": kinds[p.type], "many": p.many} for p in PARAMS]
+           "choices": list(p.choices) if p.choices else None, "kind": kinds[p.type], "many": p.many, "advanced": p.advanced}
+          for p in PARAMS]
 
 
 def settings_from_dict(values: dict) -> dict:

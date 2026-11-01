@@ -24,6 +24,11 @@ def list_routes(host: str) -> dict[str, list[int]]:
   return parse_listing(_ssh(host, f"ls -1 {REMOTE_ROOT}"))
 
 
+def is_metric(host: str) -> bool:
+  """the comma's own km or miles setting; as on the comma itself, no saved setting means miles"""
+  return _ssh(host, "cat /data/params/d/IsMetric 2>/dev/null; true").strip() == "1"
+
+
 def fetch(host: str, route: str, segments: list[int], files: tuple[str, ...], cache: Path) -> None:
   """copy [files] of each segment into cache/<route>/<segment>/, skipping what is already complete"""
   for seg in segments:

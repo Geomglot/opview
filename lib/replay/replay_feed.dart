@@ -85,8 +85,9 @@ class ReplayFeed {
   }
 
   Future<void> close() async {
+    // a forced stop: ffmpeg blocked writing to a pipe nobody reads never acts on a polite one, and stays running
+    _decoder.kill(ProcessSignal.sigkill);
+    _wideDecoder?.kill(ProcessSignal.sigkill);
     await _lines.cancel();
-    _decoder.kill();
-    _wideDecoder?.kill();
   }
 }

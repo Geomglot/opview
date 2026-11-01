@@ -34,6 +34,23 @@ class RenderRequest(Range):
   preview: bool = False  # prepare the drive for the window to play, without encoding an MP4
 
 
+def default_output(folder: Path, range_: dict, route: str) -> Path:
+  """a name that says which part of the drive this is, and never replaces an earlier clip"""
+  first, last = range_["start_segment"], range_["end_segment"]
+  stem = f"{route}--seg{first}" if first == last else f"{route}--seg{first}-{last}"
+  path = folder / f"{stem}.mp4"
+  n = 2
+  while path.exists():
+    path = folder / f"{stem} ({n}).mp4"
+    n += 1
+  return path
+
+
+def _chosen_output(text: str) -> Path:
+  path = Path(text).expanduser()
+  return path if path.suffix.lower() == ".mp4" else path.with_name(path.name + ".mp4")
+
+
 def make_app(host: str = "comma", cache: Path = DEFAULT_CACHE, renderer: Path = DEFAULT_APP, output_dir: Path = Path.home() / "Movies",
              connect: ConnectSource | None = ConnectSource()) -> FastAPI:
   app = FastAPI(title="OPRivView replay")
@@ -61,6 +78,7 @@ def make_app(host: str = "comma", cache: Path = DEFAULT_CACHE, renderer: Path = 
       device_up = True
     except SourceError as e:
       problems.append(str(e))
+    metric = sources.device.is_metric() if device_up else None
     if sources.connect is not None and sources.connect.available():
       try:
         for route, info in sources.connect.listing().items():
@@ -75,7 +93,7 @@ def make_app(host: str = "comma", cache: Path = DEFAULT_CACHE, renderer: Path = 
       # what a replay can show: everything if the comma has it, otherwise only what Connect keeps
       row["detail"] = "full" if row["on_device"] else "quick"
     ordered = sorted(rows.values(), key=lambda r: r["route"], reverse=True)
-    return {"online": device_up, "error": "; ".join(problems) or None, "routes": ordered}
+    return {"online": device_up, "metric": metric, "error": "; ".join(problems) or None, "routes": ordered}
 
   def _local_start(row: dict) -> str | None:
     if row.get("start_ms") is None or row.get("lat") is None:
@@ -101,7 +119,7 @@ def make_app(host: str = "comma", cache: Path = DEFAULT_CACHE, renderer: Path = 
     except ValueError as e:
       raise HTTPException(422, str(e))
     resolved = _resolve(req)
-    output = Path(req.output) if req.output else output_dir / f"{req.route}.mp4"
+    output = _chosen_output(req.output) if req.output else default_output(output_dir, resolved.describe(), req.route)
     job_id = uuid.uuid4().hex[:8]
     state[job_id] = {"id": job_id, "state": "running", "message": "starting", "progress": None, "output": str(output), "error": None, "preview": req.preview, "job_file": None,
                      "range": resolved.describe()}

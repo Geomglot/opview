@@ -25,7 +25,7 @@ void main() {
         if (req.uri.path == '/params') {
           body = _params;
         } else if (req.uri.path == '/routes') {
-          body = {'online': true, 'routes': [
+          body = {'online': true, 'metric': false, 'routes': [
             {'route': '0000005a--f16da7af40', 'segments': [0, 1], 'first': 0, 'last': 1, 'on_device': true, 'on_connect': true, 'detail': 'full', 'local_start': '2026-10-31 09:18 EDT', 'km': 3.6},
             {'route': '00000001--aaaaaaaaaa', 'segments': [0], 'first': 0, 'last': 0, 'on_device': false, 'on_connect': true, 'detail': 'quick'},
           ]};
@@ -40,7 +40,7 @@ void main() {
         await req.response.close();
       });
     });
-    tester.view.physicalSize = const Size(1600, 1800);
+    tester.view.physicalSize = const Size(1320, 820); // the window's real opening size
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
@@ -50,6 +50,7 @@ void main() {
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
       await tester.pump();
     }
+    expect(find.textContaining('2.2 miles'), findsOneWidget); // 3.6 km, on a comma set to miles
     expect(find.text('Lane keeping'), findsOneWidget);
     expect(find.text('Torque bar'), findsOneWidget);
 
@@ -59,6 +60,9 @@ void main() {
     await tester.pump();
     await tester.tap(find.text('Lane keeping'));
     await tester.tap(find.text('Detailed'));
+    await tester.pump();
+    await tester.ensureVisible(find.text('Lead')); // lower down the scrolling options column
+    await tester.pump();
     await tester.tap(find.text('Lead'));
     await tester.pump();
     await tester.tap(find.text('Preview'));

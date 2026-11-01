@@ -43,7 +43,7 @@ def test_preview_job_returns_the_job_file_and_makes_no_mp4(monkeypatch, tmp_path
 
   class R:
     def describe(self):
-      return {"zone": "UTC"}
+      return {"zone": "UTC", "start_segment": 2, "end_segment": 3}
 
   monkeypatch.setattr(jobs, "resolve", lambda *a, **k: R())
   seen = {}
@@ -62,3 +62,17 @@ def test_preview_job_returns_the_job_file_and_makes_no_mp4(monkeypatch, tmp_path
     time.sleep(0.05)
   assert job["state"] == "done" and job["preview"] is True and job["job_file"] == str(tmp_path / "preview-job.json")
   assert seen["preview"] is True and not (tmp_path / "movies").exists()
+
+
+def test_default_output_says_which_part_and_never_replaces_a_clip(tmp_path):
+  one = {"start_segment": 5, "end_segment": 5}
+  first = server.default_output(tmp_path, one, "r")
+  assert first.name == "r--seg5.mp4"
+  first.write_bytes(b"x")
+  assert server.default_output(tmp_path, one, "r").name == "r--seg5 (2).mp4"
+  assert server.default_output(tmp_path, {"start_segment": 3, "end_segment": 4}, "r").name == "r--seg3-4.mp4"
+
+
+def test_a_typed_output_path_may_use_a_tilde_and_leave_off_the_extension():
+  from pathlib import Path
+  assert server._chosen_output("~/clips/run") == Path.home() / "clips" / "run.mp4"

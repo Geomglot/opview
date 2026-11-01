@@ -19,6 +19,11 @@ KINDS = {"qlog.zst": "qlogs", "qcamera.ts": "qcameras", "rlog.zst": "logs", "fca
 _SEGMENT_IN_URL = re.compile(r"/(\d+)/[^/?]+(?:\?|$)")
 
 
+def _km(miles: float | None) -> float | None:
+  """Connect gives a drive's distance in miles, whatever the comma's own km or miles setting is"""
+  return None if miles is None else miles * 1.609344
+
+
 class SourceError(Exception):
   """something the user can act on: no network, no token, a file that was never uploaded"""
 
@@ -34,6 +39,13 @@ class DeviceSource:
       return ssh_source.list_routes(self.host)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as e:
       raise SourceError(f"cannot reach {self.host}: {e}")
+
+  def is_metric(self) -> bool | None:
+    """None when the comma cannot be reached"""
+    try:
+      return ssh_source.is_metric(self.host)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
+      return None
 
   def missing(self, route: str, segments: list[int], names: tuple[str, ...]) -> list[str]:
     return []  # the comma keeps whole segments; a missing file shows up when it is fetched
@@ -92,7 +104,7 @@ class ConnectSource:
     for r in self._get(f"/v1/devices/{self.dongle()}/routes_segments?limit={limit}"):
       name = r["fullname"].split("|", 1)[1]
       out[name] = {"segments": r["segment_numbers"], "start_ms": r["start_time_utc_millis"], "end_ms": r["end_time_utc_millis"],
-                   "lat": r.get("start_lat"), "lon": r.get("start_lng"), "km": r.get("distance")}
+                   "lat": r.get("start_lat"), "lon": r.get("start_lng"), "km": _km(r.get("distance"))}
     return out
 
   def routes(self) -> dict[str, list[int]]:

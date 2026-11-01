@@ -14,7 +14,7 @@ class ParamSpec {
   final String name, label, help, kind;
   final Object? defaultValue;
   final List<String>? choices;
-  final bool many;
+  final bool many, advanced;
   ParamSpec(Map<String, dynamic> j)
       : name = j['name'],
         label = j['label'],
@@ -22,7 +22,8 @@ class ParamSpec {
         kind = j['kind'],
         defaultValue = j['default'],
         choices = (j['choices'] as List?)?.cast<String>(),
-        many = j['many'] as bool;
+        many = j['many'] as bool,
+        advanced = j['advanced'] == true;
 }
 
 class RouteInfo {
@@ -92,10 +93,11 @@ class StudioApi {
 
   Future<List<ParamSpec>> params() async => [for (final j in await _call('GET', '/params')) ParamSpec(j)];
 
-  /// [error] says what could not be reached (the comma, Connect, or both); the routes found are returned anyway
-  Future<({List<RouteInfo> routes, String? error})> routes() async {
+  /// [error] says what could not be reached (the comma, Connect, or both); the routes found are returned anyway.
+  /// [metric] is the comma's km or miles setting, null when the comma cannot be reached.
+  Future<({List<RouteInfo> routes, String? error, bool? metric})> routes() async {
     final j = await _call('GET', '/routes');
-    return (routes: [for (final r in j['routes']) RouteInfo(r)], error: j['error'] as String?);
+    return (routes: [for (final r in j['routes']) RouteInfo(r)], error: j['error'] as String?, metric: j['metric'] as bool?);
   }
 
   Future<Map<String, dynamic>> resolve(RangeRequest r) async => await _call('POST', '/resolve', r.toJson());
