@@ -45,6 +45,9 @@ class AugmentedRoadView extends StatefulWidget {
   final UIState uiState;
   final RTCVideoRenderer? videoRenderer;
 
+  // drawn in place of the WebRTC video when set: the replay tool's decoded camera frames
+  final Widget? videoChild;
+
   // manual device IP, for networks where mDNS discovery does not work
   final Future<String?> Function()? loadManualHost;
   final Future<void> Function(String? host)? onSetManualHost;
@@ -62,6 +65,7 @@ class AugmentedRoadView extends StatefulWidget {
     super.key,
     required this.uiState,
     this.videoRenderer,
+    this.videoChild,
     this.loadManualHost,
     this.onSetManualHost,
     this.settings,
@@ -423,7 +427,8 @@ class _AugmentedRoadViewState extends State<AugmentedRoadView> {
   }
 
   Widget _videoLayer(FrameTransform frame) {
-    if (widget.videoRenderer == null) {
+    final child = widget.videoChild;
+    if (child == null && widget.videoRenderer == null) {
       return Container(color: Colors.black);
     }
     return Stack(
@@ -436,10 +441,11 @@ class _AugmentedRoadViewState extends State<AugmentedRoadView> {
           height: frame.videoHeight,
           // the stream is the whole camera frame scaled down (1152x720 for 1928x1208),
           // so cover only trims a fraction of a percent
-          child: RTCVideoView(
-            widget.videoRenderer!,
-            objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-          ),
+          child: child ??
+              RTCVideoView(
+                widget.videoRenderer!,
+                objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+              ),
         ),
       ],
     );

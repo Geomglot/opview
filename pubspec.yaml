@@ -16,6 +16,11 @@ dependencies:
   connectivity_plus: ^7.0.0
   shared_preferences: ^2.3.0
 
+# bonsoir_darwin 6.1.0 does not build for macOS: one missing `import Foundation`, added in this copy
+dependency_overrides:
+  bonsoir_darwin:
+    path: third_party/bonsoir_darwin
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -6,6 +6,7 @@
 
 import 'dart:math' as math;
 
+import 'package:opview/common/app_clock.dart';
 import 'package:flutter/foundation.dart';
 import 'package:opview/selfdrive/ui/onroad/lane_centering.dart';
 
@@ -271,8 +272,8 @@ class UIState extends ChangeNotifier {
     steeringAngleDeg = (data['steeringAngleDeg'] as num?)?.toDouble() ?? 0.0;
     final left = data['leftBlinker'] as bool? ?? false;
     final right = data['rightBlinker'] as bool? ?? false;
-    if (left && !leftBlinker) leftSignalSince = DateTime.now();
-    if (right && !rightBlinker) rightSignalSince = DateTime.now();
+    if (left && !leftBlinker) leftSignalSince = appNow();
+    if (right && !rightBlinker) rightSignalSince = appNow();
     leftBlinker = left;
     rightBlinker = right;
     leftBlindspot = data['leftBlindspot'] as bool? ?? false;

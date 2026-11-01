@@ -5,6 +5,7 @@
 // all layout at 1080p reference, scaled by screenHeight/1080.
 
 import 'dart:math';
+import 'package:opview/common/app_clock.dart';
 import 'package:flutter/material.dart';
 import 'package:opview/selfdrive/ui/ui_state.dart';
 
@@ -115,7 +116,7 @@ class SpeedLimitRenderer extends StatelessWidget {
     final width = st.isMetric ? _setSpeedWidthMetric : _setSpeedWidthImperial;
     final signRect = Rect.fromLTWH(60 + width + 30 - 6, 45 - 6, width, _setSpeedHeight + 6 * 2);
     final preActive = st.speedLimitAssistState == 'preActive';
-    final alpha = preActiveAlpha(preActive, DateTime.now());
+    final alpha = preActiveAlpha(preActive, appNow());
     final arrow = preActive ? preActiveArrow(st) : null;
 
     return Stack(

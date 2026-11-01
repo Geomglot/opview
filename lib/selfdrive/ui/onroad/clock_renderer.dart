@@ -2,6 +2,7 @@
 // not part of the openpilot UI; off unless turned on in settings
 
 import 'dart:async';
+import 'package:opview/common/app_clock.dart';
 import 'package:flutter/material.dart';
 import 'package:opview/services/app_settings.dart';
 
@@ -115,7 +116,7 @@ class _ClockTextState extends State<ClockText> {
 
   String _text() {
     final source = widget.now;
-    final t = source != null ? source() : DateTime.now();
+    final t = source != null ? source() : appNow();
     final use24Hour = widget.mode == ClockMode.h24 || (widget.mode == ClockMode.system && _systemUses24Hour);
     return formatClock(t, use24Hour: use24Hour);
   }

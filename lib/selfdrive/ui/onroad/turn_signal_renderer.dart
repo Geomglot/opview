@@ -4,6 +4,7 @@
 // all layout at 1080p reference, scaled by screenHeight/1080.
 
 import 'dart:math';
+import 'package:opview/common/app_clock.dart';
 import 'package:flutter/material.dart';
 import 'package:opview/selfdrive/ui/ui_state.dart';
 
@@ -50,7 +51,7 @@ class TurnSignalRenderer extends StatelessWidget {
   Widget build(BuildContext context) {
     final st = uiState;
     if (!st.showTurnSignals && !st.showBlindSpot) return const SizedBox.shrink();
-    final now = DateTime.now();
+    final now = appNow();
 
     return LayoutBuilder(builder: (context, constraints) {
       final midX = constraints.maxWidth / 2;
