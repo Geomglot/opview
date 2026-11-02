@@ -1,0 +1,76 @@
+name: Replay for Windows
+
+# Builds OPRivView Replay for Windows as a zip, with no dependence on any one computer: ffmpeg from source (MSYS2), the
+# server (PyInstaller) and the app (Flutter), put together by replay/packaging/build_windows.ps1.
+# The zip is kept as a workflow artifact; download it from the run's page.
+on:
+  push:
+    branches: [windows-replay]
+    paths: ['replay/**', 'windows/**', 'lib/**', 'pubspec.*', '.github/workflows/replay-windows.yml']
+  pull_request:
+    branches: [rivian-support]
+    paths: ['replay/**', 'windows/**', 'lib/**', 'pubspec.*', '.github/workflows/replay-windows.yml']
+  workflow_dispatch:
+
+jobs:
+  zip:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      # ffmpeg takes a quarter of an hour to build and only changes with its build script, so it is kept between runs
+      - name: ffmpeg from the cache
+        id: ffmpeg-cache
+        uses: actions/cache@v4
+        with:
+          path: replay/build/ffmpeg-win
+          key: ffmpeg-win-${{ hashFiles('replay/packaging/build_ffmpeg_windows.sh') }}
+
+      - if: steps.ffmpeg-cache.outputs.cache-hit != 'true'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            make diffutils pkgconf tar xz curl
+            mingw-w64-x86_64-gcc mingw-w64-x86_64-nasm
+            mingw-w64-x86_64-ffnvcodec-headers mingw-w64-x86_64-amf-headers
+
+      - name: ffmpeg (minimal LGPL build)
+        if: steps.ffmpeg-cache.outputs.cache-hit != 'true'
+        shell: msys2 {0}
+        working-directory: replay
+        run: bash packaging/build_ffmpeg_windows.sh build/ffmpeg-win
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: replay/requirements.txt
+
+      - name: Python environment for the server
+        working-directory: replay
+        run: |
+          python -m venv .venv
+          .venv\Scripts\python -m pip install -r requirements.txt
+
+      - name: Server tests
+        working-directory: replay
+        run: .venv\Scripts\python -m pytest -q
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - name: Build and zip
+        working-directory: replay
+        run: powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: OPRivView-Replay-Windows
+          path: replay/dist/OPRivView-Replay-*-Windows.zip
+          if-no-files-found: error
