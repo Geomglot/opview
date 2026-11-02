@@ -5,6 +5,7 @@
 import argparse
 import os
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -81,7 +82,10 @@ def _chosen_output(text: str) -> Path:
   return path if path.suffix.lower() == ".mp4" else path.with_name(path.name + ".mp4")
 
 
-def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Path = DEFAULT_APP, output_dir: Path = Path.home() / "Movies",
+DEFAULT_OUTPUT_DIR = Path.home() / ("Videos" if sys.platform == "win32" else "Movies")
+
+
+def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Path = DEFAULT_APP, output_dir: Path = DEFAULT_OUTPUT_DIR,
              connect: ConnectSource | None = ConnectSource(), settings: Settings | None = None) -> FastAPI:
   """[settings] is the user's saved choices; [host] is one given on the command line, which wins over them"""
   app = FastAPI(title="OPRivView replay")
@@ -341,6 +345,27 @@ def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Pat
   return app
 
 
+def _windows_parent_watch(parent: int):
+  """On Windows a process keeps the parent id it was started with after the parent ends, so watching os.getppid() never
+  sees a change. Hold the parent's process handle instead (opened now, so a reused id cannot fool it) and wait on it."""
+  import ctypes
+  from ctypes import wintypes
+
+  kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+  kernel32.OpenProcess.restype = wintypes.HANDLE
+  kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+  kernel32.WaitForSingleObject.argtypes = (wintypes.HANDLE, wintypes.DWORD)
+  synchronize, infinite = 0x00100000, 0xFFFFFFFF
+  handle = kernel32.OpenProcess(synchronize, False, parent)
+
+  def watch():
+    if handle:  # no handle means the parent has already gone
+      kernel32.WaitForSingleObject(handle, infinite)
+    os._exit(0)
+
+  return watch
+
+
 def main() -> None:
   p = argparse.ArgumentParser()
   p.add_argument("--port", type=int, default=8765)
@@ -352,11 +377,13 @@ def main() -> None:
   a = p.parse_args()
   if a.exit_with_parent:
     parent = os.getppid()
-
-    def watch():
-      while os.getppid() == parent:
-        time.sleep(1)
-      os._exit(0)
+    if sys.platform == "win32":
+      watch = _windows_parent_watch(parent)
+    else:
+      def watch():
+        while os.getppid() == parent:
+          time.sleep(1)
+        os._exit(0)
 
     threading.Thread(target=watch, daemon=True).start()
   uvicorn.run(make_app(a.host, a.cache, a.app, connect=None if a.no_connect else ConnectSource(), settings=Settings()), host="127.0.0.1", port=a.port, log_level="warning")

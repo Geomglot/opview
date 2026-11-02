@@ -7,6 +7,7 @@ import re
 import shutil
 import socket
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -39,14 +40,28 @@ def check_host(host: str) -> dict:
 
 
 def local_prefixes(ifconfig: str | None = None) -> list[str]:
-  """the first three numbers of each network this Mac is on"""
-  if ifconfig is None:
-    ifconfig = subprocess.run(["/sbin/ifconfig"], capture_output=True, text=True).stdout
+  """the first three numbers of each network this computer is on"""
+  if ifconfig is None and sys.platform == "win32":
+    prefixes = _windows_prefixes()
+  else:
+    if ifconfig is None:
+      ifconfig = subprocess.run(["/sbin/ifconfig"], capture_output=True, text=True).stdout
+    prefixes = _ADDRESS.findall(ifconfig)
   found: list[str] = []
-  for prefix in _ADDRESS.findall(ifconfig):
+  for prefix in prefixes:
     if not prefix.startswith(("127.", "169.254.")) and prefix not in found:
       found.append(prefix)
   return found
+
+
+def _windows_prefixes() -> list[str]:
+  """Windows has no ifconfig, and ipconfig's wording changes with the language Windows is set to, so ask for this
+  computer's own IPv4 addresses instead"""
+  try:
+    addresses = {info[4][0] for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET)}
+  except OSError:
+    return []
+  return [a.rsplit(".", 1)[0] for a in sorted(addresses)]
 
 
 def _ssh_open(address: str, timeout: float = 0.6) -> bool:

@@ -1,9 +1,13 @@
 """What the user chose in the app's settings; kept in one small file."""
 import json
 import os
+import sys
 from pathlib import Path
 
-DEFAULT_FILE = Path.home() / "Library/Application Support/OPRivViewReplay/settings.json"
+if sys.platform == "win32":
+  DEFAULT_FILE = Path(os.environ.get("APPDATA") or Path.home() / "AppData/Roaming") / "OPRivViewReplay/settings.json"
+else:
+  DEFAULT_FILE = Path.home() / "Library/Application Support/OPRivViewReplay/settings.json"
 DEFAULTS: dict = {
   "host": "comma",  # how to reach the comma over SSH: a name from ~/.ssh/config or an address
   "dongle": None,  # which device on the comma account; None means the first one the account owns
