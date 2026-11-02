@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:opview/studio/desktop.dart';
 import 'package:opview/studio/studio_api.dart';
 
 /// a size in the units a person would use
@@ -218,7 +219,7 @@ class _AdminPageState extends State<AdminPage> {
         Align(
             alignment: Alignment.centerLeft,
             child: TextButton(
-                onPressed: () => Process.run('open', ['https://github.com/settings/keys']), child: const Text('Open GitHub SSH keys'))),
+                onPressed: () => openOnDesktop('https://github.com/settings/keys'), child: const Text('Open GitHub SSH keys'))),
       ],
     ]);
   }
@@ -244,7 +245,7 @@ class _AdminPageState extends State<AdminPage> {
         const SizedBox(width: 12),
         OutlinedButton(onPressed: _tokenBusy ? null : _saveToken, child: Text(_tokenBusy ? 'Checking...' : 'Save')),
         const SizedBox(width: 4),
-        TextButton(onPressed: () => Process.run('open', ['https://jwt.comma.ai']), child: const Text('Get a token')),
+        TextButton(onPressed: () => openOnDesktop('https://jwt.comma.ai'), child: const Text('Get a token')),
       ]),
       if (_tokenResult != null) _note(_tokenResult!),
     ]);

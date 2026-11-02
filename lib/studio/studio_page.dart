@@ -6,6 +6,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:opview/studio/admin_page.dart';
+import 'package:opview/studio/desktop.dart';
 import 'package:opview/studio/preview_player.dart';
 import 'package:opview/studio/sidecar.dart';
 import 'package:opview/studio/studio_api.dart';
@@ -509,8 +510,8 @@ class _StudioPageState extends State<StudioPage> {
           if (state == 'done' && j['preview'] != true)
             Row(children: [
               Expanded(child: SelectableText(j['output'])),
-              TextButton(onPressed: () => Process.run('open', ['-R', j['output']]), child: const Text('Show in Finder')),
-              TextButton(onPressed: () => Process.run('open', [j['output']]), child: const Text('Play')),
+              TextButton(onPressed: () => showInFileManager(j['output']), child: Text('Show in $fileManagerName')),
+              TextButton(onPressed: () => openOnDesktop(j['output']), child: const Text('Play')),
             ]),
         ]));
   }

@@ -11,6 +11,8 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 BUILD_ONLY = {"altgraph", "iniconfig", "macholib", "pip", "pluggy", "pygments", "pyinstaller", "pyinstaller-hooks-contrib", "pytest",
               "colorama", "pefile", "pywin32-ctypes"}  # the last three only come with pytest and PyInstaller on Windows
+if sys.platform != "win32":
+  BUILD_ONLY.add("tzdata")  # installed everywhere for the tests, but only the Windows server carries it (server.spec)
 NO_LICENCE_FILE = {"flatbuffers": "Apache License 2.0; the package carries no licence file. See https://github.com/google/flatbuffers"}
 HEAD = """OPRivView Replay: licences for the software inside this app
 
