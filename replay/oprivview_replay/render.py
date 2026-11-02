@@ -60,10 +60,12 @@ def encoder(ffmpeg: str) -> str:
   if sys.platform != "win32":
     return "h264_videotoolbox"
   if ffmpeg not in _encoders:
+    # two blank frames in through a pipe and out through one, using only what the app's own small ffmpeg holds
+    frames = bytes(256 * 144 * 3 // 2 * 2)  # 256x144 yuv420p
     for name in WINDOWS_ENCODERS:
       try:
-        subprocess.run([ffmpeg, "-v", "error", "-f", "lavfi", "-i", "color=black:s=256x144:r=20", "-frames:v", "2",
-                        "-c:v", name, "-f", "null", "-"], check=True, capture_output=True, timeout=30)
+        subprocess.run([ffmpeg, "-v", "error", "-f", "rawvideo", "-pix_fmt", "yuv420p", "-s", "256x144", "-r", "20", "-i", "-",
+                        "-c:v", name, "-f", "rawvideo", "-"], input=frames, check=True, capture_output=True, timeout=30)
       except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
         continue
       _encoders[ffmpeg] = name
