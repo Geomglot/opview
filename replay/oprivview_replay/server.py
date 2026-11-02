@@ -171,8 +171,12 @@ def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Pat
     from .timeline import zone_for
     when = datetime.fromtimestamp(row["start_ms"] / 1000)
     place = _position(row)
-    if place is None:
-      return when.astimezone().strftime("%Y-%m-%d %H:%M %Z") + " (Mac time)"  # where the drive was is not known
+    if place is None:  # where the drive was is not known
+      if sys.platform == "win32":  # Windows names zones in full ("SA Pacific Standard Time") and has no abbreviations
+        local = when.astimezone()
+        offset = local.strftime("%z")
+        return local.strftime("%Y-%m-%d %H:%M") + f" UTC{offset[:3]}:{offset[3:]} (this computer's time)"
+      return when.astimezone().strftime("%Y-%m-%d %H:%M %Z") + " (Mac time)"
     return when.astimezone(zone_for(*place)).strftime("%Y-%m-%d %H:%M %Z")
 
   def _position(row: dict) -> tuple[float, float] | None:

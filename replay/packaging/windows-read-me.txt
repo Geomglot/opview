@@ -3,7 +3,9 @@ OPRivView Replay
 Needs 64-bit Windows 10 or 11.
 
 To install
-1. Unzip this folder anywhere you like, for example into Documents or onto the Desktop. Nothing else is installed.
+1. Unzip this folder somewhere with a short path, for example into Documents, Downloads or onto the Desktop. Nothing
+   else is installed. (Windows cannot open files more than 260 characters deep, so a folder buried many levels down
+   may fail to unzip.)
 2. Open the folder and double-click OPRivViewReplay.exe.
 To remove it, delete the folder. Your settings are in %APPDATA%\OPRivViewReplay and downloaded drives in
 %LOCALAPPDATA%\OPRivViewReplay; delete those too if you want them gone.

@@ -398,7 +398,7 @@ class _StudioPageState extends State<StudioPage> {
                         alignment: Alignment.center,
                         color: Colors.white10,
                         child: Text(running ? 'Working on it...' : 'The preview plays here'))),
-            if (_resolved != null) Padding(padding: const EdgeInsets.only(top: 12), child: SelectableText(_resolved!, style: const TextStyle(fontFamily: 'Menlo', fontSize: 12))),
+            if (_resolved != null) Padding(padding: const EdgeInsets.only(top: 12), child: SelectableText(_resolved!, style: TextStyle(fontFamily: Platform.isWindows ? 'Consolas' : 'Menlo', fontSize: 12))),
             if (_resolveError != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(_resolveError!, style: const TextStyle(color: Colors.red))),
             if (_job != null) _jobStatus(),
           ]))),

@@ -1,3 +1,4 @@
+import re
 import sys
 
 import pytest
@@ -206,6 +207,9 @@ def _routes_with_connect(tmp_path, lat, lon):
 
 def test_a_drive_with_no_position_shows_the_mac_time_and_never_gmt(tmp_path):
   row = _routes_with_connect(tmp_path, 0, 0)
+  if sys.platform == "win32":  # Windows has no zone abbreviations, only long names, so it gives the offset from UTC
+    assert re.fullmatch(r"\d{4}-\d\d-\d\d \d\d:\d\d UTC[+-]\d\d:\d\d \(this computer's time\)", row["local_start"])
+    return
   assert row["local_start"].endswith("(Mac time)") and "GMT" not in row["local_start"].replace("(Mac time)", "")
 
 
