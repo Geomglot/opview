@@ -128,7 +128,7 @@ def test_fetch_asks_sizes_once_and_copies_each_segment_with_scp(monkeypatch, tmp
   assert comma.copies() == [[f"comma:/data/media/0/realdata/{ROUTE}--3/rlog.zst", f"comma:/data/media/0/realdata/{ROUTE}--3/fcamera.hevc"],
                             [f"comma:/data/media/0/realdata/{ROUTE}--4/rlog.zst", f"comma:/data/media/0/realdata/{ROUTE}--4/fcamera.hevc"]]
   assert (tmp_path / ROUTE / "4" / "fcamera.hevc").read_bytes() == b"video4"
-  assert not any((tmp_path / ROUTE / "3" / ".part").iterdir())  # everything moved into place
+  assert not (tmp_path / ROUTE / "3" / ".part").exists()  # everything moved into place, and the holding folder gone
   scp = next(args for args, kw in comma.calls if args[0] == "scp")
   assert "BatchMode=yes" in scp and "StrictHostKeyChecking=accept-new" in scp and "ServerAliveInterval=10" in scp
 

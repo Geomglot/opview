@@ -85,3 +85,4 @@ def _fetch_with_scp(host: str, route: str, segments: list[int], files: tuple[str
     subprocess.run(["scp", "-q", *SCP_OPTIONS, *sources, "."], check=True, cwd=holding)
     for name in needed:
       os.replace(holding / name, local / name)
+    holding.rmdir()  # empty now; a copy cut short leaves it, with what arrived, to be overwritten next time
