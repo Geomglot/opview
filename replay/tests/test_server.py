@@ -1,3 +1,5 @@
+import sys
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -119,9 +121,14 @@ def test_cancel_stops_a_job_and_it_stays_cancelled(monkeypatch, tmp_path):
   assert c.get(f"/jobs/{job['id']}").json()["state"] == "cancelled" and killed
 
 
-def _fake_renderer(tmp_path, body: str):
+def _fake_renderer(tmp_path, code: int = 0):
+  """a renderer that writes something to the part file named in $PART and exits with [code]"""
+  if sys.platform == "win32":  # Windows cannot run a #! script; a .cmd file is one it starts directly
+    app = tmp_path / "renderer.cmd"
+    app.write_text(f'@echo clip> "%PART%"\r\n@exit /b {code}\r\n')
+    return app
   app = tmp_path / "renderer"
-  app.write_text("#!/bin/sh\n" + body)
+  app.write_text(f'#!/bin/sh\necho clip > "$PART"; exit {code}\n')
   app.chmod(0o755)
   return app
 
@@ -147,13 +154,13 @@ def _run_render(monkeypatch, tmp_path, app, frames_written):
 
 
 def test_a_finished_render_appears_under_its_name_with_no_part_file_left(monkeypatch, tmp_path):
-  output = _run_render(monkeypatch, tmp_path, _fake_renderer(tmp_path, 'echo clip > "$PART"'), 100)
+  output = _run_render(monkeypatch, tmp_path, _fake_renderer(tmp_path), 100)
   assert output.exists() and list(tmp_path.glob("*.part.*")) == []
 
 
 def test_a_short_render_is_a_failure_and_leaves_no_clip(monkeypatch, tmp_path):
   with pytest.raises(RuntimeError, match="30 of 100"):
-    _run_render(monkeypatch, tmp_path, _fake_renderer(tmp_path, 'echo clip > "$PART"'), 30)
+    _run_render(monkeypatch, tmp_path, _fake_renderer(tmp_path), 30)
   assert not (tmp_path / "clip.mp4").exists() and list(tmp_path.glob("*.part.*")) == []
 
 
@@ -161,7 +168,7 @@ def test_a_renderer_that_dies_is_a_failure_and_leaves_no_clip(monkeypatch, tmp_p
   import subprocess
 
   with pytest.raises(subprocess.CalledProcessError):
-    _run_render(monkeypatch, tmp_path, _fake_renderer(tmp_path, 'echo clip > "$PART"; exit 3'), 100)
+    _run_render(monkeypatch, tmp_path, _fake_renderer(tmp_path, 3), 100)
   assert not (tmp_path / "clip.mp4").exists() and list(tmp_path.glob("*.part.*")) == []
 
 

@@ -1,7 +1,9 @@
 import base64
 import json
 import stat
+import sys
 import time
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -86,7 +88,9 @@ def test_a_token_is_kept_only_if_connect_accepts_it_and_only_this_user_can_read_
   assert not f.exists()
   monkeypatch.setattr(c, "check_token", lambda token: None)
   admin.save_token(c, " good\n")
-  assert f.read_text() == "good\n" and stat.S_IMODE(f.stat().st_mode) == 0o600
+  assert f.read_text() == "good\n"
+  if sys.platform != "win32":  # Windows has no owner-only mode bits; the user's own folder is already private to them
+    assert stat.S_IMODE(f.stat().st_mode) == 0o600
 
 
 def test_an_existing_ssh_key_is_never_replaced(tmp_path, monkeypatch):
@@ -126,7 +130,7 @@ def test_a_seek_finds_the_segment_and_reads_from_a_few_seconds_earlier(tmp_path)
     "params": [[0, "p0"], [1200, "p1"]], "offsets": list(range(0, 24000, 10)),
     "segments": [{"first": 0, "skip": 0, "video": "a/fcamera.ts", "wide": "a/e"}, {"first": 1200, "skip": 0, "video": "b/fcamera.ts", "wide": "b/e"}]}))
   got = render.seek(job, 1500)
-  assert got["video_inputs"] == ["b/fcamera.ts"] and got["skip_frames"] == 300 and got["frame_count"] == 900
+  assert [Path(v) for v in got["video_inputs"]] == [Path("b/fcamera.ts")] and got["skip_frames"] == 300 and got["frame_count"] == 900
   assert got["clip_offset"] == 14000 and got["frames_before"] == 100 and got["first_lines"] == ["p1"]
 
 
@@ -136,7 +140,7 @@ def test_a_seek_near_the_start_has_nothing_earlier_to_read(tmp_path):
   (tmp_path / "preview-index.json").write_text(json.dumps({"params": [[0, "p0"]], "offsets": list(range(1200)),
                                                            "segments": [{"first": 0, "skip": 40, "video": "a/q.ts", "wide": "a/e"}]}))
   got = render.seek(job, 30)
-  assert got["clip_offset"] == 0 and got["frames_before"] == 30 and got["skip_frames"] == 70 and got["video_inputs"] == ["a/q.ts"]
+  assert got["clip_offset"] == 0 and got["frames_before"] == 30 and got["skip_frames"] == 70 and [Path(v) for v in got["video_inputs"]] == [Path("a/q.ts")]
 
 
 def test_seek_is_refused_for_anything_but_a_prepared_preview(tmp_path):
