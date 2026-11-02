@@ -108,8 +108,14 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
-  // the Mac's own folder dialog; no plugin needed
+  // the computer's own folder dialog; no plugin needed. On Windows the app's window code opens it
+  // (windows/runner/flutter_window.cpp)
   Future<void> _chooseFolder() async {
+    if (Platform.isWindows) {
+      final chosen = await const MethodChannel('oprivview/window').invokeMethod<String>('chooseFolder');
+      if (chosen != null) await _change({'output_dir': chosen});
+      return;
+    }
     final r = await Process.run('osascript', ['-e', 'POSIX path of (choose folder with prompt "Save clips in")']);
     if (r.exitCode == 0) await _change({'output_dir': (r.stdout as String).trim()});
   }

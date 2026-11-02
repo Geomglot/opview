@@ -173,3 +173,17 @@ def test_a_comma_that_does_not_answer_is_a_failed_copy(monkeypatch, tmp_path):
   monkeypatch.setattr(ssh_source.subprocess, "run", run)
   with pytest.raises(subprocess.CalledProcessError):
     ssh_source.fetch("comma", ROUTE, [3], ("rlog.zst",), tmp_path)
+
+
+def test_the_server_watches_the_app_it_is_told_about_rather_than_a_launcher(monkeypatch):
+  watched = []
+  monkeypatch.setattr(server, "_windows_parent_watch", lambda pid: watched.append(pid) or (lambda: None))
+  monkeypatch.setattr(server.threading, "Thread", lambda target, daemon: SimpleNamespace(start=lambda: None))
+  monkeypatch.setattr(server, "Settings", lambda: None)
+  monkeypatch.setattr(server, "make_app", lambda *a, **k: "app")
+  monkeypatch.setattr(server.uvicorn, "run", lambda *a, **k: None)
+  monkeypatch.setattr(sys, "argv", ["server", "--exit-with-parent", "--parent-pid", "4242", "--no-connect"])
+  server.main()
+  monkeypatch.setattr(sys, "argv", ["server", "--exit-with-parent", "--no-connect"])
+  server.main()
+  assert watched == [4242, os.getppid()]

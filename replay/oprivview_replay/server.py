@@ -374,11 +374,14 @@ def main() -> None:
   p.add_argument("--app", type=Path, default=DEFAULT_APP, help="the built renderer")
   p.add_argument("--no-connect", action="store_true", help="do not use comma Connect")
   p.add_argument("--exit-with-parent", action="store_true", help="stop when the program that started this server ends")
+  # on Windows a venv's python.exe is a launcher that starts the real Python as its own child and waits for it, so the
+  # parent this server sees is the launcher, which never ends first. The app says who it is instead.
+  p.add_argument("--parent-pid", type=int, help="with --exit-with-parent on Windows: the app to watch, if not the direct parent")
   a = p.parse_args()
   if a.exit_with_parent:
     parent = os.getppid()
     if sys.platform == "win32":
-      watch = _windows_parent_watch(parent)
+      watch = _windows_parent_watch(a.parent_pid or parent)
     else:
       def watch():
         while os.getppid() == parent:

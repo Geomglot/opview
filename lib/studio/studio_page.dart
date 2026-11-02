@@ -203,9 +203,15 @@ class _StudioPageState extends State<StudioPage> {
     }
   }
 
-  // the Mac's own save dialog, which also asks before replacing a file; no plugin needed
+  // the computer's own save dialog, which also asks before replacing a file; no plugin needed. On Windows the app's
+  // window code opens it (windows/runner/flutter_window.cpp)
   Future<void> _chooseOutput() async {
     final name = _route == null ? 'replay.mp4' : '${_route!.route}.mp4';
+    if (Platform.isWindows) {
+      final chosen = await _window.invokeMethod<String>('chooseSaveFile', name);
+      if (chosen != null) _output.text = chosen;
+      return;
+    }
     final r = await Process.run('osascript', ['-e', 'POSIX path of (choose file name with prompt "Save the MP4 as" default name "$name")']);
     if (r.exitCode == 0) _output.text = (r.stdout as String).trim();
   }
@@ -401,12 +407,12 @@ class _StudioPageState extends State<StudioPage> {
             Expanded(
                 child: TextField(
                     controller: _output,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                         labelText: 'Output file',
-                        hintText: 'Leave empty to save in Movies',
+                        hintText: 'Leave empty to save in ${Platform.isWindows ? 'Videos' : 'Movies'}',
                         floatingLabelBehavior: FloatingLabelBehavior.always,
                         isDense: true))),
-            if (Platform.isMacOS) ...[
+            if (Platform.isMacOS || Platform.isWindows) ...[
               const SizedBox(width: 8),
               TextButton(onPressed: _chooseOutput, child: const Text('Choose...')),
             ],

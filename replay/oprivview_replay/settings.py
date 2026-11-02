@@ -11,7 +11,7 @@ else:
 DEFAULTS: dict = {
   "host": "comma",  # how to reach the comma over SSH: a name from ~/.ssh/config or an address
   "dongle": None,  # which device on the comma account; None means the first one the account owns
-  "output_dir": None,  # None means the Movies folder
+  "output_dir": None,  # None means the Movies folder (Videos on Windows)
   "added": [],  # public drives and devices of other people: "dongle|route" or "dongle"
 }
 
