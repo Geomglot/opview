@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [rivian-support]
   pull_request:
-    branches: [main]
+    branches: [rivian-support]
 
 jobs:
   test:
@@ -22,6 +22,25 @@ jobs:
       - run: flutter analyze --no-fatal-infos
 
       - run: flutter test --exclude-tags golden
+
+  # the Mac replay app's server (replay/): its Flutter tests already run in the job above
+  replay-python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: replay/requirements.txt
+
+      - run: sudo apt-get install -y ffmpeg
+
+      - run: pip install -r replay/requirements.txt
+
+      - run: python -m pytest -q
+        working-directory: replay
 
   build-android:
     needs: test

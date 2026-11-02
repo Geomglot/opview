@@ -1,10 +1,8 @@
 name: Screenshots
 
 on:
-  push:
-    branches: [main]
   pull_request:
-    branches: [main]
+    branches: [rivian-support]
   workflow_dispatch:
 
 jobs:

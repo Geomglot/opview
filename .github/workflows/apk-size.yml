@@ -2,7 +2,7 @@ name: APK Size
 
 on:
   pull_request:
-    branches: [main]
+    branches: [rivian-support]
 
 jobs:
   build-base:
@@ -10,7 +10,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: main
+          ref: rivian-support
 
       - uses: actions/setup-java@v5
         with:
