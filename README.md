@@ -192,13 +192,22 @@ copies.
 - **Android Auto / Apple CarPlay:** not supported. Both restrict apps to navigation, media, messaging
   or EV charging categories with template UIs and no custom drawing.
 
+## OPRivView Replay (Mac)
+
+A separate Mac app, in the [`replay/`](replay) folder, that plays a drive back as it looked on the OPRivView screen and saves
+it as an MP4. It draws with this app's own screen layouts, so it lives in the same branch. Test versions are on the
+[releases page](https://github.com/Geomglot/opview/releases) (names starting `replay-`). To use it, see the
+[install guide](replay/docs/INSTALL.md) and the [user guide](replay/docs/USER_GUIDE.md). Notes for working on it are in
+[replay/README.md](replay/README.md).
+
 ## Branches
 
 | Branch | Description |
 |--------|-------------|
-| `rivian-support` | OPRivView: current development and the source of releases |
-| `main` | The original opview, tracking eFiniLan |
-| `comma3x-support`, `pip-switch` | Earlier work, merged into `rivian-support` |
+| `rivian-support` | OPRivView and OPRivView Replay: current development, and the source of releases. The default branch |
+| `main` | The original opview, tracking eFiniLan. Kept as a reference and not changed |
+
+`comma3x-support`, `pip-switch` and `rivian-replay` were merged into `rivian-support` and deleted; their commits are in its history.
 
 ## Credits
 
