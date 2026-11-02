@@ -48,7 +48,7 @@ sidecar:
 	.venv/bin/pyinstaller packaging/server.spec --distpath dist --workpath build -y
 
 flutter:
-	cd "$(REPO)" && flutter build macos --release -t lib/main_replay.dart && git checkout analysis_options.yaml
+	cd "$(REPO)" && flutter build macos --release -t lib/main_replay.dart
 
 install: app
 	rm -rf "$(INSTALL_DIR)/$(APP_NAME)"
