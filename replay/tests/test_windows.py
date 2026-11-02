@@ -4,10 +4,11 @@ import os
 import subprocess
 import sys
 import threading
+from types import SimpleNamespace
 
 import pytest
 
-from oprivview_replay import admin, cli, render, server, settings
+from oprivview_replay import admin, cli, render, server, settings, ssh_source
 
 pytestmark = pytest.mark.skipif(sys.platform != "win32", reason="Windows only")
 
@@ -91,3 +92,84 @@ def test_a_parent_already_gone_stops_the_server_at_once(monkeypatch):
   monkeypatch.setattr(server.os, "_exit", lambda code: exited.set())
   server._windows_parent_watch(parent.pid)()
   assert exited.is_set()
+
+
+ROUTE = "00000059--5e374df67a"
+
+
+class FakeComma:
+  """answers the size question over ssh and 'copies' with scp by writing [content] into the folder scp is run in"""
+
+  def __init__(self, monkeypatch, files: dict[str, bytes], fail_copy: bool = False):
+    self.files, self.fail_copy, self.calls = files, fail_copy, []
+    monkeypatch.setattr(ssh_source.subprocess, "run", self.run)
+
+  def run(self, args, **kw):
+    self.calls.append((args, kw))
+    if args[0] == "ssh":
+      listing = "".join(f"{len(self.files[p])} {p}\n" for p in args[-1].split("2>/dev/null")[0].split()[6:] if p in self.files)
+      return SimpleNamespace(stdout=listing)
+    assert args[0] == "scp" and args[-1] == "." and kw["check"] is True
+    if self.fail_copy:
+      raise subprocess.CalledProcessError(1, args)
+    for source in args[1:-1]:
+      if source.startswith("comma:"):
+        (kw["cwd"] / source.rsplit("/", 1)[1]).write_bytes(self.files[source.split("realdata/", 1)[1]])
+
+  def copies(self):
+    return [[a for a in args if a.startswith("comma:")] for args, kw in self.calls if args[0] == "scp"]
+
+
+def test_fetch_asks_sizes_once_and_copies_each_segment_with_scp(monkeypatch, tmp_path):
+  comma = FakeComma(monkeypatch, {f"{ROUTE}--3/rlog.zst": b"log3", f"{ROUTE}--3/fcamera.hevc": b"video3",
+                                  f"{ROUTE}--4/rlog.zst": b"log4", f"{ROUTE}--4/fcamera.hevc": b"video4"})
+  ssh_source.fetch("comma", ROUTE, [3, 4], ("rlog.zst", "fcamera.hevc"), tmp_path)
+  assert [args[0] for args, kw in comma.calls] == ["ssh", "scp", "scp"]
+  assert comma.copies() == [[f"comma:/data/media/0/realdata/{ROUTE}--3/rlog.zst", f"comma:/data/media/0/realdata/{ROUTE}--3/fcamera.hevc"],
+                            [f"comma:/data/media/0/realdata/{ROUTE}--4/rlog.zst", f"comma:/data/media/0/realdata/{ROUTE}--4/fcamera.hevc"]]
+  assert (tmp_path / ROUTE / "4" / "fcamera.hevc").read_bytes() == b"video4"
+  assert not any((tmp_path / ROUTE / "3" / ".part").iterdir())  # everything moved into place
+  scp = next(args for args, kw in comma.calls if args[0] == "scp")
+  assert "BatchMode=yes" in scp and "StrictHostKeyChecking=accept-new" in scp and "ServerAliveInterval=10" in scp
+
+
+def test_fetch_skips_files_already_whole_and_recopies_ones_that_differ(monkeypatch, tmp_path):
+  comma = FakeComma(monkeypatch, {f"{ROUTE}--3/rlog.zst": b"log3", f"{ROUTE}--3/fcamera.hevc": b"video3"})
+  local = tmp_path / ROUTE / "3"
+  local.mkdir(parents=True)
+  (local / "rlog.zst").write_bytes(b"log3")  # whole
+  (local / "fcamera.hevc").write_bytes(b"vid")  # cut short
+  ssh_source.fetch("comma", ROUTE, [3], ("rlog.zst", "fcamera.hevc"), tmp_path)
+  assert comma.copies() == [[f"comma:/data/media/0/realdata/{ROUTE}--3/fcamera.hevc"]]
+  assert (local / "fcamera.hevc").read_bytes() == b"video3"
+
+
+def test_fetch_with_everything_here_does_not_copy_at_all(monkeypatch, tmp_path):
+  comma = FakeComma(monkeypatch, {f"{ROUTE}--3/qlog.zst": b"q"})
+  (tmp_path / ROUTE / "3").mkdir(parents=True)
+  (tmp_path / ROUTE / "3" / "qlog.zst").write_bytes(b"q")
+  ssh_source.fetch("comma", ROUTE, [3], ("qlog.zst",), tmp_path)
+  assert comma.copies() == []
+
+
+def test_a_failed_copy_leaves_no_file_under_its_real_name(monkeypatch, tmp_path):
+  FakeComma(monkeypatch, {f"{ROUTE}--3/rlog.zst": b"log3"}, fail_copy=True)
+  with pytest.raises(subprocess.CalledProcessError):
+    ssh_source.fetch("comma", ROUTE, [3], ("rlog.zst",), tmp_path)
+  assert not (tmp_path / ROUTE / "3" / "rlog.zst").exists()
+
+
+def test_a_file_the_comma_does_not_have_is_still_asked_for_so_the_copy_fails(monkeypatch, tmp_path):
+  comma = FakeComma(monkeypatch, {}, fail_copy=True)
+  with pytest.raises(subprocess.CalledProcessError):
+    ssh_source.fetch("comma", ROUTE, [3], ("rlog.zst",), tmp_path)
+  assert comma.copies() == [[f"comma:/data/media/0/realdata/{ROUTE}--3/rlog.zst"]]
+
+
+def test_a_comma_that_does_not_answer_is_a_failed_copy(monkeypatch, tmp_path):
+  def run(args, **kw):
+    raise subprocess.TimeoutExpired(args, 20)
+
+  monkeypatch.setattr(ssh_source.subprocess, "run", run)
+  with pytest.raises(subprocess.CalledProcessError):
+    ssh_source.fetch("comma", ROUTE, [3], ("rlog.zst",), tmp_path)
