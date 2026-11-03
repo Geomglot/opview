@@ -5,7 +5,7 @@ name: Replay for Windows
 # The zip is kept as a workflow artifact; download it from the run's page.
 on:
   push:
-    branches: [windows-replay]
+    branches: [rivian-support]
     paths: ['replay/**', 'windows/**', 'lib/**', 'pubspec.*', '.github/workflows/replay-windows.yml']
   pull_request:
     branches: [rivian-support]
