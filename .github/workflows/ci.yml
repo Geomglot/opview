@@ -73,7 +73,9 @@ jobs:
           name: opview-apk
           path: build/app/outputs/flutter-apk/app-release.apk
 
+  # no iOS work on our branches yet: build it only on main, as the upstream project does
   build-ios:
+    if: github.ref == 'refs/heads/main'
     needs: test
     runs-on: macos-latest
     steps:
