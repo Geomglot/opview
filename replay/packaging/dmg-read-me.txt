@@ -1,6 +1,6 @@
 OPRivView Replay
 
-Needs a Mac with an Intel processor and macOS 14 or later.
+Needs macOS 14 or later, on {{ARCH_NEEDED}}.
 
 To install
 1. Drag OPRivView Replay onto the Applications folder.

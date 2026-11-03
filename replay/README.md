@@ -56,8 +56,11 @@ cache until the cache cap exists.
 to /Applications; `make clean` removes the build and the installed copy. It still needs `ssh` and `rsync`, both of
 which ship with macOS.
 
-`make dmg` also puts it in one file for release, `dist/OPRivView-Replay-<version>-macOS-Intel.dmg`, with a shortcut to
-Applications and a read-me. The version comes from `pubspec.yaml`. A first build needs `brew install nasm`.
+`make dmg` also puts it in one file for release, `dist/OPRivView-Replay-<version>-macOS-<Intel|ARM>.dmg`, with a shortcut to
+Applications and a read-me. The version comes from `pubspec.yaml`, and the name says which Mac the release is for: it
+defaults to the one that built it, so running `make dmg` on Apple silicon makes an `ARM` release, and
+`make dmg ARCH=Intel` the other kind. A release for one kind of Mac is checked at build time, so it never silently
+holds the other kind's ffmpeg or server. A first build needs `brew install nasm`.
 
 ffmpeg is built from the official source by `packaging/build_ffmpeg.sh`, holding only what the app uses: decoding H.265
 and H.264, encoding through Apple's VideoToolbox, and the file types involved. That makes it LGPL, not GPL, so it can be
@@ -66,7 +69,7 @@ script. The licences and the ffmpeg source travel in the app, in `Contents/Resou
 (`packaging/write_notices.py`).
 
 Limits of the release file:
-- Intel Macs only so far, and macOS 14 or later, which is what the bundled numpy needs. Apple Silicon is untested.
+- macOS 14 or later, which is what the bundled numpy needs. The `Intel` and `ARM` releases are for that kind of Mac.
 - It is ad-hoc signed and not notarized, as that needs a paid Apple Developer account. macOS refuses it the first time
   and the user allows it once in System Settings, Privacy & Security. The read-me in the disk image explains this.
 

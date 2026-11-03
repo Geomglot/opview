@@ -6,9 +6,8 @@ This is an early test version. For how to use it, see the [user guide](USER_GUID
 
 ## What you need
 
-- A Mac with an **Intel** processor. Macs with Apple's own chips (M1 and later) have not been tested, and the app may not
-  work on them.
-- macOS 14 or later.
+- A Mac with macOS 14 or later. Each release is for one kind of Mac; pick the one that matches yours:
+  `...-macOS-Intel.dmg` for an Intel Mac, `...-macOS-ARM.dmg` for Apple silicon (an M-series Mac).
 - About 200 MB of disk space for the app, and more for the drives you open. A minute of full detail drive takes about
   75 MB, and more with the wide camera. You can clear stored drives from the app.
 
@@ -16,7 +15,7 @@ You do not need Python, ffmpeg or anything else installed.
 
 ## Install
 
-1. Download `OPRivView-Replay-<version>-macOS-Intel.dmg` from the
+1. Download the `OPRivView-Replay-<version>-macOS-<Intel|ARM>.dmg` for your Mac (Intel or Apple silicon) from the
    [releases page](https://github.com/Geomglot/opview/releases). Test versions are marked Pre-release, and their names start
    with `replay-`.
 2. Open the file. A disk called OPRivView Replay appears.
