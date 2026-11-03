@@ -35,7 +35,9 @@ jobs:
           echo "exit_code=$exit_code" >> "$GITHUB_OUTPUT"
 
           # count failures
-          changed=$(grep -c "does not match" golden_output.txt || echo 0)
+          # Flutter reports each mismatch as 'Golden "...": Pixel test failed'. grep -c already prints 0 when
+          # nothing matches but exits 1, so "|| true" ("|| echo 0" wrote a second 0, which GitHub rejects)
+          changed=$(grep -c "Pixel test failed" golden_output.txt || true)
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
           exit 0
 
