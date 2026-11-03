@@ -37,6 +37,9 @@ class ReplayJob {
   final int framesBefore;
   /// lines to apply first, which a clip read from the middle would otherwise miss
   final List<String> firstLines;
+  /// for each segment in the clip: its number, the clip frame it starts at, and the frame within the segment the clip
+  /// starts at (only the first segment of a clip can start part-way in). Empty for job files from before it was added.
+  final List<(int segment, int first, int skip)> segmentStarts;
   final Map<String, dynamic> _json;
 
   ReplayJob.fromJson(Map<String, dynamic> j)
@@ -44,6 +47,9 @@ class ReplayJob {
         clipOffset = j['clip_offset'] as int? ?? 0,
         framesBefore = j['frames_before'] as int? ?? 0,
         firstLines = (j['first_lines'] as List?)?.cast<String>() ?? const [],
+        segmentStarts = [
+          for (final s in (j['segment_starts'] as List? ?? const []).cast<List>()) (s[0] as int, s[1] as int, s[2] as int)
+        ],
         clip = j['clip'] as String,
         output = j['output'] as String,
         ffmpeg = j['ffmpeg'] as String,
@@ -66,6 +72,14 @@ class ReplayJob {
         clock = ClockMode.values.byName(j['clock'] as String),
         speedLimit = SpeedLimitDisplay.values.byName(j['speed_limit'] as String? ?? 'auto'),
         showRoadName = (j['road_name'] as String? ?? 'show') == 'show';
+
+  /// where [frame] of the clip is in the drive, e.g. "segment 4, 0:15"; null when the job does not say
+  String? segmentAt(int frame) {
+    if (segmentStarts.isEmpty) return null;
+    final (segment, first, skip) = segmentStarts.lastWhere((s) => s.$2 <= frame, orElse: () => segmentStarts.first);
+    final seconds = (skip + frame - first) ~/ fps;
+    return 'segment $segment, ${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
+  }
 
   /// this job with some of its fields replaced, as the server gives them for a jump
   ReplayJob withChanges(Map<String, dynamic> changes) => ReplayJob.fromJson({..._json, ...changes});

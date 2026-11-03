@@ -31,9 +31,9 @@ String choiceLabel(String c) => choiceLabels[c] ?? '${c[0].toUpperCase()}${c.sub
 String distanceLabel(double km, bool? metric) =>
     metric == false ? '${(km / 1.609344).toStringAsFixed(1)} miles' : '${km.toStringAsFixed(1)} km';
 
-/// One end of the range: a segment number or a local time of day
+/// One end of the range: a segment number (the default) or a local time of day
 class RangeEnd {
-  bool byTime = true;
+  bool byTime = false;
   final text = TextEditingController();
 }
 
@@ -47,6 +47,9 @@ class StudioPage extends StatefulWidget {
 
 // the native side of full screen: macos/Runner/MainFlutterWindow.swift
 const _window = MethodChannel('oprivview/window');
+
+/// where the guides are read: on GitHub, so they are always the current ones
+const guides = 'https://github.com/Geomglot/opview/blob/rivian-support/replay/docs';
 
 /// what a drive in the list can show
 String detailLabel(String detail) => switch (detail) {
@@ -311,6 +314,15 @@ class _StudioPageState extends State<StudioPage> {
                       padding: EdgeInsets.all(12), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)))
                   : IconButton(tooltip: 'Add', icon: const Icon(Icons.add), onPressed: _addDriveFromField),
               IconButton(tooltip: 'App settings', icon: const Icon(Icons.settings), onPressed: _openAdmin),
+              PopupMenuButton<String>(
+                tooltip: 'Help',
+                icon: const Icon(Icons.help_outline),
+                onSelected: openOnDesktop,
+                itemBuilder: (_) => [
+                  const PopupMenuItem(value: '$guides/USER_GUIDE.md', child: Text('User guide')),
+                  PopupMenuItem(value: '$guides/${Platform.isWindows ? 'INSTALL-WINDOWS.md' : 'INSTALL.md'}', child: const Text('Install guide')),
+                ],
+              ),
             ])),
         if (_routesError != null)
           Padding(
@@ -361,8 +373,8 @@ class _StudioPageState extends State<StudioPage> {
       Text(route == null ? 'Choose a drive from the list' : route.localStart ?? route.route, style: Theme.of(context).textTheme.titleLarge),
       if (route?.localStart != null) Text(route!.route, style: small),
       const SizedBox(height: 16),
-      _rangeRow('Start', _start),
-      _rangeRow('End', _end),
+      _rangeRow('Start', _start, route),
+      _rangeRow('End', _end, route),
       const SizedBox(height: 4),
       Text('Leave a field empty for the start or end of the drive. Times are local to where the drive happened.', style: small),
       const SizedBox(height: 8),
@@ -431,7 +443,7 @@ class _StudioPageState extends State<StudioPage> {
         ]));
   }
 
-  Widget _rangeRow(String label, RangeEnd e) => Padding(
+  Widget _rangeRow(String label, RangeEnd e, RouteInfo? route) => Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(children: [
         SizedBox(width: 50, child: Text(label)),
@@ -448,7 +460,8 @@ class _StudioPageState extends State<StudioPage> {
         Expanded(
             child: TextField(
                 controller: e.text,
-                decoration: InputDecoration(hintText: e.byTime ? 'HH:MM:SS' : 'number', isDense: true))),
+                decoration: InputDecoration(
+                    hintText: e.byTime ? 'HH:MM:SS' : (route == null ? 'number' : '${route.first}-${route.last}'), isDense: true))),
       ]));
 
   Widget _option(ParamSpec p) {

@@ -4,6 +4,7 @@ import stat
 import sys
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -141,6 +142,19 @@ def test_a_seek_near_the_start_has_nothing_earlier_to_read(tmp_path):
                                                            "segments": [{"first": 0, "skip": 40, "video": "a/q.ts", "wide": "a/e"}]}))
   got = render.seek(job, 30)
   assert got["clip_offset"] == 0 and got["frames_before"] == 30 and got["skip_frames"] == 70 and [Path(v) for v in got["video_inputs"]] == [Path("a/q.ts")]
+
+
+def test_a_prepared_job_says_where_each_segment_starts(tmp_path, monkeypatch):
+  def write_clip(tl, route_dir, start, end, path, camera, detail, index):
+    index["segments"] += [{"segment": 4, "first": 0, "skip": 300, "video": "a", "wide": "a"},
+                          {"segment": 5, "first": 900, "skip": 0, "video": "b", "wide": "b"}]
+    return [], 1500, None
+  monkeypatch.setattr(render, "write_clip", write_clip)
+  monkeypatch.setattr(render, "_tool", lambda name: name)
+  monkeypatch.setattr(render, "encoder", lambda ffmpeg: "e")
+  start = SimpleNamespace(frame=300)
+  job = render.prepare(None, tmp_path, start, start, {"camera": "road", "video_width": 1280}, tmp_path / "out.mp4", progress=lambda text: None)
+  assert json.loads(job.read_text())["segment_starts"] == [[4, 0, 300], [5, 900, 0]]
 
 
 def test_seek_is_refused_for_anything_but_a_prepared_preview(tmp_path):

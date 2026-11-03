@@ -196,7 +196,7 @@ def write_clip(tl: RouteTimeline, route_dir: Path, start: FramePos, end: FramePo
       messages = by_frame(decoded)
       n = 0
       if index is not None:
-        index["segments"].append({"first": count, "skip": first, "video": str(video), "wide": str(wide)})
+        index["segments"].append({"segment": seg, "first": count, "skip": first, "video": str(video), "wide": str(wide)})
       for frame in range(first, stop + 1):
         if index is not None:
           index["offsets"].append(f.tell())  # where the messages for this frame start
@@ -243,7 +243,9 @@ def prepare(tl: RouteTimeline, route_dir: Path, start: FramePos, end: FramePos, 
   ffmpeg = _tool("ffmpeg")
   job = {**settings, "clip": str(clip), "output": str(output.resolve()), "ffmpeg": ffmpeg, "encoder": encoder(ffmpeg),
          "video_format": "hevc" if VIDEOS[detail].endswith(".hevc") else "mpegts", "video_inputs": inputs, "wide_inputs": wide_inputs,
-         "skip_frames": skip, "wide_skip_frames": wide_skip, "frame_count": count, "video_height": video_height, "fps": FPS}
+         "skip_frames": skip, "wide_skip_frames": wide_skip, "frame_count": count, "video_height": video_height, "fps": FPS,
+         # where each segment starts in the clip and how far into it the clip starts, so the preview can say where it is
+         "segment_starts": [[s["segment"], s["first"], s["skip"]] for s in index["segments"]]}
   job_path = route_dir / name
   job_path.write_text(json.dumps(job, indent=1))
   _index_file(job_path).write_text(json.dumps(index, separators=(",", ":")))

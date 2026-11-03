@@ -29,6 +29,16 @@ void main() {
   });
 
   group('ReplayJob settings', () {
+    test('says which segment a frame is in and how far into it, also when the clip starts part-way in', () {
+      // a clip from 15 s into segment 4 (frame 300 at 20 fps), running on into segment 5
+      final j = ReplayJob.fromJson(job({'segment_starts': [[4, 0, 300], [5, 900, 0]]}));
+      expect(j.segmentAt(0), 'segment 4, 0:15');
+      expect(j.segmentAt(899), 'segment 4, 0:59');
+      expect(j.segmentAt(900), 'segment 5, 0:00');
+      expect(j.segmentAt(1110), 'segment 5, 0:10');
+      expect(ReplayJob.fromJson(job({})).segmentAt(0), isNull); // a job file from before segments were listed
+    });
+
     test('wide camera files are optional', () {
       expect(ReplayJob.fromJson(job({})).wideInputs, isNull);
       expect(ReplayJob.fromJson(job({'wide_inputs': ['w']})).wideInputs, ['w']);

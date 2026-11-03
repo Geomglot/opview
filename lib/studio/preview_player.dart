@@ -349,6 +349,8 @@ class _PreviewPlayerState extends State<PreviewPlayer> {
       ),
     );
     final shownFrames = _dragTo == null ? _shown : (_dragTo! * total).round();
+    // where that is in the drive, which is what the Segment fields of the range take
+    final where = total == 0 ? null : _job.segmentAt(shownFrames.clamp(0, total - 1));
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       if (widget.fullScreen) Expanded(child: Center(child: picture)) else picture,
       _progress(total),
@@ -374,7 +376,8 @@ class _PreviewPlayerState extends State<PreviewPlayer> {
             onPressed: widget.onToggleFullScreen,
           ),
         const SizedBox(width: 4),
-        Text('${(shownFrames / _job.fps).toStringAsFixed(1)} of ${(total / _job.fps).toStringAsFixed(1)} s'),
+        Text('${(shownFrames / _job.fps).toStringAsFixed(1)} of ${(total / _job.fps).toStringAsFixed(1)} s'
+            '${where == null ? '' : ', $where'}'),
         if (_error != null) Expanded(child: Text('  $_error', style: const TextStyle(color: Colors.red))),
       ]),
       if (_gpuReset)

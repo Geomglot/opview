@@ -56,8 +56,11 @@ void main() {
 
     expect(find.textContaining('Quick detail only'), findsOneWidget);
     expect(find.textContaining('Full detail (on the comma)'), findsOneWidget);
+    expect(find.byTooltip('Help'), findsOneWidget);
     await tester.tap(find.text('2026-10-31 09:18 EDT'));
     await tester.pump();
+    // the range is by segment unless Time is chosen, and the fields say which segments the drive has
+    expect(find.text('0-1'), findsNWidgets(2));
     await tester.tap(find.text('Lane keeping'));
     await tester.tap(find.text('Detailed'));
     await tester.pump();
