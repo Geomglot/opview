@@ -18,18 +18,26 @@ class Sidecar {
     if (url != null) return Sidecar(null, StudioApi(Uri.parse(url)));
 
     final port = await _freePort();
-    final args = ['--port', '$port', '--app', Platform.resolvedExecutable, '--exit-with-parent'];
-    final resources = '${File(Platform.resolvedExecutable).parent.parent.path}/Resources';
-    final packaged = File('$resources/oprivview-replay-server/oprivview-replay-server');
+    final args = [
+      '--port', '$port', '--app', Platform.resolvedExecutable, '--exit-with-parent',
+      // on Windows the server may run under a launcher (a venv's python.exe), so say which process to outlive
+      if (Platform.isWindows) ...['--parent-pid', '$pid'],
+    ];
+    // a Mac app keeps its parts in Contents/Resources; on Windows they sit in the folder beside the .exe
+    final resources = Platform.isWindows
+        ? File(Platform.resolvedExecutable).parent.path
+        : '${File(Platform.resolvedExecutable).parent.parent.path}/Resources';
+    final packaged = File('$resources/oprivview-replay-server/oprivview-replay-server${Platform.isWindows ? '.exe' : ''}');
     final Process p;
     if (packaged.existsSync()) {
       // an installed app carries its own server and ffmpeg. A downloaded app has every file marked as downloaded, and
       // macOS stops each marked program with a dialog; the user has approved this app by now, so its parts need no more
-      await Process.run('/usr/bin/xattr', ['-dr', 'com.apple.quarantine', File(resources).parent.path]);
+      if (Platform.isMacOS) await Process.run('/usr/bin/xattr', ['-dr', 'com.apple.quarantine', File(resources).parent.path]);
       p = await Process.start(packaged.path, args, environment: {'OPRIVVIEW_FFMPEG_DIR': '$resources/ffmpeg'});
     } else {
       final dir = _replayDir();
-      p = await Process.start('${dir.path}/.venv/bin/python', ['-m', 'oprivview_replay.server', ...args], workingDirectory: dir.path);
+      final python = Platform.isWindows ? '${dir.path}/.venv/Scripts/python.exe' : '${dir.path}/.venv/bin/python';
+      p = await Process.start(python, ['-m', 'oprivview_replay.server', ...args], workingDirectory: dir.path);
     }
     p.stderr.drain<void>();
     p.stdout.drain<void>();

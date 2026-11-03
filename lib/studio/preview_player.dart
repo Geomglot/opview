@@ -120,11 +120,21 @@ class _PreviewPlayerState extends State<PreviewPlayer> {
     }
   }
 
-  void _noteStall(String what) {
+  /// where stalls are logged: the Mac's Logs folder, or on Windows (which has no HOME) the app's local data folder
+  static String? get _stallLog {
+    if (Platform.isWindows) {
+      final local = Platform.environment['LOCALAPPDATA'];
+      return local == null ? null : '$local\\OPRivViewReplay\\Logs\\preview.log';
+    }
     final home = Platform.environment['HOME'];
-    if (home == null) return;
+    return home == null ? null : '$home/Library/Logs/OPRivViewReplay/preview.log';
+  }
+
+  void _noteStall(String what) {
+    final path = _stallLog;
+    if (path == null) return;
     try {
-      final log = File('$home/Library/Logs/OPRivViewReplay/preview.log')..parent.createSync(recursive: true);
+      final log = File(path)..parent.createSync(recursive: true);
       log.writeAsStringSync(
           '${DateTime.now().toIso8601String()} $what, frame $_shown, ${_settings.layout.name}, memory ${ProcessInfo.currentRss >> 20} MB\n',
           mode: FileMode.append);
@@ -368,8 +378,11 @@ class _PreviewPlayerState extends State<PreviewPlayer> {
         if (_error != null) Expanded(child: Text('  $_error', style: const TextStyle(color: Colors.red))),
       ]),
       if (_gpuReset)
-        const Text('The Mac restarted its graphics chip. If text or the picture looks wrong, quit and reopen this app.',
-            style: TextStyle(color: Colors.orange)),
+        Text(
+            Platform.isWindows
+                ? 'The picture stopped for 5 seconds or more. If text or the picture looks wrong, quit and reopen this app.'
+                : 'The Mac restarted its graphics chip. If text or the picture looks wrong, quit and reopen this app.',
+            style: const TextStyle(color: Colors.orange)),
     ]);
   }
 }

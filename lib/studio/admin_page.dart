@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:opview/studio/desktop.dart';
 import 'package:opview/studio/studio_api.dart';
 
 /// a size in the units a person would use
@@ -108,8 +109,14 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
-  // the Mac's own folder dialog; no plugin needed
+  // the computer's own folder dialog; no plugin needed. On Windows the app's window code opens it
+  // (windows/runner/flutter_window.cpp)
   Future<void> _chooseFolder() async {
+    if (Platform.isWindows) {
+      final chosen = await const MethodChannel('oprivview/window').invokeMethod<String>('chooseFolder');
+      if (chosen != null) await _change({'output_dir': chosen});
+      return;
+    }
     final r = await Process.run('osascript', ['-e', 'POSIX path of (choose folder with prompt "Save clips in")']);
     if (r.exitCode == 0) await _change({'output_dir': (r.stdout as String).trim()});
   }
@@ -179,34 +186,40 @@ class _AdminPageState extends State<AdminPage> {
               dense: true,
               contentPadding: EdgeInsets.zero,
               title: Text(f['address'] as String),
-              subtitle: Text(f['comma'] == true ? 'comma ${f['dongle']}' : 'Has SSH, but is not a comma this Mac can log in to'),
+              subtitle: Text(f['comma'] == true ? 'comma ${f['dongle']}' : 'Has SSH, but is not a comma $_thisComputer can log in to'),
               trailing: TextButton(onPressed: () => _useAddress(f['address'] as String), child: const Text('Use')),
             ),
       ]);
+
+  /// what the settings call the computer the app runs on
+  static String get _thisComputer => Platform.isWindows ? 'this computer' : 'this Mac';
+  static String _capital(String s) => '${s[0].toUpperCase()}${s.substring(1)}';
 
   Widget _sshSection(Map<String, dynamic> s) {
     final key = s['key'] as Map<String, dynamic>;
     final public = key['public_key'] as String?;
     return _section('SSH setup', [
       if (public == null) ...[
-        _note('This Mac has no SSH key yet. The comma uses one to let this Mac in.'),
+        _note('${_capital(_thisComputer)} has no SSH key yet. The comma uses one to let $_thisComputer in.'),
         const SizedBox(height: 8),
         OutlinedButton(onPressed: _createKey, child: const Text('Create a key')),
       ] else ...[
-        _note('This Mac\'s public key, ${key['path']}. It is safe to share.'),
+        _note('${_capital(_thisComputer)}\'s public key, ${key['path']}. It is safe to share.'),
         const SizedBox(height: 6),
         Row(children: [
-          Expanded(child: SelectableText(public, maxLines: 2, style: const TextStyle(fontFamily: 'Menlo', fontSize: 11))),
+          Expanded(
+              child: SelectableText(public,
+                  maxLines: 2, style: TextStyle(fontFamily: Platform.isWindows ? 'Consolas' : 'Menlo', fontSize: 11))),
           TextButton(onPressed: () => Clipboard.setData(ClipboardData(text: public)), child: const Text('Copy')),
         ]),
-        _note('If the comma does not let this Mac in:\n'
+        _note('If the comma does not let $_thisComputer in:\n'
             '1. Copy the key and add it at github.com, under Settings, SSH and GPG keys.\n'
             '2. On the comma, open Settings, Developer, turn on Enable SSH, and under SSH Keys enter your GitHub username.\n'
             '3. Press Test and use above.'),
         Align(
             alignment: Alignment.centerLeft,
             child: TextButton(
-                onPressed: () => Process.run('open', ['https://github.com/settings/keys']), child: const Text('Open GitHub SSH keys'))),
+                onPressed: () => openOnDesktop('https://github.com/settings/keys'), child: const Text('Open GitHub SSH keys'))),
       ],
     ]);
   }
@@ -232,7 +245,7 @@ class _AdminPageState extends State<AdminPage> {
         const SizedBox(width: 12),
         OutlinedButton(onPressed: _tokenBusy ? null : _saveToken, child: Text(_tokenBusy ? 'Checking...' : 'Save')),
         const SizedBox(width: 4),
-        TextButton(onPressed: () => Process.run('open', ['https://jwt.comma.ai']), child: const Text('Get a token')),
+        TextButton(onPressed: () => openOnDesktop('https://jwt.comma.ai'), child: const Text('Get a token')),
       ]),
       if (_tokenResult != null) _note(_tokenResult!),
     ]);

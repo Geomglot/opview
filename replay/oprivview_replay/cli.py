@@ -5,6 +5,7 @@
   python -m oprivview_replay.cli 0000005a--f16da7af40 --from 09:23:33 --to 09:25:10 --dry-run
 """
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -12,8 +13,13 @@ from . import jobs, params
 from .sources import ConnectSource, DeviceSource, SourceError
 from .timeline import RangeError
 
-DEFAULT_CACHE = Path.home() / "Library/Caches/OPRivViewReplay"
-DEFAULT_APP = Path(__file__).resolve().parents[2] / "build/macos/Build/Products/Release/OPRivView Replay.app/Contents/MacOS/OPRivView Replay"
+_REPO = Path(__file__).resolve().parents[2]
+if sys.platform == "win32":
+  DEFAULT_CACHE = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData/Local") / "OPRivViewReplay/Cache"
+  DEFAULT_APP = _REPO / "build/windows/x64/runner/Release/OPRivViewReplay.exe"
+else:
+  DEFAULT_CACHE = Path.home() / "Library/Caches/OPRivViewReplay"
+  DEFAULT_APP = _REPO / "build/macos/Build/Products/Release/OPRivView Replay.app/Contents/MacOS/OPRivView Replay"
 
 
 def build_parser() -> argparse.ArgumentParser:

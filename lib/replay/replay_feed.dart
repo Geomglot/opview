@@ -39,8 +39,9 @@ class ReplayFeed {
 
   static Future<ReplayFeed> open(ReplayJob job, UIState uiState, CerealAdapter adapter) async {
     Future<Process> decode(List<String> files, int skip) => Process.start(job.ffmpeg, [
-          // twice as fast as decoding on the processor, which is what makes 4x possible; ffmpeg falls back if it cannot
-          '-v', 'error', if (Platform.isMacOS) ...['-hwaccel', 'videotoolbox'], '-f', job.videoFormat, if (job.videoFormat == 'hevc') ...['-framerate', '${job.fps}'],
+          // twice as fast as decoding on the processor, which is what makes 4x possible; ffmpeg falls back if it cannot.
+          // On Windows the graphics card decodes through Direct3D 11, any make of card
+          '-v', 'error', if (Platform.isMacOS) ...['-hwaccel', 'videotoolbox'], if (Platform.isWindows) ...['-hwaccel', 'd3d11va'], '-f', job.videoFormat, if (job.videoFormat == 'hevc') ...['-framerate', '${job.fps}'],
           '-i', 'concat:${files.join('|')}',
           '-vf', 'trim=start_frame=$skip,setpts=PTS-STARTPTS,scale=${job.videoWidth}:${job.videoHeight}',
           '-frames:v', '${job.frameCount}', '-pix_fmt', 'rgba', '-f', 'rawvideo', '-',

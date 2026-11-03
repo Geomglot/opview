@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import Callable
 
@@ -31,14 +32,47 @@ def video_frames(path: Path) -> int:
 
 
 def _tool(name: str) -> str:
-  """the ffmpeg folder the app ships with (OPRIVVIEW_FFMPEG_DIR) first, then whatever is installed on this Mac"""
+  """the ffmpeg folder the app ships with (OPRIVVIEW_FFMPEG_DIR) first, then whatever is installed on this computer"""
   bundled = os.environ.get("OPRIVVIEW_FFMPEG_DIR")
-  if bundled and (Path(bundled) / name).exists():
-    return str(Path(bundled) / name)
-  found = shutil.which(name) or shutil.which(name, path="/usr/local/bin:/opt/homebrew/bin")
+  file = name + ".exe" if sys.platform == "win32" else name
+  if bundled and (Path(bundled) / file).exists():
+    return str(Path(bundled) / file)
+  found = shutil.which(name)
+  if found is None and sys.platform != "win32":
+    found = shutil.which(name, path="/usr/local/bin:/opt/homebrew/bin")
   if found is None:
     raise FileNotFoundError(f"{name} was not found")
   return found
+
+
+# Windows: the graphics card's own encoder if there is one (NVIDIA, Intel, AMD), else Windows' built-in one (Media
+# Foundation). The ffmpeg shipped is LGPL, so it has no x264 to fall back on.
+WINDOWS_ENCODERS = ("h264_nvenc", "h264_qsv", "h264_amf", "h264_mf")
+NO_ENCODER = ("This computer has no H.264 video encoder that ffmpeg can use: no NVIDIA, Intel or AMD graphics encoder "
+              "answered, and Windows' own Media Foundation encoder is missing too. On a Windows \"N\" edition, install "
+              "the Media Feature Pack from Settings > Apps > Optional features, then try again.")
+_encoders: dict[str, str] = {}
+
+
+def encoder(ffmpeg: str) -> str:
+  """the H.264 encoder the renderer is told to use. On a Mac always VideoToolbox. On Windows, the first that can
+  really encode a frame here: an encoder can be built into ffmpeg yet have no hardware behind it. Checked once."""
+  if sys.platform != "win32":
+    return "h264_videotoolbox"
+  if ffmpeg not in _encoders:
+    # two blank frames in through a pipe and out through one, using only what the app's own small ffmpeg holds
+    frames = bytes(256 * 144 * 3 // 2 * 2)  # 256x144 yuv420p
+    for name in WINDOWS_ENCODERS:
+      try:
+        subprocess.run([ffmpeg, "-v", "error", "-f", "rawvideo", "-pix_fmt", "yuv420p", "-s", "256x144", "-r", "20", "-i", "-",
+                        "-c:v", name, "-f", "rawvideo", "-"], input=frames, check=True, capture_output=True, timeout=30)
+      except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
+        continue
+      _encoders[ffmpeg] = name
+      break
+    else:
+      raise RuntimeError(NO_ENCODER)
+  return _encoders[ffmpeg]
 
 
 def _is_idr(src, pos: int) -> bool:
@@ -206,7 +240,8 @@ def prepare(tl: RouteTimeline, route_dir: Path, start: FramePos, end: FramePos, 
     inputs[0], skip = _cut(inputs[0], start.frame)
   if wide_inputs:
     wide_inputs[0], wide_skip = _cut(wide_inputs[0], start.frame)
-  job = {**settings, "clip": str(clip), "output": str(output.resolve()), "ffmpeg": _tool("ffmpeg"), "encoder": "h264_videotoolbox",
+  ffmpeg = _tool("ffmpeg")
+  job = {**settings, "clip": str(clip), "output": str(output.resolve()), "ffmpeg": ffmpeg, "encoder": encoder(ffmpeg),
          "video_format": "hevc" if VIDEOS[detail].endswith(".hevc") else "mpegts", "video_inputs": inputs, "wide_inputs": wide_inputs,
          "skip_frames": skip, "wide_skip_frames": wide_skip, "frame_count": count, "video_height": video_height, "fps": FPS}
   job_path = route_dir / name
