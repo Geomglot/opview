@@ -18,7 +18,8 @@ work=$(mkdir -p "$1" && cd "$1" && pwd)
 archive="$work/ffmpeg-$VERSION.tar.xz"
 cd "$work"
 # ffmpeg.org is sometimes slow to answer, so try a few times; the checksum below still decides what is used
-[ -f "$archive" ] || curl -sSfL --connect-timeout 30 --retry 5 --retry-all-errors --retry-delay 20 \n  -o "$archive" "https://ffmpeg.org/releases/ffmpeg-$VERSION.tar.xz"
+[ -f "$archive" ] || curl -sSfL --connect-timeout 30 --retry 5 --retry-all-errors --retry-delay 20 \
+  -o "$archive" "https://ffmpeg.org/releases/ffmpeg-$VERSION.tar.xz"
 echo "$SHA256  $archive" | sha256sum -c -
 rm -rf "ffmpeg-$VERSION"
 tar xf "$archive"
