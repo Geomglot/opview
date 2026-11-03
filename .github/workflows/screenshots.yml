@@ -105,6 +105,12 @@ jobs:
 
             body.push('', '</details>', '', `[Download screenshots](${run_url})`);
 
+            // a PR from a fork gets a read-only token, so commenting fails (403): show it on the run's summary page instead
+            if (context.payload.pull_request.head.repo.full_name !== context.payload.repository.full_name) {
+              await core.summary.addRaw(body.join('\n')).write();
+              return;
+            }
+
             // update or create comment
             const { data: comments } = await github.rest.issues.listComments({
               ...context.repo,

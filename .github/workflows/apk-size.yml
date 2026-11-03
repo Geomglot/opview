@@ -93,6 +93,12 @@ jobs:
               `| diff | ${sign}${fmt(diff)} |`,
             ].join('\n');
 
+            // a PR from a fork gets a read-only token, so commenting fails (403): show it on the run's summary page instead
+            if (context.payload.pull_request.head.repo.full_name !== context.payload.repository.full_name) {
+              await core.summary.addRaw(body).write();
+              return;
+            }
+
             const { data: comments } = await github.rest.issues.listComments({
               ...context.repo,
               issue_number: context.issue.number,
