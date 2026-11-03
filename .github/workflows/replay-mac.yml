@@ -1,0 +1,95 @@
+name: Replay for Apple silicon Macs
+
+# Builds OPRivView Replay for Apple silicon Macs as a disk image, on GitHub's Apple silicon runner, with no need for an
+# M-series Mac of our own: ffmpeg from source, the server (PyInstaller) and the app (Flutter), put together by
+# `make dmg` in replay/. It then starts the server and ffmpeg from the built app, so a release that cannot run on
+# Apple silicon fails here. The disk image is kept as a workflow artifact; download it from the run's page.
+on:
+  push:
+    branches: [rivian-support]
+    paths: ['replay/**', 'macos/**', 'lib/**', 'pubspec.*', '.github/workflows/replay-mac.yml']
+  pull_request:
+    branches: [rivian-support]
+    paths: ['replay/**', 'macos/**', 'lib/**', 'pubspec.*', '.github/workflows/replay-mac.yml']
+  workflow_dispatch:
+
+jobs:
+  dmg:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: This runner is Apple silicon
+        run: test "$(uname -m)" = arm64
+
+      # ffmpeg takes several minutes to build and only changes with its build script, so it is kept between runs
+      - name: ffmpeg from the cache
+        id: ffmpeg-cache
+        uses: actions/cache@v4
+        with:
+          path: replay/build/ffmpeg-arm64
+          key: ffmpeg-mac-arm64-${{ hashFiles('replay/packaging/build_ffmpeg.sh') }}
+
+      # the checkout makes the build script newer than the cached ffmpeg, which make would take as a reason to rebuild
+      - name: Cached ffmpeg is up to date
+        if: steps.ffmpeg-cache.outputs.cache-hit == 'true'
+        run: touch replay/build/ffmpeg-arm64/ffmpeg
+
+      - name: nasm for the ffmpeg build
+        if: steps.ffmpeg-cache.outputs.cache-hit != 'true'
+        run: brew install nasm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: replay/requirements.txt
+
+      - name: Python environment for the server
+        working-directory: replay
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install -r requirements.txt
+
+      - name: Server tests
+        working-directory: replay
+        run: .venv/bin/python -m pytest -q
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      # ARCH is left to default to this runner's arch (ARM); the Makefile checks every bundled program is arm64
+      - name: Build the disk image
+        working-directory: replay
+        run: make dmg
+
+      - name: The bundled server starts
+        working-directory: replay
+        run: |
+          app="dist/OPRivView Replay.app/Contents"
+          "$app/Resources/oprivview-replay-server/oprivview-replay-server" --port 8799 --no-connect \
+            --app "$app/MacOS/OPRivView Replay" &
+          for i in $(seq 60); do
+            if curl -sf http://127.0.0.1:8799/health; then echo; kill $!; exit 0; fi
+            sleep 1
+          done
+          echo "the server did not answer /health within a minute"; kill $! || true; exit 1
+
+      # the same check the server makes before a render: a few blank frames through Apple's hardware encoder
+      - name: The bundled ffmpeg encodes with VideoToolbox
+        working-directory: replay
+        run: |
+          ffmpeg="dist/OPRivView Replay.app/Contents/Resources/ffmpeg/ffmpeg"
+          head -c $((256 * 144 * 3 / 2 * 20)) /dev/zero |
+            "$ffmpeg" -v error -f rawvideo -pix_fmt yuv420p -s 256x144 -r 20 -i - -c:v h264_videotoolbox -f mp4 out.mp4
+          "dist/OPRivView Replay.app/Contents/Resources/ffmpeg/ffprobe" -v error -show_entries stream=codec_name -of csv=p=0 out.mp4 | grep -x h264
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: OPRivView-Replay-macOS-ARM
+          path: replay/dist/OPRivView-Replay-*-macOS-ARM.dmg
+          if-no-files-found: error
