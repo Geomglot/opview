@@ -17,7 +17,8 @@ SHA256=b072aed6871998cce9b36e7774033105ca29e33632be5b6347f3206898e0756a
 work=$(mkdir -p "$1" && cd "$1" && pwd)
 archive="$work/ffmpeg-$VERSION.tar.xz"
 cd "$work"
-[ -f "$archive" ] || curl -sSfL -o "$archive" "https://ffmpeg.org/releases/ffmpeg-$VERSION.tar.xz"
+# ffmpeg.org is sometimes slow to answer, so try a few times; the checksum below still decides what is used
+[ -f "$archive" ] || curl -sSfL --connect-timeout 30 --retry 5 --retry-all-errors --retry-delay 20 \n  -o "$archive" "https://ffmpeg.org/releases/ffmpeg-$VERSION.tar.xz"
 echo "$SHA256  $archive" | sha256sum -c -
 rm -rf "ffmpeg-$VERSION"
 tar xf "$archive"
