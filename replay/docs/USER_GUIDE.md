@@ -88,7 +88,7 @@ Press **Preview** to play the range in the window.
 ## Saving an MP4
 
 Press **Render MP4**. Progress stays in the window, and you can carry on using your Mac. Rendering takes longer than the
-drive itself: about 2 minutes for each minute of drive on the Intel Mac it was tested on.
+drive itself: about 2 minutes for each minute of drive on the Mac it was tested on.
 
 - Clips go to your Movies folder unless you pick a different folder in App settings, or an **Output file** with **Choose...**.
 - A clip is only saved if it is complete. **Cancel** stops the render and saves nothing.
