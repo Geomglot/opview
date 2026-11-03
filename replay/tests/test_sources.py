@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from oprivview_replay import jobs
+from oprivview_replay import jobs, sources
 from oprivview_replay.sources import SourceError
 
 
@@ -59,6 +59,10 @@ def test_connect_distance_is_miles_and_is_listed_in_km(monkeypatch, tmp_path):
   row = {"fullname": "d|0000005a--f16da7af40", "segment_numbers": [0], "start_time_utc_millis": 1, "end_time_utc_millis": 2, "distance": 10.0}
   monkeypatch.setattr(c, "_get", lambda path: [row])
   assert c.listing()["0000005a--f16da7af40"]["km"] == 16.09344
+
+
+def test_tls_context_has_the_ca_certificates_loaded():
+  assert sources.TLS.cert_store_stats()["x509_ca"] > 0
 
 
 def test_no_saved_km_setting_means_miles_as_on_the_comma(monkeypatch):
