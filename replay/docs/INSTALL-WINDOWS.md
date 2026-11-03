@@ -2,8 +2,8 @@
 
 OPRivView Replay plays back a drive as it looked on the OPRivView screen, and saves it as an MP4.
 
-This is an early test version of the Windows app. For how to use it, see the [user guide](USER_GUIDE.md). It was written for
-the Mac, but the Windows app works the same way. The differences are listed [below](#differences-from-the-user-guide).
+This is an early test version of the Windows app. For how to use it, see the [user guide](USER_GUIDE.md), which covers
+the Mac and Windows and notes where they differ.
 
 ## What you need
 
@@ -71,13 +71,10 @@ the address bar of File Explorer:
 Clips you saved stay in your Videos folder, or wherever you chose. Your comma Connect token is in
 `%USERPROFILE%\.comma\jwt`. Other comma tools use that file too, so delete it only if nothing else needs it.
 
-## Differences from the user guide
+## Differences from the Mac
 
-- Clips go to your **Videos** folder, not Movies.
-- **Show in Finder** is **Show in Explorer**.
-- Times of drives with no GPS position use this computer's time zone.
-- Rendering speed on Windows has not been measured on a real PC yet. In a virtual machine with no graphics card it took
-  about 3.5 minutes for each minute of drive. Please tell us how long it takes on yours.
+The [user guide](USER_GUIDE.md) notes each one where it comes up: clips go to Videos, **Show in Finder** is **Show in
+Explorer**, and rendering speed on a real PC has not been measured yet. Please tell us how long it takes on yours.
 
 ## If something goes wrong
 

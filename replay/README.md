@@ -3,8 +3,9 @@
 Renders a drive as an MP4 of the OPRivView screen. The real onroad layouts draw the drive, fed the same messages
 the comma sent the app live, so the result looks as it did in the car.
 
-To use the Mac app, see the [install guide](docs/INSTALL.md) and the [user guide](docs/USER_GUIDE.md). The rest of this page
-is for working on the code.
+There is a Mac app and a Windows app, built from the same code. To use one, see the install guide for the
+[Mac](docs/INSTALL.md) or [Windows](docs/INSTALL-WINDOWS.md), and the [user guide](docs/USER_GUIDE.md). The rest of this
+page is for working on the code. Building for Windows is described [below](#building-for-windows).
 
 ## Setup
 
@@ -34,7 +35,7 @@ Run from `replay/`:
 ## The window
 
 Open `build/macos/Build/Products/Release/OPRivView Replay.app` with no job set and it shows the replay window:
-a list of the drives on the comma, a start and end (each a local time or a segment number), a form for every
+a list of the drives on the comma, a start and end (each a segment number, the default, or a local time), a form for every
 option (built from the list in `params.py`, so a new option appears with no interface work), and a Render button
 with progress. In a development build it starts `python -m oprivview_replay.server` from this folder; set
 `OPRIVVIEW_SERVER_URL` to use a server you started yourself, or `OPRIVVIEW_REPLAY_DIR` if the folder is not found.
@@ -72,6 +73,36 @@ Limits of the release file:
 - macOS 14 or later, which is what the bundled numpy needs. The `Intel` and `ARM` releases are for that kind of Mac.
 - It is ad-hoc signed and not notarized, as that needs a paid Apple Developer account. macOS refuses it the first time
   and the user allows it once in System Settings, Privacy & Security. The read-me in the disk image explains this.
+
+## Building for Windows
+
+GitHub builds the Windows program on every push to `rivian-support` that touches the replay
+(`.github/workflows/replay-windows.yml`) and keeps it as a workflow artifact. To build it on a Windows PC instead, with
+Flutter (and Visual Studio's C++ tools) and the replay `.venv` set up as above, run from this folder:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1
+```
+
+It leaves `dist\OPRivView Replay\`, which runs from any folder, and the release file in `dist\`. Like `make dmg`, it takes
+the version from `pubspec.yaml`.
+
+ffmpeg for Windows is built from the same official source by `packaging/build_ffmpeg_windows.sh`, in an MSYS2 MINGW64
+shell (the script lists the packages it needs), with the same short list of parts as the Mac's. Encoding goes through the
+graphics card's encoder (NVIDIA NVENC or AMD AMF), or else Windows' own Media Foundation encoder, which uses Intel's
+and other graphics hardware where there is some. It is LGPL, and
+needs no DLLs beside it. ffmpeg.org cannot always be reached from GitHub's build machines, so the script falls back to a
+copy of the same source in the `ffmpeg-8.1-source` release; the checksum in the script decides either way.
+
+On Windows the app keeps its settings in `%APPDATA%\OPRivViewReplay\settings.json`, stored drives in
+`%LOCALAPPDATA%\OPRivViewReplay\Cache`, and the preview's stall log in `%LOCALAPPDATA%\OPRivViewReplay\Logs`. It reaches
+the comma with Windows' own `ssh`, and saves clips in Videos. Mac behaviour that must not change with the Windows code is
+pinned by `tests/test_mac_pins.py`.
+
+Limits of the Windows release:
+- 64-bit Windows 10 or 11.
+- It is not code signed, so SmartScreen stops it the first time ("More info", then "Run anyway").
+- It has so far been tested only in a virtual machine with no graphics card.
 
 ## Where files come from, and how much detail
 
@@ -112,9 +143,9 @@ flutter test test/replay_test.dart
 ## App settings
 
 The gear above the drive list opens the app's settings: which device on the comma account to use, the comma's address on the
-local network (with a search of the networks this Mac is on), SSH setup, the comma Connect token, the folder clips are saved
-in, and how much the stored drives take up, with a button to clear them. Choices are kept in
-`~/Library/Application Support/OPRivViewReplay/settings.json`. The token stays in `~/.comma/jwt`, readable only by this user.
+local network (with a search of the networks this computer is on), SSH setup, the comma Connect token, the folder clips are
+saved in, and how much the stored drives take up, with a button to clear them. On the Mac, choices are kept in
+`~/Library/Application Support/OPRivViewReplay/settings.json` (for Windows, see [above](#building-for-windows)). The token stays in `~/.comma/jwt`, readable only by this user.
 Stored drives are in `~/Library/Caches/OPRivViewReplay`. Stalls of 200 ms or more are noted in
 `~/Library/Logs/OPRivViewReplay/preview.log`.
 
@@ -126,7 +157,8 @@ of that device's public drives. No token is needed. Connect rarely has their ful
 
 ## In the preview
 
-Click or drag along the progress bar to go to that part of the clip. It takes a second or two, and the Detailed graphs start
+Under the picture the preview shows the time into the clip and where that is in the drive (`segment 4, 0:15`), from the
+`segment_starts` list the server puts in the job. Click or drag along the progress bar to go to that part of the clip. It takes a second or two, and the Detailed graphs start
 again from there. Speed runs from 0.25x to 4x. Above 1x, frames are skipped if they cannot be drawn in time. The full screen
 button leaves only the picture and controls; Esc comes back. Swipes, taps and the settings screen update the option form.
 
