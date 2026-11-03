@@ -9,6 +9,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:opview/common/app_clock.dart';
 import 'package:opview/selfdrive/ui/onroad/augmented_road_view.dart';
 import 'mock_ui_state.dart';
 
@@ -75,6 +76,8 @@ Future<void> _loadRoboto() async {
 void main() {
   setUpAll(() async {
     await _loadRoboto();
+    // a fixed time, so the on-road clock (and anything else timed by appNow) draws the same on every run
+    appNow = () => DateTime(2026, 3, 6, 13, 10);
   });
 
   for (final screenEntry in _screens.entries) {
