@@ -6,14 +6,20 @@ import json
 import os
 import re
 from datetime import datetime, timezone
+import ssl
 import subprocess
 import urllib.error
 import urllib.request
 from pathlib import Path
 
+import certifi
+
 from . import ssh_source
 
 API = "https://api.comma.ai"
+# the computer's own trust store, plus certifi's list whatever Python built the app; a missing default path is ignored
+TLS = ssl.create_default_context()
+TLS.load_verify_locations(certifi.where())
 JWT_FILE = Path.home() / ".comma" / "jwt"
 # which Connect file list holds each file
 KINDS = {"qlog.zst": "qlogs", "qcamera.ts": "qcameras", "rlog.zst": "logs", "fcamera.hevc": "cameras", "ecamera.hevc": "ecameras"}
@@ -112,7 +118,7 @@ class ConnectSource:
   def _request(self, path: str, token: str | None):
     req = urllib.request.Request(API + path, headers={"Authorization": f"JWT {token}"} if token else {})
     try:
-      with urllib.request.urlopen(req, timeout=20) as r:
+      with urllib.request.urlopen(req, timeout=20, context=TLS) as r:
         return json.loads(r.read())
     except urllib.error.HTTPError as e:
       if self.public and e.code in (401, 403, 404):
@@ -208,7 +214,7 @@ class ConnectSource:
         dest.parent.mkdir(parents=True, exist_ok=True)
         part = dest.with_name(dest.name + ".part")
         try:
-          with urllib.request.urlopen(urls[KINDS[name]][seg], timeout=60) as r, open(part, "wb") as f:
+          with urllib.request.urlopen(urls[KINDS[name]][seg], timeout=60, context=TLS) as r, open(part, "wb") as f:
             while chunk := r.read(1 << 20):
               f.write(chunk)
         except (urllib.error.URLError, TimeoutError, OSError) as e:

@@ -79,6 +79,30 @@ jobs:
           done
           echo "the server did not answer /health within a minute"; kill $! || true; exit 1
 
+      # a dummy token must reach comma Connect and be refused there: anything else means the bundled trust store is wrong
+      - name: The bundled server reaches comma Connect over TLS
+        working-directory: replay
+        run: |
+          app="dist/OPRivView Replay.app/Contents"
+          mkdir -p "$HOME/.comma"
+          echo not-a-real-token > "$HOME/.comma/jwt"
+          "$app/Resources/oprivview-replay-server/oprivview-replay-server" --port 8799 --host 127.0.0.1 \
+            --app "$app/MacOS/OPRivView Replay" &
+          pid=$!
+          for i in $(seq 60); do
+            if curl -sf http://127.0.0.1:8799/health >/dev/null; then break; fi
+            sleep 1
+          done
+          routes=$(curl -sf http://127.0.0.1:8799/routes) || { echo "the server did not answer /routes"; kill $pid || true; exit 1; }
+          kill $pid || true
+          rm -f "$HOME/.comma/jwt"
+          echo "$routes"
+          case "$routes" in
+            *"cannot reach comma Connect"*) echo "the bundled server does not trust comma Connect's certificate"; exit 1 ;;
+            *"comma Connect answered 401"*) echo "Connect was reached over TLS and refused the dummy token, as expected" ;;
+            *) echo "unexpected /routes answer"; exit 1 ;;
+          esac
+
       # the same check the server makes before a render: a few blank frames through Apple's hardware encoder
       - name: The bundled ffmpeg encodes with VideoToolbox
         working-directory: replay
