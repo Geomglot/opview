@@ -119,8 +119,9 @@ again. When there is one, it shows what is new and offers **Update**; **Later** 
 while a render or preview is running.
 
 - On Windows, Update downloads the new installer, closes the app, installs the new version and opens it again.
-- On a Mac, Update downloads the new disk image and shows it in the Finder. Open it, quit the app, and drag the new app
-  over the old one in Applications.
+- On a Mac, Update downloads the new version, closes the app, puts the new version in place of the old one and opens
+  it again. If the app cannot change the folder it is in, it shows the downloaded disk image in the Finder instead, to
+  drag the new app over the old one. The [install guide](INSTALL.md#updating) has more.
 
 Test versions are offered as well as final ones unless you turn off **Include test versions** under Updates in App
 settings. Your settings and stored drives are kept. The **?** menu also shows which version you have.

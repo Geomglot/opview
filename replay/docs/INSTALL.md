@@ -44,8 +44,16 @@ shasum -a 256 ~/Downloads/OPRivView-Replay-*.dmg
 
 ## Updating
 
-Quit the app, then install the new version in the same way and choose to replace the old one. You may need to do the Open
-Anyway step again. Your settings and stored drives are kept.
+From version 0.1.2 the app updates itself: when it offers a new version, choose **Update**. It downloads the new version,
+checks it, closes, puts the new version in place of the old one and opens it again. If something goes wrong part-way,
+the old version is put back. Your settings and stored drives are kept.
+
+Because the app is not signed by Apple, macOS sees each version as a new app, so it may ask again for permissions you
+gave the old one, such as reaching devices on your local network.
+
+The app cannot update itself when it is opened straight from the disk image, or in a folder your Mac account cannot
+change. It then shows the downloaded disk image in the Finder instead: quit the app, and install the new version in the
+same way as the first time, choosing to replace the old one.
 
 ## Removing it
 

@@ -131,8 +131,12 @@ The app's updater (`lib/studio/replay_updater.dart`) reads the 20 newest release
 parses (`0.1.2`, `0.1.2-test.3`; tests come before the final version), skips test versions when **Include test versions**
 is off (`test_versions` in the settings), and picks the file named for this computer (`-Windows.exe`, or `-macOS-ARM.dmg`
 / `-macOS-Intel.dmg` by `sysctl hw.optional.arm64`). The download is checked against GitHub's SHA-256 of the file, or
-`SHA256SUMS`. Windows runs the installer with `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /RELAUNCH` and quits; the Mac shows
-the disk image in the Finder for now. `-dev` builds never update. To try an update against a releases list of your own,
+`SHA256SUMS`. Windows runs the installer with `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /RELAUNCH` and quits. The Mac
+mounts the disk image, copies the app beside the installed one as a hidden `.<name>-update.app`, checks the server's and
+ffmpeg's arch and the signature, and starts a detached script (`macSwapScript`) that waits for everything running from
+the old bundle to stop, swaps the two, opens the new one and deletes the old only once the new one is running (otherwise
+it puts the old one back); its log is `$TMPDIR/OPRivViewReplay-update/swap-app.log`. It falls back to showing the disk image in
+the Finder when the app runs from `/Volumes/`, is translocated, or its folder is not writable. `-dev` builds never update. To try an update against a releases list of your own,
 set `OPRIVVIEW_RELEASES_URL` to a URL serving JSON in the same form as GitHub's.
 
 ## Where files come from, and how much detail

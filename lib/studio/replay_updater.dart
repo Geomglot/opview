@@ -3,7 +3,7 @@
 // Separate from the Android app's updater (lib/services/updater.dart): replay releases are tagged replay-v<version>,
 // have a .dmg or .exe rather than an APK, and order their test versions before the final one.
 // Windows: the installer (replay/packaging/windows-installer.iss) runs silently, closes this app and reopens it.
-// Mac: until the Mac's own install step exists, the downloaded disk image is shown in the Finder.
+// Mac: the new app is copied out of the disk image and checked, and a script swaps it in once this app has quit.
 
 import 'dart:async';
 import 'dart:convert';
@@ -271,13 +271,124 @@ class ReplayUpdater extends ChangeNotifier {
 void Function() quitForUpdate = () => exit(0);
 
 /// Windows: the installer, silently, which closes this app (and its server), replaces it, and opens the new version.
-/// Mac: the disk image in the Finder, to drag the new app over the old one, until the Mac's own install step exists.
+/// Mac: the new app is copied out of the disk image beside this one and checked, then a small script swaps the two once
+/// this app has quit and opens the new one. Where that cannot work, the disk image is shown in the Finder instead.
 Future<String> installForThisComputer(File file) async {
   if (Platform.isWindows) {
     await Process.start(file.path, ['/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/RELAUNCH'], mode: ProcessStartMode.detached);
     quitForUpdate();
     return 'Installing'; // not reached once the app has quit
   }
-  await showInFileManager(file.path);
-  return 'Downloaded. Open ${file.uri.pathSegments.last}, quit this app, and drag the new app over the old one in Applications.';
+  final app = File(Platform.resolvedExecutable).parent.parent.parent.path; // .../OPRivView Replay.app
+  final writable = (await Process.run('/bin/test', ['-w', File(app).parent.path])).exitCode == 0;
+  final refusal = macInstallRefusal(app, writable: writable);
+  if (refusal != null) return _byHand(file, refusal);
+  try {
+    final arch = await assetSuffixForThisComputer() == '-macOS-ARM.dmg' ? 'arm64' : 'x86_64';
+    final staged = await _stageMacApp(file, app, arch);
+    final script = File('${file.parent.path}/swap-app.sh');
+    await script.writeAsString(macSwapScript);
+    await Process.start('/usr/bin/nohup', ['/bin/bash', script.path, app, staged, '${file.parent.path}/swap-app.log'],
+        mode: ProcessStartMode.detached);
+  } on _MacInstallError catch (e) {
+    return _byHand(file, e.message);
+  }
+  quitForUpdate();
+  return 'Installing'; // not reached once the app has quit
 }
+
+/// why the app at [app] cannot replace itself, or null if it can
+String? macInstallRefusal(String app, {required bool writable}) {
+  if (!app.endsWith('.app')) return 'This copy of the app is not in an app bundle';
+  if (app.startsWith('/Volumes/')) return 'The app is running from the disk image rather than from Applications';
+  if (app.contains('/AppTranslocation/')) {
+    return 'macOS is running the app from a temporary place, because it was opened where it was downloaded. Move it to '
+        'Applications first';
+  }
+  if (!writable) return 'This Mac account cannot change the folder the app is in';
+  return null;
+}
+
+Future<String> _byHand(File dmg, String why) async {
+  await showInFileManager(dmg.path);
+  return '$why, so it cannot update itself. The new version is downloaded: open ${dmg.uri.pathSegments.last}, quit this '
+      'app, and drag the new app over the old one.';
+}
+
+class _MacInstallError implements Exception {
+  final String message;
+  _MacInstallError(this.message);
+}
+
+/// copies the app out of [dmg] to a hidden bundle beside [app] (the same disk, so the swap is a rename) and checks the
+/// copy will run here: its server and ffmpeg are this Mac's arch (the app's own binary is universal, so it says
+/// nothing), and its signature is whole. Returns the copy's path.
+Future<String> _stageMacApp(File dmg, String app, String arch) async {
+  Future<void> run(String what, String exe, List<String> args) async {
+    final r = await Process.run(exe, args);
+    if (r.exitCode != 0) throw _MacInstallError('$what failed: ${'${r.stderr}'.trim()}');
+  }
+
+  final staged = '${File(app).parent.path}/.${app.split('/').last.replaceFirst(RegExp(r'\.app$'), '')}-update.app';
+  final mount = await Directory.systemTemp.createTemp('OPRivViewReplay-mount');
+  try {
+    await run('Opening the disk image', '/usr/bin/hdiutil',
+        ['attach', '-nobrowse', '-readonly', '-noautoopen', '-mountpoint', mount.path, dmg.path]);
+    try {
+      final inside = Directory(mount.path).listSync().whereType<Directory>().where((d) => d.path.endsWith('.app')).toList();
+      if (inside.length != 1) throw _MacInstallError('The disk image does not hold one app');
+      if (await Directory(staged).exists()) await Directory(staged).delete(recursive: true);
+      await run('Copying the new app', '/usr/bin/ditto', [inside.single.path, staged]);
+    } finally {
+      final r = await Process.run('/usr/bin/hdiutil', ['detach', mount.path]);
+      if (r.exitCode != 0) await Process.run('/usr/bin/hdiutil', ['detach', '-force', mount.path]);
+    }
+  } finally {
+    if (await mount.exists()) await mount.delete();
+  }
+  try {
+    final res = '$staged/Contents/Resources';
+    for (final b in ['ffmpeg/ffmpeg', 'ffmpeg/ffprobe', 'oprivview-replay-server/oprivview-replay-server']) {
+      await run('Checking the new app is for this Mac', '/usr/bin/lipo', ['$res/$b', '-verify_arch', arch]);
+    }
+    await run('Checking the new app is whole', '/usr/bin/codesign', ['--verify', '--deep', '--strict', staged]);
+    // a disk image copied from one marked as downloaded marks the app too, and macOS would then stop it with a dialog;
+    // the download has already been checked against the release's SHA-256
+    await Process.run('/usr/bin/xattr', ['-dr', 'com.apple.quarantine', staged]);
+  } catch (_) {
+    await Directory(staged).delete(recursive: true);
+    rethrow;
+  }
+  return staged;
+}
+
+/// run detached, after the app has quit: puts the new bundle in the old one's place and opens it. The old bundle is kept
+/// aside until the new one is seen running, and put back (and opened) if anything goes wrong.
+/// Arguments: the installed app, the checked copy beside it, a log file.
+const macSwapScript = r'''
+app=$1 new=$2
+exec >>"$3" 2>&1
+echo "$(date): replacing $app"
+old="$(dirname "$app")/.$(basename "$app" .app)-old.app"
+running() { pgrep -f -- "$app/Contents/" >/dev/null; }
+# the app, its server and any ffmpeg all run from inside the bundle; give them half a minute to go
+for i in $(seq 60); do running || break; sleep 0.5; done
+running && echo "still running after 30 s; replacing anyway (a running program is not harmed by its folder moving)"
+rm -rf "$old"
+if ! mv "$app" "$old"; then echo "could not move the old app aside"; rm -rf "$new"; open "$app"; exit 1; fi
+if ! mv "$new" "$app"; then echo "could not move the new app in"; mv "$old" "$app"; open "$app"; exit 1; fi
+open "$app"
+# seen running, and still running 5 s later: a new app that fails at once is caught even if it was glimpsed starting
+for i in $(seq 20); do running && break; sleep 0.5; done
+sleep 5
+if running; then
+  rm -rf "$old"
+  echo "the new app is running"
+else
+  echo "the new app did not start; putting the old one back"
+  rm -rf "$app"
+  mv "$old" "$app"
+  open "$app"
+  exit 1
+fi
+''';

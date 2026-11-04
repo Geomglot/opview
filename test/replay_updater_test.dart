@@ -155,4 +155,19 @@ void main() {
       expect(got.where((url) => url.endsWith('.exe')), isEmpty);
     });
   });
+
+  group('Mac install', () {
+    test('an app in Applications, or any folder the user can change, replaces itself', () {
+      expect(macInstallRefusal('/Applications/OPRivView Replay.app', writable: true), isNull);
+      expect(macInstallRefusal('/Users/me/Apps/OPRivView Replay.app', writable: true), isNull);
+    });
+
+    test('an app on the disk image, moved by macOS to a temporary place, or in a folder it cannot change, does not', () {
+      expect(macInstallRefusal('/Volumes/OPRivView Replay/OPRivView Replay.app', writable: true), contains('disk image'));
+      expect(macInstallRefusal('/private/var/folders/x/T/AppTranslocation/ABC/d/OPRivView Replay.app', writable: true),
+          contains('temporary place'));
+      expect(macInstallRefusal('/Applications/OPRivView Replay.app', writable: false), contains('cannot change'));
+      expect(macInstallRefusal('/usr/local/bin', writable: true), isNotNull);
+    });
+  });
 }
