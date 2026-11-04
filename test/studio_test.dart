@@ -89,11 +89,12 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('a running render shows the picture it has reached, and the placeholder once it is done', (tester) async {
+  testWidgets('a running render shows the picture it has reached, Cancel asks before stopping, and the placeholder returns when done', (tester) async {
     HttpOverrides.global = null;
     late HttpServer server;
     late Directory dir;
     var state = 'running';
+    final asked = <String>[]; // cancel and finish requests
     await tester.runAsync(() async {
       dir = await Directory.systemTemp.createTemp('studio-snapshot-test');
       final shot = File('${dir.path}/render-snapshot.bmp');
@@ -108,6 +109,7 @@ void main() {
             {'route': '0000005a--f16da7af40', 'segments': [0, 1], 'first': 0, 'last': 1, 'on_device': true, 'on_connect': false, 'detail': 'full'},
           ]};
         } else if (req.uri.path.startsWith('/jobs')) {
+          if (req.uri.path.endsWith('/cancel') || req.uri.path.endsWith('/finish')) asked.add(req.uri.path);
           body = {'id': 'a', 'state': state, 'message': state == 'running' ? 'frame 40 of 100 after 2 s, segment 0, 0:02' : 'finished',
               'progress': state == 'running' ? 0.4 : 1.0, 'output': '/tmp/x.mp4', 'error': null, 'preview': false,
               'snapshot': state == 'running' ? shot.path : null};
@@ -140,6 +142,23 @@ void main() {
     expect(find.byType(Image), findsOneWidget);
     expect(find.text('Working on it...'), findsNothing);
     expect(find.textContaining('segment 0, 0:02'), findsOneWidget);
+
+    // Cancel asks first; carrying on sends nothing, and Save asks the server to finish early
+    await tester.tap(find.text('Cancel'));
+    await tester.pump();
+    expect(find.text('Stop the render?'), findsOneWidget);
+    await tester.tap(find.text('Keep rendering'));
+    await tester.pump();
+    expect(find.text('Stop the render?'), findsNothing);
+    await tester.tap(find.text('Cancel'));
+    await tester.pump();
+    await tester.tap(find.text("Save what's done"));
+    await settle(() => asked.isNotEmpty);
+    expect(asked, ['/jobs/a/finish']);
+    for (var i = 0; i < 5; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50))); // its answer arrives
+      await tester.pump();
+    }
 
     state = 'done';
     await settle(() => find.byType(Image).evaluate().isEmpty);

@@ -104,7 +104,14 @@ PC yet; in a virtual machine with no graphics card it took about 3.5 minutes per
   progress bar says which segment and how far into it.
 - Clips go to your Movies folder on a Mac, or your Videos folder on Windows, unless you pick a different folder in App
   settings, or an **Output file** with **Choose...**.
-- A clip is only saved if it is complete. **Cancel** stops the render and saves nothing.
+- **Cancel** asks what to do with the part made so far:
+  - **Save what's done** finishes the clip where the render has got to, and saves it with "(partial)" added to its
+    name. It never replaces an earlier clip.
+  - **Discard** stops and saves nothing.
+  - **Keep rendering** carries on, in case Cancel was pressed by mistake. The render keeps going while you decide.
+
+  Cancel before the first frames are made, or during a preview, just stops.
+- Otherwise a clip is only saved once it is complete.
 - The app does not replace an earlier clip when it picks the name itself. If you choose or type a file name, it does.
 - When the render is done, use **Play** to open the clip, or **Show in Finder** (**Show in Explorer** on Windows).
 

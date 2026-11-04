@@ -158,15 +158,90 @@ def test_a_running_render_shows_the_picture_it_has_reached_and_a_finished_one_do
   assert job["state"] == "done" and job["snapshot"] is None
 
 
-def _fake_renderer(tmp_path, code: int = 0):
+def _wait_for(c, job_id, ready):
+  import time
+
+  for _ in range(100):
+    job = c.get(f"/jobs/{job_id}").json()
+    if ready(job):
+      return job
+    time.sleep(0.05)
+  raise AssertionError(job)
+
+
+def test_finish_asks_the_renderer_to_stop_and_the_job_ends_with_the_partial_clip(monkeypatch, tmp_path):
+  import threading
+
+  from oprivview_replay import jobs
+
+  _resolved(monkeypatch, tmp_path)
+  asked, stopped = [], threading.Event()
+
+  class Stdin:
+    def write(self, text):
+      asked.append(text)
+
+    def flush(self):
+      stopped.set()
+
+  class Renderer:
+    stdin = Stdin()
+
+    def kill(self):
+      raise AssertionError("keeping what is done must not kill the renderer")
+
+  def fake_render(resolved, sources, cache, settings, output, app, progress, preview=False, started=None):
+    started(Renderer())
+    progress("frame 20 of 100 after 1 s")
+    stopped.wait(5)
+    progress("frame 40 of 100 after 2 s")  # the renderer can finish one more second before it stops
+    return output.with_name(output.stem + " (partial).mp4")
+
+  monkeypatch.setattr(jobs, "render_resolved", fake_render)
+  c = TestClient(server.make_app(host="x", connect=None, output_dir=tmp_path))
+  job = c.post("/jobs", json={"route": "r"}).json()
+  _wait_for(c, job["id"], lambda j: j["progress"] == 0.2)
+  stopping = c.post(f"/jobs/{job['id']}/finish").json()
+  assert stopping["state"] == "running" and stopping["stopping"] is True
+  done = _wait_for(c, job["id"], lambda j: j["state"] != "running")
+  assert asked == ["stop\n"]
+  assert done["state"] == "done" and done["output"].endswith("--seg2-3 (partial).mp4") and done["message"].startswith("Stopped early")
+
+
+def test_finish_before_the_renderer_has_started_is_a_cancel(monkeypatch, tmp_path):
+  import threading
+
+  from oprivview_replay import jobs
+
+  _resolved(monkeypatch, tmp_path)
+  entered, go = threading.Event(), threading.Event()
+
+  def fake_render(resolved, sources, cache, settings, output, app, progress, preview=False, started=None):
+    entered.set()
+    go.wait(5)
+    progress("preparing the drive")  # where a cancelled job stops
+
+  monkeypatch.setattr(jobs, "render_resolved", fake_render)
+  c = TestClient(server.make_app(host="x", connect=None, output_dir=tmp_path))
+  job = c.post("/jobs", json={"route": "r"}).json()
+  assert entered.wait(5)
+  assert c.post(f"/jobs/{job['id']}/finish").json()["state"] == "cancelled"
+  go.set()
+  assert _wait_for(c, job["id"], lambda j: True)["state"] == "cancelled"
+
+
+def _fake_renderer(tmp_path, code: int = 0, stopped_at: int | None = None):
   """a renderer that writes something to the part file named in $PART, and a picture of its progress where it is
-  told to, and exits with [code]"""
+  told to, and exits with [code]. With [stopped_at] it says it was asked to stop there, as a real one does."""
+  said = "" if stopped_at is None else f"stopped at frame {stopped_at}"
   if sys.platform == "win32":  # Windows cannot run a #! script; a .cmd file is one it starts directly
     app = tmp_path / "renderer.cmd"
-    app.write_text(f'@echo clip> "%PART%"\r\n@echo png> "%OPRIVVIEW_SNAPSHOT%"\r\n@exit /b {code}\r\n')
+    app.write_text(f'@echo clip> "%PART%"\r\n@echo png> "%OPRIVVIEW_SNAPSHOT%"\r\n' + (f"@echo {said} 1>&2\r\n" if said else "")
+                   + f"@exit /b {code}\r\n")
     return app
   app = tmp_path / "renderer"
-  app.write_text(f'#!/bin/sh\necho clip > "$PART"; echo png > "$OPRIVVIEW_SNAPSHOT"; exit {code}\n')
+  app.write_text(f'#!/bin/sh\necho clip > "$PART"; echo png > "$OPRIVVIEW_SNAPSHOT"; ' + (f'echo "{said}" >&2; ' if said else "")
+                 + f"exit {code}\n")
   app.chmod(0o755)
   return app
 
@@ -200,16 +275,28 @@ def _run_render(monkeypatch, tmp_path, app, frames_written):
 
   monkeypatch.setattr(subprocess, "Popen", Proc)
   try:
-    render.run(None, tmp_path, None, None, {}, output, app, lambda t: None)
+    return render.run(None, tmp_path, None, None, {}, output, app, lambda t: None)
   finally:
     assert seen == [b"png"], "the renderer is told where to put its picture"
     assert not stale.exists(), "no picture is left behind"
-  return output
 
 
 def test_a_finished_render_appears_under_its_name_with_no_part_file_left(monkeypatch, tmp_path):
   output = _run_render(monkeypatch, tmp_path, _fake_renderer(tmp_path), 100)
-  assert output.exists() and list(tmp_path.glob("*.part.*")) == []
+  assert output == tmp_path / "clip.mp4" and output.exists() and list(tmp_path.glob("*.part.*")) == []
+
+
+def test_a_render_stopped_with_save_keeps_its_frames_as_a_partial_clip_beside_any_earlier_one(monkeypatch, tmp_path):
+  (tmp_path / "clip (partial).mp4").write_bytes(b"an earlier partial clip")
+  saved = _run_render(monkeypatch, tmp_path, _fake_renderer(tmp_path, stopped_at=30), 30)
+  assert saved == tmp_path / "clip (partial 2).mp4" and saved.exists()
+  assert (tmp_path / "clip (partial).mp4").read_bytes() == b"an earlier partial clip"
+  assert not (tmp_path / "clip.mp4").exists() and list(tmp_path.glob("*.part.*")) == []
+
+
+def test_a_render_stopped_before_its_first_frame_saves_nothing(monkeypatch, tmp_path):
+  assert _run_render(monkeypatch, tmp_path, _fake_renderer(tmp_path, stopped_at=0), 0) is None
+  assert list(tmp_path.glob("*.mp4")) == []
 
 
 def test_a_short_render_is_a_failure_and_leaves_no_clip(monkeypatch, tmp_path):

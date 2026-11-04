@@ -359,9 +359,35 @@ class _StudioPageState extends State<StudioPage> {
     _snapshot = bytes;
   }
 
+  /// once a render has made frames, Cancel asks whether to keep them as a shorter clip, throw them away, or carry on (in
+  /// case Cancel was pressed by mistake). The render keeps going while the question is open.
   Future<void> _cancel() async {
+    final id = _job!['id'] as String;
+    final made = _job!['preview'] != true && ((_job!['progress'] as num?) ?? 0) > 0;
+    final choice = !made
+        ? 'discard'
+        : await showDialog<String>(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('Stop the render?'),
+                content: const Text('You can keep the part made so far as a shorter clip, with "(partial)" added to its name, '
+                    'or throw it away.'),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(context, 'continue'), child: const Text('Keep rendering')),
+                  TextButton(onPressed: () => Navigator.pop(context, 'discard'), child: const Text('Discard')),
+                  FilledButton(onPressed: () => Navigator.pop(context, 'save'), child: const Text("Save what's done")),
+                ],
+              )) ??
+            'continue';
+    // the render may have finished, or failed, while the question was open
+    if (choice == 'continue' || !mounted || _job?['id'] != id || _job?['state'] != 'running') return;
+    if (choice == 'save') {
+      final j = await _sidecar!.api.finish(id);
+      if (mounted) setState(() => _job = j); // the poll carries on until the clip is saved
+      return;
+    }
     _poll?.cancel();
-    final j = await _sidecar!.api.cancel(_job!['id'] as String);
+    final j = await _sidecar!.api.cancel(id);
     setState(() {
       _job = j;
       _showSnapshot(null);
@@ -554,7 +580,7 @@ class _StudioPageState extends State<StudioPage> {
             FilledButton(onPressed: _route == null || running ? null : _render, child: const Text('Render MP4')),
             if (running && _job?['id'] != null) ...[
               const SizedBox(width: 12),
-              TextButton(onPressed: _cancel, child: const Text('Cancel')),
+              TextButton(onPressed: _job?['stopping'] == true ? null : _cancel, child: const Text('Cancel')),
             ],
           ]),
         ]));

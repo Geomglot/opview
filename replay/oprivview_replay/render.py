@@ -283,14 +283,36 @@ def snapshot_file(route_dir: Path) -> Path:
   return route_dir / "render-snapshot.bmp"
 
 
+def partial_file(output: Path) -> Path:
+  """where a render stopped early with Save is kept: marked as part of the range, and never over an earlier clip"""
+  path = output.with_name(f"{output.stem} (partial){output.suffix}")
+  n = 2
+  while path.exists():
+    path = output.with_name(f"{output.stem} (partial {n}){output.suffix}")
+    n += 1
+  return path
+
+
+def request_stop(proc: subprocess.Popen) -> None:
+  """ask a running renderer to finish the clip at the frame it has reached: it closes the video properly and says
+  "stopped at frame N". Killing it instead leaves a file that will not play."""
+  try:
+    proc.stdin.write("stop\n")
+    proc.stdin.flush()
+  except (OSError, ValueError):
+    pass  # it has just ended by itself; what it wrote is handled as usual
+
+
 def part_file(output: Path) -> Path:
   """where a clip is written until it is complete; ffmpeg goes by the last part of the name, so that stays .mp4"""
   return output.with_name(output.stem + ".part" + output.suffix)
 
 
 def run(tl: RouteTimeline, route_dir: Path, start: FramePos, end: FramePos, settings: dict, output: Path, app: Path, progress=print,
-        detail: str = "full", started: Callable[[subprocess.Popen], None] | None = None) -> None:
-  """the clip only appears at [output] once every frame is in it. [started] is given the renderer, so it can be stopped."""
+        detail: str = "full", started: Callable[[subprocess.Popen], None] | None = None) -> Path | None:
+  """the clip only appears at [output] once every frame is in it. [started] is given the renderer, so it can be stopped:
+  killed, which saves nothing, or asked with [request_stop] to finish early, which saves the frames so far at
+  [partial_file]. Returns where the clip was saved, or None if it was stopped before its first frame."""
   part = part_file(output)
   job_path = prepare(tl, route_dir, start, end, settings, part, progress, detail)
   wanted = json.loads(job_path.read_text())["frame_count"]
@@ -304,19 +326,27 @@ def run(tl: RouteTimeline, route_dir: Path, start: FramePos, end: FramePos, sett
   if started:
     started(proc)
   tail = []
+  stopped_at = None
   try:
     for line in proc.stderr:
       line = line.rstrip()
       if line.startswith("frame "):
         progress(line)
+      elif line.startswith("stopped at frame "):
+        stopped_at = int(line.split()[-1])
       else:
         tail = (tail + [line])[-20:]
     if proc.wait() != 0:
       raise subprocess.CalledProcessError(proc.returncode, str(app), stderr="\n".join(tail))
+    if stopped_at == 0:
+      return None
+    if stopped_at is not None:
+      wanted, output = stopped_at, partial_file(output)
     written = video_frames(part)
     if written != wanted:
       raise RuntimeError(f"the render stopped early: {written} of {wanted} frames were written")
     part.replace(output)
+    return output
   finally:
     for leftover in (part, snapshot, snapshot.with_name(snapshot.name + ".part")):
       _remove(leftover, patience=3.0)

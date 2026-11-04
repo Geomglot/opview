@@ -138,5 +138,8 @@ class StudioApi {
 
   Future<Map<String, dynamic>> cancel(String id) async => await _call('POST', '/jobs/$id/cancel', {});
 
+  /// stop a render early but keep the frames made so far, as a clip marked partial
+  Future<Map<String, dynamic>> finish(String id) async => await _call('POST', '/jobs/$id/finish', {});
+
   void close() => _client.close(force: true);
 }

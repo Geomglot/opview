@@ -2,6 +2,7 @@
 // with OPRIVVIEW_JOB set (by the replay server) it renders that job; without it, it opens the replay window
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
@@ -46,13 +47,19 @@ class _ReplayRenderState extends State<ReplayRender> {
   ui.Image? _picture;
   Process? _encoder;
   DateTime _time = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+  bool _stopRequested = false;
 
   @override
   void initState() {
     super.initState();
     appNow = () => _time;
-    // when the server that asked for this render goes away, so does the render
-    if (Platform.environment['OPRIVVIEW_WATCH_STDIN'] != null) stdin.listen(null, onDone: _abandon);
+    // when the server that asked for this render goes away, so does the render. A "stop" line from it means finish the
+    // clip at the frame reached, so what is done so far can be kept (replay/oprivview_replay/render.py, request_stop)
+    if (Platform.environment['OPRIVVIEW_WATCH_STDIN'] != null) {
+      stdin.transform(utf8.decoder).transform(const LineSplitter()).listen((line) {
+        if (line.trim() == 'stop') _stopRequested = true;
+      }, onDone: _abandon);
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) => _run().then((_) => exit(0), onError: _fail));
   }
 
@@ -92,7 +99,7 @@ class _ReplayRenderState extends State<ReplayRender> {
     final snapshot = Platform.environment['OPRIVVIEW_SNAPSHOT'];
     var nextSnapshotMs = 0;
     FeedFrame? frame;
-    while ((frame = await feed.next()) != null) {
+    while (!_stopRequested && (frame = await feed.next()) != null) {
       final previous = _picture;
       setState(() {
         _time = DateTime.fromMillisecondsSinceEpoch(frame!.timeMs, isUtc: true);
@@ -124,10 +131,19 @@ class _ReplayRenderState extends State<ReplayRender> {
       }
     }
     await feed.close();
+    if (_stopRequested && done == 0) {
+      encoder.kill(); // nothing to keep, and ffmpeg given no frames reports a failure
+      stderr.writeln('stopped at frame 0');
+      return;
+    }
     await encoder.stdin.close();
     final code = await encoder.exitCode;
     if (code != 0) throw 'ffmpeg could not write ${job.output}';
-    if (done != job.frameCount) throw 'drew $done frames, expected ${job.frameCount}';
+    if (_stopRequested && done < job.frameCount) {
+      stderr.writeln('stopped at frame $done');
+    } else if (done != job.frameCount) {
+      throw 'drew $done frames, expected ${job.frameCount}';
+    }
   }
 
   @override

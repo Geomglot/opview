@@ -118,8 +118,8 @@ def choose_files(r: Resolved, sources: Sources, needed: list[int], detail: str) 
 def render_resolved(r: Resolved, sources: Sources, cache: Path, settings: dict, output: Path, app: Path,
                     progress: Callable[[str], None] = print, preview: bool = False,
                     started: Callable[[object], None] | None = None) -> Path | None:
-  """fetch what is needed and render. With [preview] it stops after writing the job file, which it returns, so the window
-  can play the drive itself instead of encoding it."""
+  """fetch what is needed and render, and return where the clip was saved (see render.run). With [preview] it stops after
+  writing the job file, which it returns instead, so the window can play the drive itself rather than encoding it."""
   needed = [s for s in r.segments if r.start.segment <= s <= r.end.segment]
   earlier = render.preroll_segment(r.timeline, r.start)
   source, detail = choose_files(r, sources, needed + ([earlier] if earlier is not None else []), settings["detail"])
@@ -136,5 +136,4 @@ def render_resolved(r: Resolved, sources: Sources, cache: Path, settings: dict, 
   if preview:
     return render.prepare(r.timeline, r.route_dir, r.start, r.end, settings, output, progress, detail, name="preview-job.json")
   progress(f"rendering ({detail} detail)")
-  render.run(r.timeline, r.route_dir, r.start, r.end, settings, output, app, progress, detail, started)
-  return None
+  return render.run(r.timeline, r.route_dir, r.start, r.end, settings, output, app, progress, detail, started)

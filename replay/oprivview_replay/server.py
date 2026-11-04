@@ -210,14 +210,15 @@ def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Pat
     folder = Path(settings["output_dir"]).expanduser() if settings["output_dir"] else output_dir
     output = _chosen_output(req.output) if req.output else default_output(folder, resolved.describe(), req.route)
     job_id = uuid.uuid4().hex[:8]
-    state[job_id] = {"id": job_id, "state": "running", "message": "starting", "progress": None, "output": str(output), "error": None, "preview": req.preview, "job_file": None, "snapshot": None,
+    state[job_id] = {"id": job_id, "state": "running", "message": "starting", "progress": None, "output": str(output), "error": None, "preview": req.preview, "job_file": None, "snapshot": None, "stopping": False,
                      "range": resolved.describe()}
 
     def progress(text: str):
       with lock:
         if state[job_id]["state"] == "cancelled":
           raise Cancelled()
-        state[job_id]["message"] = text
+        if not state[job_id]["stopping"]:
+          state[job_id]["message"] = text
         if text.startswith("frame "):
           parts = text.split()
           state[job_id]["progress"] = int(parts[1]) / int(parts[3])
@@ -229,12 +230,20 @@ def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Pat
       try:
         if not req.preview:
           output.parent.mkdir(parents=True, exist_ok=True)
-        job_file = jobs.render_resolved(resolved, sources, cache, options, output, renderer, progress, preview=req.preview,
-                                        started=lambda p: renderers.__setitem__(job_id, p))
+        made = jobs.render_resolved(resolved, sources, cache, options, output, renderer, progress, preview=req.preview,
+                                    started=lambda p: renderers.__setitem__(job_id, p))
         with lock:
-          if state[job_id]["state"] == "running":
-            state[job_id].update(state="done", message="ready" if req.preview else "finished", progress=1.0, snapshot=None,
-                                 job_file=str(job_file) if job_file else None)
+          if state[job_id]["state"] != "running":
+            pass
+          elif req.preview:
+            state[job_id].update(state="done", message="ready", progress=1.0, job_file=str(made) if made else None)
+          elif state[job_id]["stopping"] and made is None:
+            state[job_id].update(state="cancelled", message="stopped before the first frame", snapshot=None)
+          elif state[job_id]["stopping"]:
+            state[job_id].update(state="done", message="Stopped early. The clip ends where the render stopped.", progress=1.0,
+                                 snapshot=None, output=str(made))
+          else:
+            state[job_id].update(state="done", message="finished", progress=1.0, snapshot=None)
       except Cancelled:
         pass
       except Exception as e:  # report anything to the interface rather than lose it in the thread
@@ -260,6 +269,20 @@ def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Pat
       running.kill()
     with lock:
       return dict(state[job_id])
+
+  @app.post("/jobs/{job_id}/finish")
+  def finish(job_id: str):
+    """stop a render early and keep what it has made so far, as a clip marked partial. Before the renderer has started
+    there is nothing to keep, so it is the same as cancel."""
+    if job_id not in state:
+      raise HTTPException(404, "no such job")
+    with lock:
+      running = renderers.get(job_id)
+      if running is not None and state[job_id]["state"] == "running" and not state[job_id]["preview"]:
+        state[job_id].update(stopping=True, message="saving what is done so far")
+        render.request_stop(running)
+        return dict(state[job_id])
+    return cancel(job_id)
 
   @app.post("/preview/seek")
   def preview_seek(s: Seek):
