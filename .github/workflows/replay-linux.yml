@@ -1,0 +1,48 @@
+name: Replay for Linux
+
+# Builds OPRivView Replay for Linux (x86_64) on the oldest Ubuntu GitHub offers, so the result runs on that and on later
+# distributions. For now this builds the app only; ffmpeg, the server and the AppImage come in later steps.
+# On a push the build is kept as a workflow artifact.
+on:
+  push:
+    branches: [rivian-support]
+    paths: ['replay/**', 'linux/**', 'lib/**', 'pubspec.*', '.github/workflows/replay-linux.yml']
+  pull_request:
+    branches: [rivian-support]
+    paths: ['replay/**', 'linux/**', 'lib/**', 'pubspec.*', '.github/workflows/replay-linux.yml']
+  workflow_dispatch:
+
+jobs:
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build tools and GTK
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - name: Build the app
+        run: flutter build linux --release -t lib/main_replay.dart
+
+      - name: The app is where the packaging will look for it
+        run: |
+          bundle=build/linux/x64/release/bundle
+          ls -l "$bundle" "$bundle/lib"
+          test -x "$bundle/oprivview-replay"
+          ldd "$bundle/oprivview-replay" | tee ldd.txt
+          if grep -q 'not found' ldd.txt; then echo "::error::the app needs a library this computer lacks"; exit 1; fi
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: oprivview-replay-linux-bundle
+          path: build/linux/x64/release/bundle
+          retention-days: 7
