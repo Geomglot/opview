@@ -168,15 +168,19 @@ class _StudioPageState extends State<StudioPage> {
     await _loadRoutes(); // the comma or the account may have changed
   }
 
-  // a result from Check range only describes the range it was checked with
+  // a result from Check range only describes the range it was checked with; a preview showing says when the range has
+  // moved on from the one it plays
   void _rangeChanged() {
-    if (_resolved != null || _resolveError != null) {
-      setState(() {
-        _resolved = null;
-        _resolveError = null;
-      });
-    }
+    setState(() {
+      _resolved = null;
+      _resolveError = null;
+    });
   }
+
+  String? _previewedRange; // the range the preview showing was made for, to compare with the fields
+
+  /// the preview showing is of a range other than the one in the fields now
+  bool get _previewIsOld => _previewFile != null && _previewedRange != '${_request()?.toJson()}';
 
   Future<void> _boot() async {
     try {
@@ -347,6 +351,7 @@ class _StudioPageState extends State<StudioPage> {
       _resolveError = null;
       _previewFile = null;
       _showSnapshot(null);
+      if (preview) _previewedRange = '${r.toJson()}';
     });
     try {
       final out = _output.text.trim().isEmpty ? null : _output.text.trim();
@@ -659,6 +664,11 @@ class _StudioPageState extends State<StudioPage> {
           Expanded(
               child: SingleChildScrollView(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            if (_previewIsOld)
+              const Padding(
+                  padding: EdgeInsets.only(bottom: 6),
+                  child: Text('The range has changed since this preview. Press Preview to see the new one.',
+                      style: TextStyle(color: Colors.orangeAccent))),
             _previewFile != null
                 ? _previewPlayer()
                 : running && _snapshot != null
