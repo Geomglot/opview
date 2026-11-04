@@ -1,4 +1,5 @@
 """The steps shared by the command line and the server: find the drive, resolve a range, render it."""
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
@@ -14,6 +15,10 @@ class Sources:
   device: DeviceSource
   connect: ConnectSource | None = None
   added: dict[str, ConnectSource] = field(default_factory=dict)  # someone else's public drives, by route
+  # the comma through comma's server (comma prime), when it may be used: see choose_files
+  through_server: Callable[[], DeviceSource | None] | None = None
+  # whether the comma on this network answered the last listing; None before the first
+  local_reachable: bool | None = None
 
   def listed(self) -> dict[str, tuple[object, list[int]]]:
     """route -> (source, segments). The comma wins over Connect for a route both have, since it has the full files."""
@@ -25,7 +30,9 @@ class Sources:
         pass
     try:
       out.update({r: (self.device, s) for r, s in self.device.routes().items()})
+      self.local_reachable = True
     except SourceError:
+      self.local_reachable = False
       if not out:
         raise
     for route, source in self.added.items():
@@ -90,6 +97,13 @@ def choose_files(r: Resolved, sources: Sources, needed: list[int], detail: str) 
     except SourceError:
       continue
     candidates.append(other)
+  # The comma through comma's server comes last, after Connect, which costs the car nothing. Only when the comma on this
+  # network did not answer: never in its place while it does, nor after a copy from it failed part-way, so that a Wi-Fi
+  # blip never moves a large copy onto the car's own internet connection.
+  if not public and sources.through_server is not None and sources.local_reachable is False:
+    remote = sources.through_server()
+    if remote is not None:
+      candidates.append(remote)
   if detail in ("auto", "full"):
     problems = []
     for source in candidates:
@@ -115,6 +129,15 @@ def choose_files(r: Resolved, sources: Sources, needed: list[int], detail: str) 
   raise SourceError("neither the comma nor comma Connect has the files for this drive")
 
 
+_locks: dict[str, threading.Lock] = {}
+_locks_guard = threading.Lock()
+
+
+def _fetching(route: str) -> threading.Lock:
+  with _locks_guard:
+    return _locks.setdefault(route, threading.Lock())
+
+
 def render_resolved(r: Resolved, sources: Sources, cache: Path, settings: dict, output: Path, app: Path,
                     progress: Callable[[str], None] = print, preview: bool = False,
                     started: Callable[[object], None] | None = None) -> Path | None:
@@ -124,14 +147,23 @@ def render_resolved(r: Resolved, sources: Sources, cache: Path, settings: dict, 
   earlier = render.preroll_segment(r.timeline, r.start)
   source, detail = choose_files(r, sources, needed + ([earlier] if earlier is not None else []), settings["detail"])
   log_name, video_name = render.LOGS[detail], render.VIDEOS[detail]
-  progress(f"fetching the {detail} files from {source.name}")
-  source.fetch(r.route, needed, (log_name, video_name), cache)
-  if earlier is not None:
-    source.fetch(r.route, [earlier], (log_name,), cache)
-  wide = render.wide_segments(r.timeline, r.route_dir, r.start, r.end, settings["camera"], detail)
-  if wide:
-    progress("fetching wide camera video")
-    source.fetch(r.route, wide, ("ecamera.hevc",), cache)
+
+  def fetch(segments: list[int], names: tuple[str, ...]) -> None:
+    if getattr(source, "through_server", False):  # slow: count what has arrived, and let Cancel stop it part-way
+      source.fetch(r.route, segments, names, cache, progress=progress)
+    else:
+      source.fetch(r.route, segments, names, cache)
+
+  # one copy of a drive at a time, so a preview and a render of it never fetch the same files twice over
+  with _fetching(r.route):
+    progress(f"fetching the {detail} files from {source.name}")
+    fetch(needed, (log_name, video_name))
+    if earlier is not None:
+      fetch([earlier], (log_name,))
+    wide = render.wide_segments(r.timeline, r.route_dir, r.start, r.end, settings["camera"], detail)
+    if wide:
+      progress("fetching wide camera video")
+      fetch(wide, ("ecamera.hevc",))
   progress("preparing the drive")  # also where a job cancelled during a long fetch stops, before it writes anything
   if preview:
     return render.prepare(r.timeline, r.route_dir, r.start, r.end, settings, output, progress, detail, name="preview-job.json")

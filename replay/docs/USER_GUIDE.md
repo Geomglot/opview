@@ -11,12 +11,13 @@ The **?** button above the drive list opens this guide and the install guide.
 
 ## Getting your drives into the app
 
-The app can read drives from three places. You only need one.
+The app can read drives from four places. You only need one.
 
 | Source | What you need | What you get |
 | --- | --- | --- |
 | Your comma, over your local network | The comma on the same network as your computer, and SSH set up | Full detail, while the drive is still on the comma |
 | comma Connect | A comma Connect token | Whatever Connect keeps, usually the small files |
+| Your comma, through comma's server | comma prime, a Connect token, SSH set up, and the comma online | Full detail, when the comma is not on your network |
 | Other people's public drives | Nothing but a link | Usually the log and small video |
 
 The gear above the drive list opens **App settings**, where you set up the first two.
@@ -39,6 +40,16 @@ The gear above the drive list opens **App settings**, where you set up the first
 
 If you have more than one device on your account, you can choose which one to use. Tokens expire. The app tells you when it
 needs a new one.
+
+### When the comma is not on your network
+
+With comma prime, the app can copy full detail from your comma through comma's own SSH server, wherever the comma is, as
+long as it is online. It uses the same SSH key as on your network, so set that up first. The app only does this when the
+comma does not answer on your network, and only for files Connect does not already have. The status line counts the
+megabytes as they arrive: about 90 MB for each minute of drive, or 165 MB with the wide camera.
+
+This uses the comma's own internet connection. To stop the app doing it, turn off **Reach the comma through comma's
+server** in App settings.
 
 ### Adding a public drive
 

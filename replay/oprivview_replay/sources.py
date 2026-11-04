@@ -11,6 +11,7 @@ import subprocess
 import urllib.error
 import urllib.request
 from pathlib import Path
+from typing import Callable
 
 import certifi
 
@@ -51,10 +52,12 @@ def parse_drive_ref(text: str) -> tuple[str, str | None]:
 
 
 class DeviceSource:
-  name = "device"
+  """the comma on this network, or with a [ssh_source.ThroughServer] host, the comma through comma's own SSH server"""
 
-  def __init__(self, host: str):
+  def __init__(self, host: "ssh_source.Host"):
     self.host = host  # changes when the user picks another address in the settings
+    self.through_server = isinstance(host, ssh_source.ThroughServer)
+    self.name = "the comma through comma's server" if self.through_server else "device"
 
   def routes(self) -> dict[str, list[int]]:
     try:
@@ -70,13 +73,55 @@ class DeviceSource:
       return None
 
   def missing(self, route: str, segments: list[int], names: tuple[str, ...]) -> list[str]:
-    return []  # the comma keeps whole segments; a missing file shows up when it is fetched
-
-  def fetch(self, route: str, segments: list[int], names: tuple[str, ...], cache: Path) -> None:
+    """On this network the comma keeps whole segments, and a missing file shows up when it is fetched. Through comma's
+    server it is only chosen when Connect lacks the files, so it is asked, in one command, rather than assumed to have
+    them: a drive it has already deleted then falls back to what Connect has."""
+    if not self.through_server:
+      return []
     try:
-      ssh_source.fetch(self.host, route, segments, names, cache)
+      sizes = ssh_source.remote_sizes(self.host, [f"{route}--{s}/{n}" for s in segments for n in names])
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as e:
+      raise SourceError(f"cannot reach the comma through comma's server: {e}")
+    return [n for n in names if any(f"{route}--{s}/{n}" not in sizes for s in segments)]
+
+  def fetch(self, route: str, segments: list[int], names: tuple[str, ...], cache: Path,
+            progress: Callable[[str], None] | None = None) -> None:
+    """[progress] is told, about once a second, how much of a copy through comma's server has arrived"""
+    tick = None
+    if self.through_server and progress is not None:
+      tick = self._counter(route, segments, names, cache, progress)
+    try:
+      ssh_source.fetch(self.host, route, segments, names, cache, tick)
     except subprocess.CalledProcessError as e:
-      raise SourceError(f"could not copy {', '.join(names)} from {self.host}: {e}")
+      where = "the comma through comma's server" if self.through_server else self.host
+      raise SourceError(f"could not copy {', '.join(names)} from {where}: {e}")
+
+  def _counter(self, route: str, segments: list[int], names: tuple[str, ...], cache: Path,
+               progress: Callable[[str], None]) -> Callable[[], None]:
+    """what has arrived is whatever the drive's folders have grown by since the copy began, partial files included"""
+    try:
+      sizes = ssh_source.remote_sizes(self.host, [f"{route}--{s}/{n}" for s in segments for n in names])
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
+      sizes = {}
+
+    def here(s: int, n: str) -> int:
+      f = cache / route / str(s) / n
+      return f.stat().st_size if f.exists() else -1
+
+    # only what still has to come: a file already whole here is skipped by the copy
+    total = sum(size for s in segments for n in names
+                if (size := sizes.get(f"{route}--{s}/{n}")) is not None and here(s, n) != size)
+    folders = [cache / route / str(s) for s in segments]
+
+    def held() -> int:
+      return sum(p.stat().st_size for f in folders if f.exists() for p in f.rglob("*") if p.is_file())
+
+    start = held()
+
+    def tick() -> None:
+      done = min(max(held() - start, 0), total)
+      progress(f"fetching {', '.join(names)} from the comma through comma's server: {done / 1e6:.0f} of {total / 1e6:.0f} MB")
+    return tick
 
 
 class ConnectSource:

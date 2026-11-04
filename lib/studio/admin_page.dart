@@ -271,6 +271,17 @@ class _AdminPageState extends State<AdminPage> {
         OutlinedButton(onPressed: _clearCache, child: const Text('Clear stored drives')),
       ]);
 
+  Widget _awaySection(Map<String, dynamic> s) => _section('comma away from this network', [
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text("Reach the comma through comma's server"),
+          subtitle: const Text("Needs comma prime and the Connect sign-in. When the comma is not on this network but is online, "
+              "full detail is copied from it through comma's SSH server, using the comma's own internet connection."),
+          value: s['via_server'] as bool? ?? true,
+          onChanged: (on) => _change({'via_server': on}),
+        ),
+      ]);
+
   Widget _updatesSection(Map<String, dynamic> s) => _section('Updates', [
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
@@ -299,6 +310,7 @@ class _AdminPageState extends State<AdminPage> {
                         _networkSection(),
                         _sshSection(s),
                         _tokenSection(s),
+                        _awaySection(s),
                         _outputSection(),
                         _storageSection(s),
                         _updatesSection(s),

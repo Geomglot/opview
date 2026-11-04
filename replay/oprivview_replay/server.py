@@ -16,7 +16,7 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-from . import admin, jobs, params, places, render
+from . import admin, jobs, params, places, render, ssh_source
 from .settings import Settings
 from .sources import ConnectSource, DeviceSource, SourceError, parse_drive_ref
 from .cli import DEFAULT_APP, DEFAULT_CACHE
@@ -47,6 +47,7 @@ class SettingsChange(BaseModel):
   dongle: str | None = None
   output_dir: str | None = None
   test_versions: bool | None = None
+  via_server: bool | None = None
 
 
 class Address(BaseModel):
@@ -91,9 +92,24 @@ def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Pat
   """[settings] is the user's saved choices; [host] is one given on the command line, which wins over them"""
   app = FastAPI(title="OPRivView replay")
   settings = settings or Settings(Path(tempfile.mkdtemp()) / "settings.json")
-  sources = jobs.Sources(DeviceSource(host or settings["host"]), connect)
   if connect is not None and settings["dongle"]:
     connect.use_device(settings["dongle"])
+
+  def through_server() -> DeviceSource | None:
+    """the comma through comma's SSH server, if this user may use it: the setting is on, and Connect says the device is
+    theirs (a shared one may list as prime yet refuse their key) and has comma prime, which the server needs"""
+    if not settings["via_server"] or connect is None or not connect.available() or getattr(connect, "public", False):
+      return None
+    try:
+      dongle = connect.dongle()
+      device = next((d for d in connect.devices() if d.get("dongle_id") == dongle), None)
+    except SourceError:
+      return None
+    if device is None or not device.get("prime") or not device.get("is_owner"):
+      return None
+    return DeviceSource(ssh_source.ThroughServer(dongle, cache / "through-server"))
+
+  sources = jobs.Sources(DeviceSource(host or settings["host"]), connect, through_server=through_server)
   public_sources: dict[str, ConnectSource] = {}
   state: dict[str, dict] = {}
   renderers: dict[str, object] = {}  # job -> its running renderer process
@@ -302,7 +318,7 @@ def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Pat
     return {"host": sources.device.host, "dongle": connect.dongle() if devices else settings["dongle"], "devices": devices,
             "output_dir": settings["output_dir"] or str(output_dir), "token": admin.token_status(connect) if connect else None,
             "key": admin.key_info(), "cache_bytes": admin.cache_size(cache), "cache_path": str(cache),
-            "test_versions": settings["test_versions"]}
+            "test_versions": settings["test_versions"], "via_server": settings["via_server"]}
 
   @app.put("/settings")
   def put_settings(c: SettingsChange):
