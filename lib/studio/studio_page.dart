@@ -29,6 +29,15 @@ const choiceLabels = {
 
 String choiceLabel(String c) => choiceLabels[c] ?? '${c[0].toUpperCase()}${c.substring(1)}';
 
+/// how much of a running render's clip exists, e.g. "Made so far: 0:31 of 2:00"
+String madeSoFar(Map<String, dynamic> job) {
+  final done = ((job['progress'] as num?) ?? 0).toDouble();
+  final total = ((job['range'] as Map?)?['seconds'] as num?)?.toDouble();
+  if (total == null) return 'Made so far: ${(done * 100).round()}%';
+  String clock(double s) => '${s ~/ 60}:${(s.floor() % 60).toString().padLeft(2, '0')}';
+  return 'Made so far: ${clock(done * total)} of ${clock(total)}';
+}
+
 /// A drive's distance in the comma's own units; km when the comma cannot be reached to ask
 String distanceLabel(double km, bool? metric) =>
     metric == false ? '${(km / 1.609344).toStringAsFixed(1)} miles' : '${km.toStringAsFixed(1)} km';
@@ -263,6 +272,7 @@ class _StudioPageState extends State<StudioPage> {
   void dispose() {
     _poll?.cancel();
     _updater.dispose();
+    _jobPolled.dispose();
     _sidecar?.stop();
     super.dispose();
   }
@@ -328,6 +338,7 @@ class _StudioPageState extends State<StudioPage> {
         setState(() {
           _job = j;
           _showSnapshot(snapshot);
+          _jobPolled.value++;
           if (j['state'] == 'done' && j['preview'] == true) _previewFile = j['job_file'] as String?;
         });
         if (j['state'] != 'running') t.cancel();
@@ -359,6 +370,9 @@ class _StudioPageState extends State<StudioPage> {
     _snapshot = bytes;
   }
 
+  /// counts the job's updates, for the Cancel question, which is outside this page's own rebuilds
+  final _jobPolled = ValueNotifier(0);
+
   /// once a render has made frames, Cancel asks whether to keep them as a shorter clip, throw them away, or carry on (in
   /// case Cancel was pressed by mistake). The render keeps going while the question is open.
   Future<void> _cancel() async {
@@ -370,8 +384,13 @@ class _StudioPageState extends State<StudioPage> {
               context: context,
               builder: (context) => AlertDialog(
                 title: const Text('Stop the render?'),
-                content: const Text('You can keep the part made so far as a shorter clip, with "(partial)" added to its name, '
-                    'or throw it away.'),
+                content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('You can keep the part made so far as a shorter clip, with "(partial)" added to its name, '
+                      'or throw it away.'),
+                  const SizedBox(height: 12),
+                  // the render carries on behind the question, so this keeps up with it
+                  ValueListenableBuilder(valueListenable: _jobPolled, builder: (_, __, ___) => Text(madeSoFar(_job ?? const {}))),
+                ]),
                 actions: [
                   TextButton(onPressed: () => Navigator.pop(context, 'continue'), child: const Text('Keep rendering')),
                   TextButton(onPressed: () => Navigator.pop(context, 'discard'), child: const Text('Discard')),

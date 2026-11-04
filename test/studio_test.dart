@@ -112,7 +112,7 @@ void main() {
           if (req.uri.path.endsWith('/cancel') || req.uri.path.endsWith('/finish')) asked.add(req.uri.path);
           body = {'id': 'a', 'state': state, 'message': state == 'running' ? 'frame 40 of 100 after 2 s, segment 0, 0:02' : 'finished',
               'progress': state == 'running' ? 0.4 : 1.0, 'output': '/tmp/x.mp4', 'error': null, 'preview': false,
-              'snapshot': state == 'running' ? shot.path : null};
+              'snapshot': state == 'running' ? shot.path : null, 'range': {'seconds': 100.0}};
         } else {
           body = {'ok': true};
         }
@@ -147,6 +147,7 @@ void main() {
     await tester.tap(find.text('Cancel'));
     await tester.pump();
     expect(find.text('Stop the render?'), findsOneWidget);
+    expect(find.text('Made so far: 0:40 of 1:40'), findsOneWidget); // 40% of a 100 s range
     await tester.tap(find.text('Keep rendering'));
     await tester.pump();
     expect(find.text('Stop the render?'), findsNothing);

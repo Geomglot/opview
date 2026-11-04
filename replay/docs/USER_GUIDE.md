@@ -104,7 +104,7 @@ PC yet; in a virtual machine with no graphics card it took about 3.5 minutes per
   progress bar says which segment and how far into it.
 - Clips go to your Movies folder on a Mac, or your Videos folder on Windows, unless you pick a different folder in App
   settings, or an **Output file** with **Choose...**.
-- **Cancel** asks what to do with the part made so far:
+- **Cancel** asks what to do with the part made so far, and shows how much that is:
   - **Save what's done** finishes the clip where the render has got to, and saves it with "(partial)" added to its
     name. It never replaces an earlier clip.
   - **Discard** stops and saves nothing.
