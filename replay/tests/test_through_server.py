@@ -112,6 +112,65 @@ def test_the_copy_through_the_server_counts_what_has_arrived(monkeypatch, tmp_pa
   assert said == ["fetching fcamera.hevc from the comma through comma's server: 1 of 4 MB"]
 
 
+def test_a_copy_stopped_part_way_marks_its_file_and_connect_then_downloads_it_whole(monkeypatch, tmp_path, through):
+  from oprivview_replay.sources import ConnectSource, incomplete_marker
+
+  monkeypatch.setattr(ssh_source, "remote_sizes", lambda host, paths: {"r--0/rlog.zst": 10, "r--0/fcamera.hevc": 6})
+  cache = tmp_path / "cache"
+
+  class Cancelled(Exception):
+    pass
+
+  def stopped(host, route, segments, files, c, tick):
+    (c / "r" / "0").mkdir(parents=True)
+    (c / "r" / "0" / "rlog.zst").write_bytes(b"part")  # rsync keeps a stopped copy under the file's own name
+    (c / "r" / "0" / "fcamera.hevc").write_bytes(b"whole!")
+    raise Cancelled()
+
+  monkeypatch.setattr(ssh_source, "fetch", stopped)
+  with pytest.raises(Cancelled):
+    DeviceSource(through).fetch("r", [0], ("rlog.zst", "fcamera.hevc"), cache, progress=lambda t: None)
+  log = cache / "r" / "0" / "rlog.zst"
+  assert incomplete_marker(log).exists() and not incomplete_marker(cache / "r" / "0" / "fcamera.hevc").exists()
+
+  # Connect, later: the marked file comes down again, the whole one is left alone
+  connect = ConnectSource(tmp_path / "no-token")
+  monkeypatch.setattr(connect, "_urls", lambda route: {"logs": {0: "https://x/rlog"}, "cameras": {0: "https://x/fcam"}})
+  got = []
+
+  class Body:
+    def __init__(self, url):
+      got.append(url)
+      self.left = b"0123456789"
+
+    def read(self, n):
+      chunk, self.left = self.left, b""
+      return chunk
+
+    def __enter__(self):
+      return self
+
+    def __exit__(self, *a):
+      return False
+
+  monkeypatch.setattr("oprivview_replay.sources.urllib.request.urlopen", lambda url, **k: Body(url))
+  connect.fetch("r", [0], ("rlog.zst", "fcamera.hevc"), cache)
+  assert got == ["https://x/rlog"] and log.read_bytes() == b"0123456789" and not incomplete_marker(log).exists()
+
+
+def test_a_copy_through_the_server_that_finishes_clears_the_marks(monkeypatch, tmp_path, through):
+  from oprivview_replay.sources import incomplete_marker
+
+  monkeypatch.setattr(ssh_source, "remote_sizes", lambda host, paths: {"r--0/rlog.zst": 4})
+  log = tmp_path / "r" / "0" / "rlog.zst"
+  log.parent.mkdir(parents=True)
+  log.write_bytes(b"pa")
+  incomplete_marker(log).touch()
+  monkeypatch.setattr(ssh_source, "fetch", lambda host, route, segments, files, c, tick: log.write_bytes(b"part"))
+  DeviceSource(through).fetch("r", [0], ("rlog.zst",), tmp_path)
+  assert not incomplete_marker(log).exists()
+
+
 @pytest.mark.parametrize("device, setting, allowed", [
   ({"dongle_id": DONGLE, "prime": True, "is_owner": True}, True, True),
   ({"dongle_id": DONGLE, "prime": False, "is_owner": True}, True, False),  # the server needs prime

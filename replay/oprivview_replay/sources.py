@@ -87,22 +87,37 @@ class DeviceSource:
   def fetch(self, route: str, segments: list[int], names: tuple[str, ...], cache: Path,
             progress: Callable[[str], None] | None = None) -> None:
     """[progress] is told, about once a second, how much of a copy through comma's server has arrived"""
-    tick = None
-    if self.through_server and progress is not None:
-      tick = self._counter(route, segments, names, cache, progress)
-    try:
-      ssh_source.fetch(self.host, route, segments, names, cache, tick)
-    except subprocess.CalledProcessError as e:
-      where = "the comma through comma's server" if self.through_server else self.host
-      raise SourceError(f"could not copy {', '.join(names)} from {where}: {e}")
-
-  def _counter(self, route: str, segments: list[int], names: tuple[str, ...], cache: Path,
-               progress: Callable[[str], None]) -> Callable[[], None]:
-    """what has arrived is whatever the drive's folders have grown by since the copy began, partial files included"""
+    if not self.through_server:
+      try:
+        ssh_source.fetch(self.host, route, segments, names, cache)
+      except subprocess.CalledProcessError as e:
+        raise SourceError(f"could not copy {', '.join(names)} from {self.host}: {e}")
+      return
     try:
       sizes = ssh_source.remote_sizes(self.host, [f"{route}--{s}/{n}" for s in segments for n in names])
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
       sizes = {}
+    tick = self._counter(route, segments, names, cache, progress, sizes) if progress is not None else None
+    try:
+      ssh_source.fetch(self.host, route, segments, names, cache, tick)
+    except BaseException as e:
+      # a copy stopped part-way (Cancel, or the comma dropping off) keeps what came, under the file's own name, for the
+      # next copy from the comma to finish. Mark those files, so that a download from Connect does not take them as whole.
+      for s in segments:
+        for n in names:
+          f = cache / route / str(s) / n
+          if f.exists() and f.stat().st_size != sizes.get(f"{route}--{s}/{n}"):
+            incomplete_marker(f).touch()
+      if isinstance(e, subprocess.CalledProcessError):
+        raise SourceError(f"could not copy {', '.join(names)} from the comma through comma's server: {e}")
+      raise
+    for s in segments:
+      for n in names:
+        incomplete_marker(cache / route / str(s) / n).unlink(missing_ok=True)
+
+  def _counter(self, route: str, segments: list[int], names: tuple[str, ...], cache: Path,
+               progress: Callable[[str], None], sizes: dict[str, int]) -> Callable[[], None]:
+    """what has arrived is whatever the drive's folders have grown by since the copy began, partial files included"""
 
     def here(s: int, n: str) -> int:
       f = cache / route / str(s) / n
@@ -122,6 +137,11 @@ class DeviceSource:
       done = min(max(held() - start, 0), total)
       progress(f"fetching {', '.join(names)} from the comma through comma's server: {done / 1e6:.0f} of {total / 1e6:.0f} MB")
     return tick
+
+
+def incomplete_marker(file: Path) -> Path:
+  """beside a file a copy from the comma left part-way; while it is there the file is not to be used as it is"""
+  return file.with_name(file.name + ".incomplete")
 
 
 class ConnectSource:
@@ -254,7 +274,8 @@ class ConnectSource:
     for seg in segments:
       for name in names:
         dest = cache / route / str(seg) / name
-        if dest.exists():
+        # a file a copy from the comma left part-way is downloaded again in full
+        if dest.exists() and not incomplete_marker(dest).exists():
           continue
         dest.parent.mkdir(parents=True, exist_ok=True)
         part = dest.with_name(dest.name + ".part")
@@ -265,4 +286,5 @@ class ConnectSource:
         except (urllib.error.URLError, TimeoutError, OSError) as e:
           part.unlink(missing_ok=True)
           raise SourceError(f"download of {name} for segment {seg} failed: {getattr(e, 'reason', e)}")
-        part.rename(dest)
+        part.replace(dest)  # over a part-way copy, if there is one
+        incomplete_marker(dest).unlink(missing_ok=True)

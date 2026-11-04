@@ -101,8 +101,15 @@ def _copy(command: list[str], cwd: Path | None = None, tick: Callable[[], None] 
         if tick:
           tick()
   except BaseException:
-    proc.kill()
-    proc.wait()
+    # asked to stop rather than killed: rsync then keeps what it has under the file's own name, and the next copy only
+    # sends the rest. Killed, it leaves a hidden temporary file that nothing reuses. (On Windows both are the same, and
+    # scp's part-copy stays in the holding folder.)
+    proc.terminate()
+    try:
+      proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+      proc.kill()
+      proc.wait()
     raise
   if proc.returncode != 0:
     raise subprocess.CalledProcessError(proc.returncode, command)
