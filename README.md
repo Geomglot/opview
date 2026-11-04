@@ -192,13 +192,16 @@ copies.
 - **Android Auto / Apple CarPlay:** not supported. Both restrict apps to navigation, media, messaging
   or EV charging categories with template UIs and no custom drawing.
 
-## OPRivView Replay (Mac)
+## OPRivView Replay (Mac and Windows)
 
-A separate Mac app, in the [`replay/`](replay) folder, that plays a drive back as it looked on the OPRivView screen and saves
-it as an MP4. It draws with this app's own screen layouts, so it lives in the same branch. Test versions are on the
-[releases page](https://github.com/Geomglot/opview/releases) (names starting `replay-`). To use it, see the
-[install guide](replay/docs/INSTALL.md) and the [user guide](replay/docs/USER_GUIDE.md). Notes for working on it are in
-[replay/README.md](replay/README.md).
+A separate app for Macs and Windows PCs, in the [`replay/`](replay) folder, that plays a drive back as it looked on the
+OPRivView screen and saves it as an MP4. It draws with this app's own screen layouts, so it lives in the same branch. Test
+versions are on the [releases page](https://github.com/Geomglot/opview/releases) (names starting `replay-`). To use it, see
+the install guide for the [Mac](replay/docs/INSTALL.md) or [Windows](replay/docs/INSTALL-WINDOWS.md), and the
+[user guide](replay/docs/USER_GUIDE.md). Notes for working on it are in [replay/README.md](replay/README.md).
+
+OPRivView Replay is an independent project. It is not made or endorsed by comma.ai. It uses your own comma Connect sign-in,
+and for reaching the comma away from home, your own comma prime subscription.
 
 ## Branches
 

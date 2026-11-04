@@ -9,6 +9,9 @@ it, see the install guide for the [Mac](INSTALL.md) or for [Windows](INSTALL-WIN
 
 The **?** button above the drive list opens this guide and the install guide.
 
+OPRivView Replay is an independent project. It is not made or endorsed by comma.ai. It uses your own comma Connect sign-in,
+and for reaching the comma away from home, your own comma prime subscription.
+
 ## Getting your drives into the app
 
 The app can read drives from four places. You only need one.
