@@ -271,6 +271,16 @@ class _AdminPageState extends State<AdminPage> {
         OutlinedButton(onPressed: _clearCache, child: const Text('Clear stored drives')),
       ]);
 
+  Widget _updatesSection(Map<String, dynamic> s) => _section('Updates', [
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Include test versions'),
+          subtitle: const Text('Offer test versions as well as final ones. The ? menu has Check for updates.'),
+          value: s['test_versions'] as bool? ?? true,
+          onChanged: (on) => _change({'test_versions': on}),
+        ),
+      ]);
+
   @override
   Widget build(BuildContext context) {
     final s = _s;
@@ -291,6 +301,7 @@ class _AdminPageState extends State<AdminPage> {
                         _tokenSection(s),
                         _outputSection(),
                         _storageSection(s),
+                        _updatesSection(s),
                       ])))),
     );
   }

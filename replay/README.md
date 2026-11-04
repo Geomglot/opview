@@ -127,6 +127,14 @@ listing the commits since the previous replay tag. Nothing is public until the d
   to the draft with `gh release upload <tag> <dmg> --clobber`, updating `SHA256SUMS` to match.
 - Bump `replay/VERSION` in its own commit once a version is released, before the next one's first test tag.
 
+The app's updater (`lib/studio/replay_updater.dart`) reads the 20 newest releases, keeps `replay-v*` tags whose version
+parses (`0.1.2`, `0.1.2-test.3`; tests come before the final version), skips test versions when **Include test versions**
+is off (`test_versions` in the settings), and picks the file named for this computer (`-Windows.exe`, or `-macOS-ARM.dmg`
+/ `-macOS-Intel.dmg` by `sysctl hw.optional.arm64`). The download is checked against GitHub's SHA-256 of the file, or
+`SHA256SUMS`. Windows runs the installer with `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /RELAUNCH` and quits; the Mac shows
+the disk image in the Finder for now. `-dev` builds never update. To try an update against a releases list of your own,
+set `OPRIVVIEW_RELEASES_URL` to a URL serving JSON in the same form as GitHub's.
+
 ## Where files come from, and how much detail
 
 Drives are listed from the comma (over SSH) and from comma Connect (the token in `~/.comma/jwt`) together. A drive

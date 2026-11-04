@@ -13,6 +13,7 @@ DEFAULTS: dict = {
   "dongle": None,  # which device on the comma account; None means the first one the account owns
   "output_dir": None,  # None means the Movies folder (Videos on Windows)
   "added": [],  # public drives and devices of other people: "dongle|route" or "dongle"
+  "test_versions": True,  # whether the app's updater offers test versions (pre-releases) as well as final ones
 }
 
 

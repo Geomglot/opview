@@ -47,8 +47,9 @@ Settings, Apps, Optional features, choose **Add a feature** (or **View features*
 
 ## Updating
 
-Download the new installer and open it, as above. It replaces the old version, closing the app first if it is open.
-Your settings and stored drives are kept, because they are not in the app's folder.
+From version 0.1.2 the app offers new versions itself: see Updates in the [user guide](USER_GUIDE.md#updates). You can
+also download the new installer and open it, as above. Either way it replaces the old version, closing the app first if
+it is open. Your settings and stored drives are kept, because they are not in the app's folder.
 
 ## Removing it
 
@@ -79,6 +80,6 @@ Explorer**, and rendering speed on a real PC has not been measured yet. Please t
   install the Media Feature Pack.
 - **The app says the replay server did not start.** Close it and open it again. If that does not help, please report it.
 
-To report a problem, use the [issues page](https://github.com/Geomglot/opview/issues) and say which version of the app and of
-Windows you have, your graphics card, and what you were doing. Check screenshots before you post them, because they can
-show licence plates.
+To report a problem, use the [issues page](https://github.com/Geomglot/opview/issues) and say which version of the app
+(at the bottom of its **?** menu) and of Windows you have, your graphics card, and what you were doing. Check
+screenshots before you post them, because they can show licence plates.

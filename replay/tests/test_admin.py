@@ -116,6 +116,12 @@ def test_settings_survive_a_restart_and_a_bare_address_is_completed(tmp_path):
   assert got["host"] == "comma@192.168.4.38" and got["output_dir"] == "/tmp/clips"
 
 
+def test_test_versions_are_offered_until_turned_off(tmp_path):
+  assert _client(tmp_path).get("/settings").json()["test_versions"] is True
+  assert _client(tmp_path).put("/settings", json={"test_versions": False}).json()["test_versions"] is False
+  assert _client(tmp_path).get("/settings").json()["test_versions"] is False  # kept across a restart
+
+
 def test_the_cache_can_be_cleared_but_not_during_a_job(tmp_path):
   c = _client(tmp_path)
   (tmp_path / "cache" / "route" / "0").mkdir(parents=True)

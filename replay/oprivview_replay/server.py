@@ -46,6 +46,7 @@ class SettingsChange(BaseModel):
   host: str | None = None
   dongle: str | None = None
   output_dir: str | None = None
+  test_versions: bool | None = None
 
 
 class Address(BaseModel):
@@ -274,7 +275,8 @@ def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Pat
         pass
     return {"host": sources.device.host, "dongle": connect.dongle() if devices else settings["dongle"], "devices": devices,
             "output_dir": settings["output_dir"] or str(output_dir), "token": admin.token_status(connect) if connect else None,
-            "key": admin.key_info(), "cache_bytes": admin.cache_size(cache), "cache_path": str(cache)}
+            "key": admin.key_info(), "cache_bytes": admin.cache_size(cache), "cache_path": str(cache),
+            "test_versions": settings["test_versions"]}
 
   @app.put("/settings")
   def put_settings(c: SettingsChange):

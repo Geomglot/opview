@@ -112,6 +112,19 @@ Drives you open are kept on your computer so they open faster next time. They ca
 They also include your camera video and GPS positions. **Clear stored drives** in App settings removes them, and shows how
 much space they take. Your saved clips are not touched.
 
+## Updates
+
+From version 0.1.2, the app checks for a newer version when it opens, and **Check for updates** in the **?** menu checks
+again. When there is one, it shows what is new and offers **Update**; **Later** leaves it for now. It does not update
+while a render or preview is running.
+
+- On Windows, Update downloads the new installer, closes the app, installs the new version and opens it again.
+- On a Mac, Update downloads the new disk image and shows it in the Finder. Open it, quit the app, and drag the new app
+  over the old one in Applications.
+
+Test versions are offered as well as final ones unless you turn off **Include test versions** under Updates in App
+settings. Your settings and stored drives are kept. The **?** menu also shows which version you have.
+
 ## Known limits in this version
 
 - A drive deleted from the comma is available only as what Connect kept. Requesting the full files back from the comma through
@@ -121,4 +134,3 @@ much space they take. Your saved clips are not touched.
 - The Automatic wide camera rule has not yet been checked on a real experimental mode drive.
 - The OPRivView app takes a second or two to change cameras while driving. The replay changes at once.
 - Public drives from other forks of openpilot may not decode.
-- There is no automatic update. New versions are on the [releases page](https://github.com/Geomglot/opview/releases).

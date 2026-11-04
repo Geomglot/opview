@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:opview/studio/admin_page.dart';
 import 'package:opview/studio/desktop.dart';
 import 'package:opview/studio/preview_player.dart';
+import 'package:opview/studio/replay_updater.dart';
 import 'package:opview/studio/sidecar.dart';
 import 'package:opview/studio/studio_api.dart';
 import 'package:opview/studio/version.dart';
@@ -78,6 +79,7 @@ class _StudioPageState extends State<StudioPage> {
   Map<String, dynamic>? _job;
   String? _previewFile; // set once the server has prepared a preview, which starts playing
   Timer? _poll;
+  final _updater = ReplayUpdater();
 
   @override
   void initState() {
@@ -157,6 +159,12 @@ class _StudioPageState extends State<StudioPage> {
         }
       });
       await _loadRoutes();
+      // an update quits the app: stop the server first, as closing the window does
+      quitForUpdate = () {
+        _sidecar?.stop();
+        exit(0);
+      };
+      unawaited(_checkForUpdate(quiet: true));
     } catch (e) {
       setState(() => _fatal = '$e');
     }
@@ -171,9 +179,80 @@ class _StudioPageState extends State<StudioPage> {
     });
   }
 
+  /// ask GitHub for a newer version, and offer it; [quiet] (at start) says nothing unless there is one
+  Future<void> _checkForUpdate({bool quiet = false}) async {
+    void say(String text) {
+      if (!quiet && mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+    }
+
+    if (!_updater.enabled) {
+      say('This is a local build (${replayVersion.isEmpty ? 'no version' : replayVersion}), so it does not update itself.');
+      return;
+    }
+    bool includeTests = true;
+    try {
+      includeTests = (await _sidecar!.api.settings())['test_versions'] as bool? ?? true;
+    } catch (_) {
+      // the setting could not be read; offering test versions is the default
+    }
+    await _updater.check(includeTests: includeTests);
+    if (!mounted) return;
+    switch (_updater.status) {
+      case ReplayUpdateStatus.available:
+        await _offerUpdate();
+      case ReplayUpdateStatus.upToDate:
+        say('OPRivView Replay $replayVersion is the newest version.');
+      default:
+        say(_updater.message);
+    }
+  }
+
+  Future<void> _offerUpdate() async {
+    final release = _updater.latest!;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => ListenableBuilder(
+        listenable: _updater,
+        builder: (context, _) {
+          final busy = _updater.status == ReplayUpdateStatus.downloading || _updater.status == ReplayUpdateStatus.installing;
+          final rendering = _job?['state'] == 'running';
+          return AlertDialog(
+            title: Text('OPRivView Replay ${release.version} is available'),
+            content: SizedBox(
+                width: 560,
+                child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('You have $replayVersion.${release.prerelease ? ' This is a test version.' : ''}'),
+                  const SizedBox(height: 12),
+                  ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 280),
+                      child: SingleChildScrollView(child: SelectableText(plainNotes(release.notes), style: Theme.of(context).textTheme.bodySmall))),
+                  const SizedBox(height: 12),
+                  if (_updater.status == ReplayUpdateStatus.downloading && _updater.total > 0)
+                    LinearProgressIndicator(value: _updater.received / _updater.total),
+                  if (_updater.message.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_updater.message)),
+                  if (rendering) const Padding(padding: EdgeInsets.only(top: 8), child: Text('Finish or cancel the render or preview first.')),
+                ])),
+            actions: [
+              TextButton(onPressed: () => openOnDesktop(release.pageUrl), child: const Text('Release page')),
+              TextButton(
+                  onPressed: () {
+                    if (busy) _updater.cancel();
+                    Navigator.of(context).pop();
+                  },
+                  child: Text(busy ? 'Cancel' : 'Later')),
+              FilledButton(onPressed: busy || rendering ? null : _updater.downloadAndInstall, child: const Text('Update')),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _poll?.cancel();
+    _updater.dispose();
     _sidecar?.stop();
     super.dispose();
   }
@@ -315,10 +394,11 @@ class _StudioPageState extends State<StudioPage> {
               PopupMenuButton<String>(
                 tooltip: 'Help',
                 icon: const Icon(Icons.help_outline),
-                onSelected: openOnDesktop,
+                onSelected: (v) => v == 'update' ? _checkForUpdate() : openOnDesktop(v),
                 itemBuilder: (_) => [
                   PopupMenuItem(value: '$guidesUrl/USER_GUIDE.md', child: const Text('User guide')),
                   PopupMenuItem(value: '$guidesUrl/${Platform.isWindows ? 'INSTALL-WINDOWS.md' : 'INSTALL.md'}', child: const Text('Install guide')),
+                  const PopupMenuItem(value: 'update', child: Text('Check for updates')),
                   if (replayVersion.isNotEmpty) PopupMenuItem(enabled: false, child: Text('Version $replayVersion')),
                 ],
               ),
