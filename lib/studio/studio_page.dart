@@ -209,14 +209,15 @@ class _StudioPageState extends State<StudioPage> {
 
   Future<void> _offerUpdate() async {
     final release = _updater.latest!;
+    // read when Update is pressed rather than when the dialog was drawn, since a render can start or end meanwhile
+    final refused = ValueNotifier(false);
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (context) => ListenableBuilder(
-        listenable: _updater,
+        listenable: Listenable.merge([_updater, refused]),
         builder: (context, _) {
           final busy = _updater.status == ReplayUpdateStatus.downloading || _updater.status == ReplayUpdateStatus.installing;
-          final rendering = _job?['state'] == 'running';
           return AlertDialog(
             title: Text('OPRivView Replay ${release.version} is available'),
             content: SizedBox(
@@ -231,7 +232,7 @@ class _StudioPageState extends State<StudioPage> {
                   if (_updater.status == ReplayUpdateStatus.downloading && _updater.total > 0)
                     LinearProgressIndicator(value: _updater.received / _updater.total),
                   if (_updater.message.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_updater.message)),
-                  if (rendering) const Padding(padding: EdgeInsets.only(top: 8), child: Text('Finish or cancel the render or preview first.')),
+                  if (refused.value) const Padding(padding: EdgeInsets.only(top: 8), child: Text('Finish or cancel the render or preview first.')),
                 ])),
             actions: [
               TextButton(onPressed: () => openOnDesktop(release.pageUrl), child: const Text('Release page')),
@@ -241,12 +242,20 @@ class _StudioPageState extends State<StudioPage> {
                     Navigator.of(context).pop();
                   },
                   child: Text(busy ? 'Cancel' : 'Later')),
-              FilledButton(onPressed: busy || rendering ? null : _updater.downloadAndInstall, child: const Text('Update')),
+              FilledButton(
+                  onPressed: busy
+                      ? null
+                      : () {
+                          refused.value = _job?['state'] == 'running';
+                          if (!refused.value) _updater.downloadAndInstall();
+                        },
+                  child: const Text('Update')),
             ],
           );
         },
       ),
     );
+    refused.dispose();
   }
 
   @override
