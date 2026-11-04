@@ -7,6 +7,9 @@ There is a Mac app and a Windows app, built from the same code. To use one, see 
 [Mac](docs/INSTALL.md) or [Windows](docs/INSTALL-WINDOWS.md), and the [user guide](docs/USER_GUIDE.md). The rest of this
 page is for working on the code. Building for Windows is described [below](#building-for-windows).
 
+OPRivView Replay is an independent project. It is not made or endorsed by comma.ai. It uses your own comma Connect sign-in,
+and for reaching the comma away from home, your own comma prime subscription.
+
 ## Setup
 
 Needs Flutter, Xcode, ffmpeg and the `comma` host alias in `~/.ssh/config`.
