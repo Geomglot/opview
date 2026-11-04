@@ -117,26 +117,30 @@ class DeviceSource:
 
   def _counter(self, route: str, segments: list[int], names: tuple[str, ...], cache: Path,
                progress: Callable[[str], None], sizes: dict[str, int]) -> Callable[[], None]:
-    """what has arrived is whatever the drive's folders have grown by since the copy began, partial files included"""
+    """How much of each file is here, out of its size on the comma. A file can be in three places while it comes: under
+    its own name (whole, or kept from a copy stopped part-way), as rsync's hidden .<name>.<random> beside it, or in
+    scp's .part folder. The largest of them counts, so a resumed copy starts at what is already here and the count
+    never goes backwards when rsync's new copy replaces the old part."""
 
-    def here(s: int, n: str) -> int:
-      f = cache / route / str(s) / n
-      return f.stat().st_size if f.exists() else -1
+    def arrived(s: int, n: str, size: int) -> int:
+      folder = cache / route / str(s)
+      places = [folder / n, folder / ".part" / n, *(folder.glob(f".{n}.*") if folder.exists() else ())]
+      return min(size, max((_size(p) for p in places), default=0))
 
-    # only what still has to come: a file already whole here is skipped by the copy
-    total = sum(size for s in segments for n in names
-                if (size := sizes.get(f"{route}--{s}/{n}")) is not None and here(s, n) != size)
-    folders = [cache / route / str(s) for s in segments]
-
-    def held() -> int:
-      return sum(p.stat().st_size for f in folders if f.exists() for p in f.rglob("*") if p.is_file())
-
-    start = held()
+    wanted = [(s, n, size) for s in segments for n in names if (size := sizes.get(f"{route}--{s}/{n}")) is not None]
+    total = sum(size for _, _, size in wanted)
 
     def tick() -> None:
-      done = min(max(held() - start, 0), total)
+      done = sum(arrived(s, n, size) for s, n, size in wanted)
       progress(f"fetching {', '.join(names)} from the comma through comma's server: {done / 1e6:.0f} of {total / 1e6:.0f} MB")
     return tick
+
+
+def _size(path: Path) -> int:
+  try:
+    return path.stat().st_size
+  except OSError:  # not there, or renamed away by the copy just now
+    return 0
 
 
 def incomplete_marker(file: Path) -> Path:

@@ -112,6 +112,26 @@ def test_the_copy_through_the_server_counts_what_has_arrived(monkeypatch, tmp_pa
   assert said == ["fetching fcamera.hevc from the comma through comma's server: 1 of 4 MB"]
 
 
+def test_a_resumed_copy_counts_from_what_is_here_and_never_goes_backwards(monkeypatch, tmp_path, through):
+  monkeypatch.setattr(ssh_source, "remote_sizes", lambda host, paths: {"r--0/fcamera.hevc": 4_000_000})
+  folder = tmp_path / "r" / "0"
+  folder.mkdir(parents=True)
+  (folder / "fcamera.hevc").write_bytes(b"x" * 2_000_000)  # kept from a copy stopped part-way
+  said = []
+
+  def fetch(host, route, segments, files, cache, tick):
+    tick()
+    (folder / ".fcamera.hevc.Ab12Cd").write_bytes(b"x" * 3_000_000)  # rsync's new copy, beside the old part
+    tick()
+    (folder / ".fcamera.hevc.Ab12Cd").replace(folder / "fcamera.hevc")
+    (folder / "fcamera.hevc").write_bytes(b"x" * 4_000_000)
+    tick()
+
+  monkeypatch.setattr(ssh_source, "fetch", fetch)
+  DeviceSource(through).fetch("r", [0], ("fcamera.hevc",), tmp_path, progress=said.append)
+  assert [line.rsplit(": ", 1)[1] for line in said] == ["2 of 4 MB", "3 of 4 MB", "4 of 4 MB"]
+
+
 def test_a_copy_stopped_part_way_marks_its_file_and_connect_then_downloads_it_whole(monkeypatch, tmp_path, through):
   from oprivview_replay.sources import ConnectSource, incomplete_marker
 
