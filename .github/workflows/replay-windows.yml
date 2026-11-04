@@ -65,12 +65,14 @@ jobs:
           python -m venv .venv
           .venv\Scripts\python -m pip install -r requirements.txt
 
-      # with the ffmpeg just built on the PATH, so the tests that need ffmpeg (test_keyframe_cut.py) run too
+      # test_keyframe_cut.py makes its sample videos with ffmpeg's test pattern and H.265 encoder, which the app's own
+      # small ffmpeg leaves out; a full ffmpeg on the PATH serves the tests only, and is never put in the app
+      - name: Full ffmpeg for the tests
+        run: choco install ffmpeg -y --no-progress
+
       - name: Server tests
         working-directory: replay
-        run: |
-          $env:PATH = "$pwd\build\ffmpeg-win;$env:PATH"
-          .venv\Scripts\python -m pytest -q
+        run: .venv\Scripts\python -m pytest -q
 
       - uses: subosito/flutter-action@v2
         with:
