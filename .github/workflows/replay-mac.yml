@@ -50,6 +50,17 @@ jobs:
       - name: This runner is the kind of Mac the disk image is for
         run: test "$(uname -m)" = "$SIDE_ARCH"
 
+      # GitHub's Intel image (macos-15-intel) defaults to Xcode 16, whose SDK lacks what the Flutter plugins now use
+      # (connectivity_plus wants the macOS 26 SDK); the Apple silicon image already defaults to Xcode 26
+      - name: Xcode 26 on the Intel runner
+        if: env.MAC_ARCH == 'Intel'
+        run: |
+          ls -d /Applications/Xcode*.app
+          xcode=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -n1)
+          if [ -z "$xcode" ]; then echo "::error::this runner has no Xcode 26"; exit 1; fi
+          sudo xcode-select -s "$xcode"
+          xcodebuild -version
+
       # ffmpeg takes several minutes to build and only changes with its build script, so it is kept between runs
       - name: ffmpeg from the cache
         id: ffmpeg-cache
