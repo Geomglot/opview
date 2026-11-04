@@ -10,6 +10,7 @@ import 'package:opview/studio/desktop.dart';
 import 'package:opview/studio/preview_player.dart';
 import 'package:opview/studio/sidecar.dart';
 import 'package:opview/studio/studio_api.dart';
+import 'package:opview/studio/version.dart';
 
 // friendlier names for choices; anything not listed shows as it is
 const choiceLabels = {
@@ -47,9 +48,6 @@ class StudioPage extends StatefulWidget {
 
 // the native side of full screen: macos/Runner/MainFlutterWindow.swift
 const _window = MethodChannel('oprivview/window');
-
-/// where the guides are read: on GitHub, so they are always the current ones
-const guides = 'https://github.com/Geomglot/opview/blob/rivian-support/replay/docs';
 
 /// what a drive in the list can show
 String detailLabel(String detail) => switch (detail) {
@@ -319,8 +317,9 @@ class _StudioPageState extends State<StudioPage> {
                 icon: const Icon(Icons.help_outline),
                 onSelected: openOnDesktop,
                 itemBuilder: (_) => [
-                  const PopupMenuItem(value: '$guides/USER_GUIDE.md', child: Text('User guide')),
-                  PopupMenuItem(value: '$guides/${Platform.isWindows ? 'INSTALL-WINDOWS.md' : 'INSTALL.md'}', child: const Text('Install guide')),
+                  PopupMenuItem(value: '$guidesUrl/USER_GUIDE.md', child: const Text('User guide')),
+                  PopupMenuItem(value: '$guidesUrl/${Platform.isWindows ? 'INSTALL-WINDOWS.md' : 'INSTALL.md'}', child: const Text('Install guide')),
+                  if (replayVersion.isNotEmpty) PopupMenuItem(enabled: false, child: Text('Version $replayVersion')),
                 ],
               ),
             ])),

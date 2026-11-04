@@ -6,13 +6,17 @@
 # The Mac the release is for is ARCH, defaulting to the Mac doing the build, so building on
 # Apple silicon just works. Pass ARCH=Intel to build for the other kind of Mac; each release
 # folder is keyed on the arch, so a build for one Mac never reuses the other's ffmpeg.
+# The version is replay/VERSION with "-dev" on the end, which the app takes as a local build (its updater stays off).
+# The release workflow passes the full version, VERSION=0.1.2-test.1, and BUILD_NUMBER, its run number.
 APP_NAME   = OPRivView Replay.app
 REPO       = $(abspath ..)
 BUILT_APP  = $(REPO)/build/macos/Build/Products/Release/$(APP_NAME)
 OUT_APP    = dist/$(APP_NAME)
 PY         = .venv/bin/python
 INSTALL_DIR = /Applications
-VERSION    = $(shell grep '^version:' $(REPO)/pubspec.yaml | sed 's/version: *//; s/+.*//')
+BASE_VERSION := $(shell cat VERSION)
+VERSION    ?= $(BASE_VERSION)-dev
+BUILD_NUMBER ?= 1
 ARCH      ?= $(if $(filter x86_64,$(shell uname -m)),Intel,ARM)
 SIDE_ARCH  = $(if $(filter Intel,$(ARCH)),x86_64,arm64)
 FFMPEG     = build/ffmpeg-$(SIDE_ARCH)
@@ -70,8 +74,12 @@ sidecar: .venv
 	@echo "No .venv: run  python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt  first"
 	exit 1
 
+# --build-name and --build-number are what Get Info shows; they take numbers only, so the test number stays out of them
 flutter:
-	cd "$(REPO)" && flutter build macos --release -t lib/main_replay.dart
+	@case "$(VERSION)" in "$(BASE_VERSION)"|"$(BASE_VERSION)"-*) ;; \
+	  *) echo "VERSION=$(VERSION) does not start with replay/VERSION ($(BASE_VERSION))"; exit 1 ;; esac
+	cd "$(REPO)" && flutter build macos --release -t lib/main_replay.dart \
+	  --build-name=$(BASE_VERSION) --build-number=$(BUILD_NUMBER) --dart-define=OPRIVVIEW_REPLAY_VERSION=$(VERSION)
 
 install: app
 	rm -rf "$(INSTALL_DIR)/$(APP_NAME)"

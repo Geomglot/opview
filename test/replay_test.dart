@@ -6,6 +6,7 @@ import 'package:opview/replay/replay_job.dart';
 import 'package:opview/services/app_settings.dart';
 import 'package:opview/selfdrive/ui/ui_state.dart';
 import 'package:opview/studio/preview_player.dart';
+import 'package:opview/studio/version.dart';
 
 Map<String, dynamic> job(Map<String, dynamic> over) => {
       'clip': 'c', 'output': 'o', 'ffmpeg': 'f', 'encoder': 'e', 'video_inputs': ['a'], 'skip_frames': 0, 'frame_count': 1,
@@ -26,6 +27,12 @@ void main() {
       final r = RawFrameReader(Stream.fromIterable([[1, 2]]), 3);
       expect(await r.next(), isNull);
     });
+  });
+
+  test('a build with no release version reads the guides on the branch', () {
+    // tests run without --dart-define=OPRIVVIEW_REPLAY_VERSION, like a bare `flutter run`
+    expect(isReleaseBuild, isFalse);
+    expect(guidesUrl, 'https://github.com/Geomglot/opview/blob/rivian-support/replay/docs');
   });
 
   group('ReplayJob settings', () {
