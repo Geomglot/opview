@@ -18,6 +18,7 @@ from pydantic import BaseModel
 
 from . import admin, jobs, params, places, render, ssh_source
 from .settings import Settings
+from .uploads import UploadRequests
 from .sources import ConnectSource, DeviceSource, SourceError, parse_drive_ref
 from .cli import DEFAULT_APP, DEFAULT_CACHE
 from .logs import index_segment
@@ -48,6 +49,7 @@ class SettingsChange(BaseModel):
   output_dir: str | None = None
   test_versions: bool | None = None
   via_server: bool | None = None
+  keep_on_connect: bool | None = None
 
 
 class Address(BaseModel):
@@ -113,7 +115,32 @@ def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Pat
       return None
     return DeviceSource(ssh_source.ThroughServer(dongle, cache / "through-server"))
 
-  sources = jobs.Sources(DeviceSource(host or settings["host"]), connect, through_server=through_server)
+  upload_requests = UploadRequests(cache / "upload-requests.json")
+
+  def request_upload(route: str, files: list[tuple[int, str]]) -> str | None:
+    """ask the comma to put those of [files] that Connect lacks on Connect, unless "Keep a copy on comma Connect" is off,
+    or they were asked for in the last 7 days. Says what was done, for the job's note."""
+    if not settings["keep_on_connect"] or connect is None or not connect.available() or getattr(connect, "public", False):
+      return None
+    connect.forget_route(route)  # what Connect has now, not when the drive was listed
+    wanted = [(s, n) for s, n in files if connect.missing(route, [s], (n,))]
+    if not wanted:
+      return None
+    if upload_requests.asked_recently(route, wanted):
+      return "The comma was already asked to upload the full files to comma Connect."
+    result = connect.request_upload(route, wanted)
+    asked = [f for f in wanted if f not in result["missing"]]
+    if asked:
+      upload_requests.add(route, asked, result["offline"])
+    gone = f" The comma no longer has {len(result['missing'])} of them." if result["missing"] else ""
+    if not asked:
+      return "The comma no longer has the full files of this range, so they cannot be put on comma Connect."
+    if result["offline"]:
+      return f"Asked the comma to upload the full files to comma Connect when it is next online.{gone}"
+    return f"Asked the comma to upload the full files to comma Connect, on an unmetered connection.{gone}"
+
+  sources = jobs.Sources(DeviceSource(host or settings["host"]), connect, through_server=through_server,
+                         request_upload=request_upload)
   public_sources: dict[str, ConnectSource] = {}
   state: dict[str, dict] = {}
   renderers: dict[str, object] = {}  # job -> its running renderer process
@@ -232,7 +259,11 @@ def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Pat
     output = _chosen_output(req.output) if req.output else default_output(folder, resolved.describe(), req.route)
     job_id = uuid.uuid4().hex[:8]
     state[job_id] = {"id": job_id, "state": "running", "message": "starting", "progress": None, "output": str(output), "error": None, "preview": req.preview, "job_file": None, "snapshot": None, "stopping": False,
-                     "question": None, "range": resolved.describe()}
+                     "question": None, "note": None, "range": resolved.describe()}
+
+    def note(text: str) -> None:
+      with lock:
+        state[job_id]["note"] = text
 
     def ask(question: str) -> bool:
       """wait for the window to answer [question] (POST /jobs/{id}/answer); Cancel ends the wait, and the job"""
@@ -269,7 +300,7 @@ def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Pat
         if not req.preview:
           output.parent.mkdir(parents=True, exist_ok=True)
         made = jobs.render_resolved(resolved, sources, cache, options, output, renderer, progress, preview=req.preview,
-                                    started=lambda p: renderers.__setitem__(job_id, p), ask=ask)
+                                    started=lambda p: renderers.__setitem__(job_id, p), ask=ask, note=note)
         with lock:
           if state[job_id]["state"] != "running":
             pass
@@ -351,7 +382,8 @@ def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Pat
     return {"host": sources.device.host, "dongle": connect.dongle() if devices else settings["dongle"], "devices": devices,
             "output_dir": settings["output_dir"] or str(output_dir), "token": admin.token_status(connect) if connect else None,
             "key": admin.key_info(), "cache_bytes": admin.cache_size(cache), "cache_path": str(cache),
-            "test_versions": settings["test_versions"], "via_server": settings["via_server"]}
+            "test_versions": settings["test_versions"], "via_server": settings["via_server"],
+            "keep_on_connect": settings["keep_on_connect"]}
 
   @app.put("/settings")
   def put_settings(c: SettingsChange):
@@ -415,6 +447,34 @@ def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Pat
   def remove_drive(d: Drive):
     settings.update(added=[e for e in settings["added"] if e != d.text])
     return {"ok": True}
+
+  @app.get("/uploads/{route}")
+  def upload_status(route: str):
+    """How an upload to Connect the app asked for is going, for the drive pane: how many of the files Connect has now,
+    and what the comma says about its queue (it may not answer while offline). Once Connect has them all the request is
+    forgotten and "done" is true once, so the window can list the drive again at its new detail."""
+    asked = upload_requests.get(route)
+    if asked is None or connect is None:
+      return {"requested": False}
+    files = [tuple(f) for f in asked["files"]]
+    connect.forget_route(route)
+    try:
+      still = [(s, n) for s, n in files if connect.missing(route, [s], (n,))]
+    except SourceError:
+      still = files
+    out = {"requested": True, "at": asked["at"], "files": len(files), "uploaded": len(files) - len(still), "done": not still}
+    if not still:
+      upload_requests.drop(route)
+      return out
+    queue = connect.upload_queue()
+    mine = [q for q in queue or [] if q["route"] == route]
+    current = next((q for q in mine if q["current"]), None)
+    out.update(answered=queue is not None, queued=len(mine),
+               current={"segment": current["segment"], "file": current["file"], "progress": current["progress"]} if current else None)
+    if mine and current is None:  # queued but not going: say whether the comma is holding back for a metered connection
+      network = connect.network()
+      out["metered"] = None if network is None else network["metered"]
+    return out
 
   @app.get("/jobs/{job_id}")
   def job(job_id: str):

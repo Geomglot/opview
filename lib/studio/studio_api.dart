@@ -122,6 +122,9 @@ class StudioApi {
 
   Future<void> removeDrive(String entry) async => await _call('POST', '/drives/remove', {'text': entry});
 
+  /// how an upload of [route]'s full files to Connect, asked for by the app, is going (server.py upload_status)
+  Future<Map<String, dynamic>> uploadStatus(String route) async => await _call('GET', '/uploads/$route');
+
   Future<Map<String, dynamic>> settings() async => await _call('GET', '/settings');
 
   Future<Map<String, dynamic>> changeSettings(Map<String, Object?> changes) async => await _call('PUT', '/settings', changes);

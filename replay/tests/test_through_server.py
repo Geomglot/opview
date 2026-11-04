@@ -336,7 +336,7 @@ def test_the_window_answers_the_job_s_question_and_cancel_ends_the_wait(monkeypa
   _resolved(monkeypatch, tmp_path)
   answers = []
 
-  def fake_render(resolved, sources, cache, settings, output, app, progress, preview=False, started=None, ask=None):
+  def fake_render(resolved, sources, cache, settings, output, app, progress, preview=False, started=None, ask=None, note=None):
     answers.append(ask("Copy now?"))
     answers.append(ask("Again?"))
 

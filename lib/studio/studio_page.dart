@@ -29,6 +29,23 @@ const choiceLabels = {
 
 String choiceLabel(String c) => choiceLabels[c] ?? '${c[0].toUpperCase()}${c.substring(1)}';
 
+/// one line for the drive pane about an upload to Connect the app asked the comma for; null when there is none
+String? uploadLine(Map<String, dynamic>? u) {
+  if (u == null || u['requested'] != true) return null;
+  if (u['done'] == true) return 'The full files are on comma Connect now.';
+  final head = 'Upload to comma Connect: ${u['uploaded']} of ${u['files']} files there';
+  final current = u['current'] as Map<String, dynamic>?;
+  if (current != null) {
+    return '$head. Uploading ${current['file']} of segment ${current['segment']}: '
+        '${(((current['progress'] as num?) ?? 0) * 100).round()}%.';
+  }
+  if (u['answered'] == false) return '$head. The comma is not answering; it uploads once it is online.';
+  if (((u['queued'] as num?) ?? 0) > 0) {
+    return u['metered'] == true ? '$head. The comma is waiting for an unmetered connection.' : "$head. Waiting in the comma's upload queue.";
+  }
+  return '$head. Waiting for comma Connect to list the uploaded files.';
+}
+
 /// how much of a running render's clip exists, e.g. "Made so far: 0:31 of 2:00"
 String madeSoFar(Map<String, dynamic> job) {
   final done = ((job['progress'] as num?) ?? 0).toDouble();
@@ -273,6 +290,7 @@ class _StudioPageState extends State<StudioPage> {
     _poll?.cancel();
     _updater.dispose();
     _jobPolled.dispose();
+    _uploadPoll?.cancel();
     _sidecar?.stop();
     super.dispose();
   }
@@ -341,7 +359,10 @@ class _StudioPageState extends State<StudioPage> {
           _jobPolled.value++;
           if (j['state'] == 'done' && j['preview'] == true) _previewFile = j['job_file'] as String?;
         });
-        if (j['state'] != 'running') t.cancel();
+        if (j['state'] != 'running') {
+          t.cancel();
+          _watchUpload(); // the job may have asked the comma to upload this drive's full files
+        }
         final question = j['state'] == 'running' ? j['question'] as String? : null;
         if (question != null && !_asking && _answered != j['id']) unawaited(_ask(j['id'] as String, question));
       });
@@ -398,6 +419,34 @@ class _StudioPageState extends State<StudioPage> {
     if (identical(old, bytes)) return;
     if (old != null) imageCache.evict(MemoryImage(old));
     _snapshot = bytes;
+  }
+
+  Map<String, dynamic>? _upload; // how an upload of the selected drive's full files to Connect is going
+  Timer? _uploadPoll;
+
+  /// Look at the selected drive's upload to Connect, if the app asked for one, and keep looking every 15 s until it is
+  /// done. Asking the comma takes a few seconds, more while it is offline, so it is not done more often.
+  void _watchUpload() {
+    _uploadPoll?.cancel();
+    final route = _route;
+    if (route == null || route.addedAs != null || _sidecar == null) return;
+    Future<void> look() async {
+      Map<String, dynamic> u;
+      try {
+        u = await _sidecar!.api.uploadStatus(route.route);
+      } on Object {
+        return; // the server is busy or gone; the next look may do better
+      }
+      if (!mounted || _route?.route != route.route) return;
+      setState(() => _upload = u);
+      if (u['requested'] != true || u['done'] == true) {
+        _uploadPoll?.cancel();
+        if (u['done'] == true) await _loadRoutes(); // the drive now lists at full detail
+      }
+    }
+
+    unawaited(look());
+    _uploadPoll = Timer.periodic(const Duration(seconds: 15), (_) => look());
   }
 
   /// counts the job's updates, for the Cancel question, which is outside this page's own rebuilds
@@ -550,6 +599,8 @@ class _StudioPageState extends State<StudioPage> {
                 _resolveError = null;
                 _job = null;
                 _previewFile = null; // the old preview belongs to the drive that was selected before
+                _upload = null;
+                _watchUpload();
               }),
             ),
         ])),
@@ -562,6 +613,8 @@ class _StudioPageState extends State<StudioPage> {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text(route == null ? 'Choose a drive from the list' : route.localStart ?? route.route, style: Theme.of(context).textTheme.titleLarge),
       if (route?.localStart != null) Text(route!.route, style: small),
+      if (uploadLine(_upload) != null)
+        Padding(padding: const EdgeInsets.only(top: 6), child: Text(uploadLine(_upload)!, style: small?.copyWith(color: Colors.lightBlueAccent))),
       const SizedBox(height: 16),
       _rangeRow('Start', _start, route),
       _rangeRow('End', _end, route),
@@ -712,6 +765,8 @@ class _StudioPageState extends State<StudioPage> {
           const SizedBox(height: 6),
           Text(state == 'failed' ? 'Failed: ${j['error']}' : state == 'cancelled' ? 'Stopped. No clip was saved.' : j['preview'] == true && state == 'done' ? '' : '${j['message']}',
               style: TextStyle(color: state == 'failed' ? Colors.red : null)),
+          // e.g. that the comma was asked to put the full files on Connect; it stays after the job
+          if (j['note'] != null) Text('${j['note']}', style: Theme.of(context).textTheme.bodySmall),
           if (state == 'done' && j['preview'] != true)
             Row(children: [
               Expanded(child: SelectableText(j['output'])),

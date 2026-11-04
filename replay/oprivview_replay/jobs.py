@@ -20,6 +20,8 @@ class Sources:
   through_server: Callable[[], DeviceSource | None] | None = None
   # whether the comma on this network answered the last listing; None before the first
   local_reachable: bool | None = None
+  # asks the comma to upload (segment, name) files of a route to Connect, and says what it did; None when it does not
+  request_upload: Callable[[str, list[tuple[int, str]]], str | None] | None = None
 
   def listed(self) -> dict[str, tuple[object, list[int]]]:
     """route -> (source, segments). The comma wins over Connect for a route both have, since it has the full files."""
@@ -166,6 +168,10 @@ def _may_copy_through_server(r: Resolved, sources: Sources, source: DeviceSource
              "Not now uses what comma Connect has, which is usually less detail.")
 
 
+def _render_again(said: str) -> str:
+  return f"{said} Render again when the drive shows Full detail."
+
+
 _locks: dict[str, threading.Lock] = {}
 _locks_guard = threading.Lock()
 
@@ -178,20 +184,51 @@ def _fetching(route: str) -> threading.Lock:
 def render_resolved(r: Resolved, sources: Sources, cache: Path, settings: dict, output: Path, app: Path,
                     progress: Callable[[str], None] = print, preview: bool = False,
                     started: Callable[[object], None] | None = None,
-                    ask: Callable[[str], bool] | None = None) -> Path | None:
+                    ask: Callable[[str], bool] | None = None,
+                    note: Callable[[str], None] | None = None) -> Path | None:
   """fetch what is needed and render, and return where the clip was saved (see render.run). With [preview] it stops after
   writing the job file, which it returns instead, so the window can play the drive itself rather than encoding it.
-  [ask] puts a yes-or-no question to the user: whether to copy over the comma's metered connection."""
+  [ask] puts a yes-or-no question to the user: whether to copy over the comma's metered connection. [note] is told
+  anything worth keeping in view after the job, such as an upload to Connect asked for."""
   needed = [s for s in r.segments if r.start.segment <= s <= r.end.segment]
   earlier = render.preroll_segment(r.timeline, r.start)
   wanted = needed + ([earlier] if earlier is not None else [])
-  source, detail = choose_files(r, sources, wanted, settings["detail"])
+
+  def upload(files: list[tuple[int, str]]) -> str | None:
+    """Ask the comma to put [files] on Connect, so they can be had later when it is offline. Only for this user's own
+    drive with the comma away from this network: at home the comma is right there. Never fails the job."""
+    if sources.request_upload is None or getattr(r.source, "public", False) or sources.local_reachable is not False:
+      return None
+    try:
+      said = sources.request_upload(r.route, files)
+    except SourceError as e:
+      if note:
+        note(f"Could not ask the comma to upload the full files to comma Connect: {e}")
+      return None
+    if said and note:
+      note(said)
+    return said
+
+  # what full detail needs: the log and road camera of the range, the log before it for the preroll, and the wide camera
+  # unless the camera is set to the road one (whether Automatic switches to it is only known from the logs)
+  full_files = [(s, n) for s in needed for n in FULL] + ([(earlier, FULL[0])] if earlier is not None else [])
+  wide_files = [(s, "ecamera.hevc") for s in needed] if settings["camera"] != "road" else []
+
+  try:
+    source, detail = choose_files(r, sources, wanted, settings["detail"])
+  except SourceError as e:
+    said = upload(full_files + wide_files) if settings["detail"] == "full" else None
+    raise SourceError(f"{e} {_render_again(said)}" if said else str(e)) from None
   if getattr(source, "through_server", False) and not _may_copy_through_server(r, sources, source, needed, earlier, settings,
                                                                                 cache, progress, ask):
     if settings["detail"] == "full":
+      said = upload(full_files + wide_files)
       raise SourceError("Full detail was not copied over the comma's metered connection. Choose Automatic detail to use "
-                        "what comma Connect has now, or render again when the comma is on an unmetered connection.")
+                        "what comma Connect has now, or render again when the comma is on an unmetered connection."
+                        + (f" {_render_again(said)}" if said else ""))
     source, detail = choose_files(r, sources, wanted, settings["detail"], allow_server=False)
+  if detail != "full" and settings["detail"] == "auto":
+    upload(full_files + wide_files)  # less detail now; the full files for next time
   log_name, video_name = render.LOGS[detail], render.VIDEOS[detail]
 
   def fetch(segments: list[int], names: tuple[str, ...]) -> None:
@@ -210,6 +247,11 @@ def render_resolved(r: Resolved, sources: Sources, cache: Path, settings: dict, 
     if wide:
       progress("fetching wide camera video")
       fetch(wide, ("ecamera.hevc",))
+  if getattr(source, "through_server", False):
+    # copied straight from the comma: now have it put the same files on Connect, after the copy so the two never compete
+    # for the comma's connection
+    progress("asking the comma to upload these files to comma Connect")
+    upload(full_files + [(s, "ecamera.hevc") for s in wide])
   progress("preparing the drive")  # also where a job cancelled during a long fetch stops, before it writes anything
   if preview:
     return render.prepare(r.timeline, r.route_dir, r.start, r.end, settings, output, progress, detail, name="preview-job.json")

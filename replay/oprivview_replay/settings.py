@@ -14,6 +14,7 @@ DEFAULTS: dict = {
   "output_dir": None,  # None means the Movies folder (Videos on Windows)
   "added": [],  # public drives and devices of other people: "dongle|route" or "dongle"
   "test_versions": True,  # whether the app's updater offers test versions (pre-releases) as well as final ones
+  "keep_on_connect": True,  # when the full files come from the comma away from this network, or cannot, ask it to put them on Connect
   "via_server": True,  # fetch through comma's SSH server (comma prime) when the comma is not on this network
 }
 

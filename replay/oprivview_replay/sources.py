@@ -179,14 +179,23 @@ class ConnectSource:
   def _get(self, path: str):
     if self.public:
       return self._request(path, None)
+    return self._request(path, self._token())
+
+  def _post(self, path: str, body: dict):
+    return self._request(path, self._token(), body)
+
+  def _token(self) -> str:
     try:
-      token = self.jwt_file.read_text().strip()
+      return self.jwt_file.read_text().strip()
     except OSError:
       raise SourceError(f"no comma token at {self.jwt_file}")
-    return self._request(path, token)
 
-  def _request(self, path: str, token: str | None):
-    req = urllib.request.Request(API + path, headers={"Authorization": f"JWT {token}"} if token else {})
+  def _request(self, path: str, token: str | None, body: dict | None = None):
+    headers = {"Authorization": f"JWT {token}"} if token else {}
+    if body is not None:
+      headers["Content-Type"] = "application/json"
+    req = urllib.request.Request(API + path, headers=headers, data=None if body is None else json.dumps(body).encode(),
+                                 method="GET" if body is None else "POST")
     try:
       with urllib.request.urlopen(req, timeout=20, context=TLS) as r:
         return json.loads(r.read())
@@ -216,14 +225,13 @@ class ConnectSource:
     ping = next((d.get("last_athena_ping") for d in devices if d["dongle_id"] == self.dongle()), None)
     return bool(ping) and time.time() - ping < within_s
 
-  def athena(self, method: str, params: dict | None = None, timeout: float = 15) -> object:
+  def athena(self, method: str, params: dict | None = None, timeout: float = 15, expiry: int | None = None) -> object:
     """call [method] on the device itself through comma's relay (athena), as Connect's website does; SourceError if the
-    relay or the device does not answer"""
-    try:
-      token = self.jwt_file.read_text().strip()
-    except OSError:
-      raise SourceError(f"no comma token at {self.jwt_file}")
-    body = {"method": method, "jsonrpc": "2.0", "id": 0, **({"params": params} if params is not None else {})}
+    relay or the device does not answer. With [expiry] (a Unix time) the relay keeps the call for a device that is
+    offline until then, and answers "Device offline, message queued"."""
+    token = self._token()
+    body = {"method": method, "jsonrpc": "2.0", "id": 0, **({"params": params} if params is not None else {}),
+            **({"expiry": expiry} if expiry is not None else {})}
     req = urllib.request.Request(f"{ATHENA}/{self.dongle()}", data=json.dumps(body).encode(), method="POST",
                                  headers={"Authorization": f"JWT {token}", "Content-Type": "application/json"})
     try:
@@ -236,6 +244,46 @@ class ConnectSource:
     if "error" in answer:
       raise SourceError(f"the comma did not answer: {answer['error']}")
     return answer.get("result")
+
+  def request_upload(self, route: str, files: list[tuple[int, str]]) -> dict:
+    """Ask the device to upload [files] (segment, name) of [route] to Connect, as Connect's website does: an upload
+    address for each from comma's API, then uploadFilesToUrls through the relay. The device waits while its connection
+    is metered (allow_cellular false leaves that to its own setting), and the relay keeps the request for 7 days if the
+    device is offline. Returns {"offline": bool, "missing": [(segment, name) the device no longer has]}."""
+    import time
+
+    def names(name: str) -> tuple[str, ...]:  # a log may be kept under either name, as Connect's website also allows
+      return (name, name.replace(".zst", ".bz2")) if name.endswith("log.zst") else (name,)
+
+    paths = [(s, n, f"{route}--{s}/{alt}") for s, n in files for alt in names(n)]
+    addresses = self._post(f"/v1/{self.dongle()}/upload_urls/", {"paths": [p for _, _, p in paths], "expiry_days": 7})
+    files_data = [{"fn": p, "url": a["url"], "headers": a.get("headers") or {"x-ms-blob-type": "BlockBlob"},
+                   "allow_cellular": False, "priority": 0} for (_, _, p), a in zip(paths, addresses)]
+    result = self.athena("uploadFilesToUrls", {"files_data": files_data}, expiry=int(time.time()) + 7 * 86400)
+    if not isinstance(result, dict):  # "Device offline, message queued"
+      return {"offline": True, "missing": []}
+    failed = set(result.get("failed") or [])
+    return {"offline": False, "missing": [(s, n) for s, n in files if all(f"{route}--{s}/{alt}" in failed for alt in names(n))]}
+
+  def upload_queue(self) -> list[dict] | None:
+    """what the device is uploading or has waiting, as {route, segment, file, progress (0 to 1), current}; None when the
+    device does not answer"""
+    try:
+      items = self.athena("listUploadQueue") or []
+    except SourceError:
+      return None
+    out = []
+    for item in items:
+      parts = item.get("url", "").split("?")[0].split("/")
+      if len(parts) >= 4 and parts[-2].isdigit():
+        out.append({"route": parts[-3], "segment": int(parts[-2]), "file": parts[-1],
+                    "progress": float(item.get("progress") or 0), "current": bool(item.get("current"))})
+    return out
+
+  def forget_route(self, route: str) -> None:
+    """look again at what Connect has for [route], as after an upload"""
+    self._files.pop(route, None)
+    self._infos.pop(route, None)
 
   def network(self) -> dict | None:
     """{"kind": "Wi-Fi" or "cellular" or ..., "metered": bool} as the comma reports its connection now, or None when it

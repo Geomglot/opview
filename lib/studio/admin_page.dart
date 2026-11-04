@@ -280,6 +280,15 @@ class _AdminPageState extends State<AdminPage> {
           value: s['via_server'] as bool? ?? true,
           onChanged: (on) => _change({'via_server': on}),
         ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Keep a copy on comma Connect'),
+          subtitle: const Text('Needs the Connect sign-in. When the full files come from the comma away from this network, or '
+              'cannot come now, the comma is asked to upload them to Connect, so they are there later even when it is offline. '
+              'It uploads only on a connection it treats as unmetered.'),
+          value: s['keep_on_connect'] as bool? ?? true,
+          onChanged: (on) => _change({'keep_on_connect': on}),
+        ),
       ]);
 
   Widget _updatesSection(Map<String, dynamic> s) => _section('Updates', [
