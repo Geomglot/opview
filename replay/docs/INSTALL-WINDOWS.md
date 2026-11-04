@@ -8,7 +8,7 @@ the Mac and Windows and notes where they differ.
 ## What you need
 
 - 64-bit Windows 10 or 11.
-- About 200 MB of disk space for the app, and more for the drives you open. A minute of full detail drive takes about
+- About 250 MB of disk space for the app, and more for the drives you open. A minute of full detail drive takes about
   75 MB, and more with the wide camera. You can clear stored drives from the app.
 - To make MP4s: a graphics card from NVIDIA, Intel or AMD, or Windows' own video encoder. Windows has that encoder
   unless it is an "N" edition. On an N edition, install the Media Feature Pack from Settings, Apps, Optional features.
@@ -17,32 +17,22 @@ You do not need Python, ffmpeg or anything else installed.
 
 ## Install
 
-1. Download `OPRivView-Replay-<version>-Windows.zip` from the
+1. Download `OPRivView-Replay-<version>-Windows.exe` from the
    [releases page](https://github.com/Geomglot/opview/releases). Test versions are marked Pre-release, and their names
    start with `replay-`. If your browser warns that the file is not commonly downloaded, choose to keep it.
-2. Right-click the zip and choose **Extract All...**. Extract it somewhere with a short path, such as Documents or the
-   Desktop. Windows cannot open files buried too many folders deep, so a long path may make the extraction fail.
-3. Open the **OPRivView Replay** folder and double-click **OPRivViewReplay.exe**.
+2. Open it. The installer is not signed, so Windows SmartScreen may stop it with "Windows protected your PC". Click
+   **More info**, then **Run anyway**.
+3. Follow the installer. It installs for you only, in your own folder, so it does not ask for an administrator. You can
+   choose to add a desktop shortcut. At the end it can open the app.
 
-Nothing else is installed. To start the app from the Start menu or the taskbar, right-click **OPRivViewReplay.exe** and
-choose **Pin to Start**, or **Show more options** then **Pin to taskbar**.
+The app is then in the Start menu as **OPRivView Replay**. To pin it to the taskbar, right-click it there and choose
+**Pin to taskbar**.
 
-Keep the files in the folder together. The app needs the `ffmpeg`, `oprivview-replay-server` and `data` folders beside it.
-
-## The first time you open it
-
-The app is not signed, so Windows SmartScreen may stop it with "Windows protected your PC". This is a one-time step:
-
-1. Click **More info**.
-2. Click **Run anyway**.
-
-The app opens, and from then on it opens normally.
-
-If you would like to check the download first, each release lists the file's SHA-256 checksum. To see yours, run this in
-PowerShell:
+If you would like to check the download first, each release lists the checksums of its files in `SHA256SUMS`. To see
+yours, run this in PowerShell:
 
 ```powershell
-Get-FileHash "$HOME\Downloads\OPRivView-Replay-*-Windows.zip" -Algorithm SHA256
+Get-FileHash "$HOME\Downloads\OPRivView-Replay-*-Windows.exe" -Algorithm SHA256
 ```
 
 ## Reaching your comma
@@ -57,19 +47,22 @@ Settings, Apps, Optional features, choose **Add a feature** (or **View features*
 
 ## Updating
 
-Close the app, delete the old **OPRivView Replay** folder, and extract the new version in the same way. You may need to
-do the SmartScreen step again. Your settings and stored drives are kept, because they are not in the app's folder.
+Download the new installer and open it, as above. It replaces the old version, closing the app first if it is open.
+Your settings and stored drives are kept, because they are not in the app's folder.
 
 ## Removing it
 
-Delete the **OPRivView Replay** folder. To remove everything it stored as well, delete these. You can paste each one into
-the address bar of File Explorer:
+Open Settings, Apps, find **OPRivView Replay**, and choose **Uninstall**. It asks whether to delete your settings and
+the drives the app stored as well. Those are in these folders, which you can also delete yourself by pasting each one
+into the address bar of File Explorer:
 
 - `%APPDATA%\OPRivViewReplay` (settings)
 - `%LOCALAPPDATA%\OPRivViewReplay` (stored drives, which include your video and GPS positions, and logs)
 
 Clips you saved stay in your Videos folder, or wherever you chose. Your comma Connect token is in
 `%USERPROFILE%\.comma\jwt`. Other comma tools use that file too, so delete it only if nothing else needs it.
+
+Versions before 0.1.2 came as a zip with no installer. If you used one, delete its **OPRivView Replay** folder.
 
 ## Differences from the Mac
 
@@ -80,7 +73,6 @@ Explorer**, and rendering speed on a real PC has not been measured yet. Please t
 
 - **There is no Run anyway button.** Click **More info** first. If your PC is managed by an employer or school, its
   settings may not allow unsigned programs.
-- **Extracting fails, or the app cannot find a file.** Extract it to a shorter path, such as straight into Documents.
 - **Reaching the comma fails because the system cannot find the file specified.** SSH is missing. Add OpenSSH Client,
   as above.
 - **Rendering fails with a message about the video encoder.** Update your graphics driver. On an N edition of Windows,
