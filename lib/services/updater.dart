@@ -20,7 +20,7 @@ import 'package:opview/services/system_service.dart' as system;
 const installedVersion = String.fromEnvironment('OPVIEW_BUILD', defaultValue: 'dev build');
 
 // the newest releases first; /releases/latest would skip pre-releases, and all of Geomglot's are pre-releases
-const _latestReleaseUrl = 'https://api.github.com/repos/Geomglot/opview/releases?per_page=10';
+const _latestReleaseUrl = 'https://api.github.com/repos/Geomglot/opview/releases?per_page=20';
 
 class ReleaseInfo {
   final String version;  // tag without the leading v
