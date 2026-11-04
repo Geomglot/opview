@@ -1,10 +1,11 @@
 """The steps shared by the command line and the server: find the drive, resolve a range, render it."""
+import subprocess
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from . import render
+from . import render, ssh_source
 from .logs import index_segment
 from .sources import FULL_FILES as FULL, LOGS_FILES as LOGS, QUICK_FILES as QUICK, ConnectSource, DeviceSource, SourceError
 from .timeline import FramePos, RangeError, RouteTimeline, resolve_range, zone_for
@@ -83,8 +84,9 @@ def resolve(sources: Sources, cache: Path, route: str, start_segment: int | None
   return Resolved(route, segments, route_dir, timeline, start, end, source)
 
 
-def choose_files(r: Resolved, sources: Sources, needed: list[int], detail: str) -> tuple[object, str]:
-  """(where to get the files, and "full", "logs" or "quick") for what the user asked for and what exists"""
+def choose_files(r: Resolved, sources: Sources, needed: list[int], detail: str, allow_server: bool = True) -> tuple[object, str]:
+  """(where to get the files, and "full", "logs" or "quick") for what the user asked for and what exists.
+  [allow_server] False leaves out the comma through comma's server, as when the user said not to copy that way now."""
   candidates = [r.source]
   public = getattr(r.source, "public", False)  # someone else's drive: neither of this user's own sources has it
   for other in () if public else (sources.device, sources.connect):
@@ -100,7 +102,7 @@ def choose_files(r: Resolved, sources: Sources, needed: list[int], detail: str) 
   # The comma through comma's server comes last, after Connect, which costs the car nothing. Only when the comma on this
   # network did not answer: never in its place while it does, nor after a copy from it failed part-way, so that a Wi-Fi
   # blip never moves a large copy onto the car's own internet connection.
-  if not public and sources.through_server is not None and sources.local_reachable is False:
+  if allow_server and not public and sources.through_server is not None and sources.local_reachable is False:
     remote = sources.through_server()
     if remote is not None:
       candidates.append(remote)
@@ -129,6 +131,39 @@ def choose_files(r: Resolved, sources: Sources, needed: list[int], detail: str) 
   raise SourceError("neither the comma nor comma Connect has the files for this drive")
 
 
+def _may_copy_through_server(r: Resolved, sources: Sources, source: DeviceSource, needed: list[int], earlier: int | None,
+                             settings: dict, cache: Path, progress: Callable[[str], None],
+                             ask: Callable[[str], bool] | None) -> bool:
+  """A copy through comma's server is plain SSH, so the comma cannot hold it back on a metered connection as it does its
+  own uploads. Ask the comma what it is on: unmetered, copy; metered, or no answer, ask the user, with the size."""
+  progress("checking the comma's connection")
+  network = sources.connect.network() if sources.connect is not None else None
+  if network is not None and not network["metered"]:
+    return True
+  if ask is None:  # nobody to ask, as on the command line
+    return True
+  files = [(s, n) for s in needed for n in FULL] + ([(earlier, FULL[0])] if earlier is not None else [])
+  wide = [(s, "ecamera.hevc") for s in needed] if settings["camera"] != "road" else []
+  try:
+    sizes = ssh_source.remote_sizes(source.host, [f"{r.route}--{s}/{n}" for s, n in files + wide])
+  except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):  # the size only makes the question clearer; it is still asked without one
+    sizes = {}
+
+  def to_copy(items: list[tuple[int, str]]) -> float:
+    """MB still to come: what is already whole here is not copied again"""
+    def here(s: int, n: str) -> int:
+      f = cache / r.route / str(s) / n
+      return f.stat().st_size if f.exists() else -1
+    return sum(size for s, n in items if (size := sizes.get(f"{r.route}--{s}/{n}")) is not None and here(s, n) != size) / 1e6
+
+  why = (f"The comma is on {network['kind']}, which it is set to treat as metered." if network is not None
+         else "The comma did not say whether its connection is metered.")
+  amount = f"about {to_copy(files):.0f} MB of its data" if sizes else "its data"
+  extra = f", and up to {to_copy(wide):.0f} MB more if the wide camera is used" if sizes and wide and to_copy(wide) else ""
+  return ask(f"{why} Copying full detail for this range through comma's server would use {amount}{extra}. Copy now?\n\n"
+             "Not now uses what comma Connect has, which is usually less detail.")
+
+
 _locks: dict[str, threading.Lock] = {}
 _locks_guard = threading.Lock()
 
@@ -140,12 +175,21 @@ def _fetching(route: str) -> threading.Lock:
 
 def render_resolved(r: Resolved, sources: Sources, cache: Path, settings: dict, output: Path, app: Path,
                     progress: Callable[[str], None] = print, preview: bool = False,
-                    started: Callable[[object], None] | None = None) -> Path | None:
+                    started: Callable[[object], None] | None = None,
+                    ask: Callable[[str], bool] | None = None) -> Path | None:
   """fetch what is needed and render, and return where the clip was saved (see render.run). With [preview] it stops after
-  writing the job file, which it returns instead, so the window can play the drive itself rather than encoding it."""
+  writing the job file, which it returns instead, so the window can play the drive itself rather than encoding it.
+  [ask] puts a yes-or-no question to the user: whether to copy over the comma's metered connection."""
   needed = [s for s in r.segments if r.start.segment <= s <= r.end.segment]
   earlier = render.preroll_segment(r.timeline, r.start)
-  source, detail = choose_files(r, sources, needed + ([earlier] if earlier is not None else []), settings["detail"])
+  wanted = needed + ([earlier] if earlier is not None else [])
+  source, detail = choose_files(r, sources, wanted, settings["detail"])
+  if getattr(source, "through_server", False) and not _may_copy_through_server(r, sources, source, needed, earlier, settings,
+                                                                                cache, progress, ask):
+    if settings["detail"] == "full":
+      raise SourceError("Full detail was not copied over the comma's metered connection. Choose Automatic detail to use "
+                        "what comma Connect has now, or render again when the comma is on an unmetered connection.")
+    source, detail = choose_files(r, sources, wanted, settings["detail"], allow_server=False)
   log_name, video_name = render.LOGS[detail], render.VIDEOS[detail]
 
   def fetch(segments: list[int], names: tuple[str, ...]) -> None:

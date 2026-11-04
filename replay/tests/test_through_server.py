@@ -239,3 +239,114 @@ def test_the_setting_is_offered_and_saved(tmp_path):
   c = TestClient(server.make_app(host="x", connect=None, settings=Settings(tmp_path / "s.json")))
   assert c.get("/settings").json()["via_server"] is True
   assert c.put("/settings", json={"via_server": False}).json()["via_server"] is False
+
+
+# step C: a copy through comma's server checks the comma's connection first
+
+def _connect_answering(monkeypatch, result):
+  from oprivview_replay.sources import ConnectSource
+
+  c = ConnectSource(Path("no-token"))
+  if isinstance(result, Exception):
+    def athena(method, params=None, timeout=15):
+      raise result
+  else:
+    def athena(method, params=None, timeout=15):
+      assert method == "getMessage" and params["service"] == "deviceState"
+      return {"deviceState": result}
+  monkeypatch.setattr(c, "athena", athena)
+  return c
+
+
+def test_the_comma_says_what_connection_it_is_on(monkeypatch):
+  assert _connect_answering(monkeypatch, {"networkType": "wifi", "networkMetered": False}).network() == {"kind": "Wi-Fi", "metered": False}
+  assert _connect_answering(monkeypatch, {"networkType": "cell4G", "networkMetered": True}).network() == {"kind": "cellular", "metered": True}
+  assert _connect_answering(monkeypatch, SourceError("timed out")).network() is None
+  assert _connect_answering(monkeypatch, {"networkType": "wifi"}).network() is None  # no metered answer is no answer
+
+
+class Remote(Fake):
+  through_server = True
+  host = "comma-via-server"
+
+  def fetch(self, route, segments, names, cache, progress=None):
+    self.fetched = getattr(self, "fetched", []) + [names]
+
+
+class Connect(Fake):
+  def fetch(self, route, segments, names, cache):
+    self.fetched = getattr(self, "fetched", []) + [names]
+
+
+def _render(monkeypatch, tmp_path, network, ask, detail="auto"):
+  from oprivview_replay import render
+
+  remote = Remote("the comma through comma's server", None, FULL)
+  connect = Connect("connect", {"r": [0, 1]}, ("qlog.zst", "qcamera.ts"))
+  monkeypatch.setattr(connect, "network", lambda: network, raising=False)
+  sources = jobs.Sources(Fake("device", None), connect, through_server=lambda: remote)
+  sources.listed()
+  monkeypatch.setattr(render, "preroll_segment", lambda tl, start: None)
+  monkeypatch.setattr(render, "wide_segments", lambda *a, **k: [])
+  monkeypatch.setattr(render, "prepare", lambda *a, **k: tmp_path / "preview-job.json")
+  monkeypatch.setattr(ssh_source, "remote_sizes", lambda host, paths: {p: 44_000_000 for p in paths if "ecamera" not in p})
+  r = jobs.Resolved("r", [0, 1], tmp_path, None, SimpleNamespace(segment=0), SimpleNamespace(segment=0), connect)
+  said = []
+  jobs.render_resolved(r, sources, tmp_path, {"detail": detail, "camera": "road"}, tmp_path / "x.mp4", tmp_path, said.append,
+                       preview=True, ask=ask)
+  return remote, connect, said
+
+
+def test_on_an_unmetered_connection_it_copies_without_asking(monkeypatch, tmp_path):
+  remote, connect, said = _render(monkeypatch, tmp_path, {"kind": "Wi-Fi", "metered": False}, ask=lambda q: pytest.fail("asked"))
+  assert remote.fetched and not hasattr(connect, "fetched")
+
+
+def test_on_a_metered_connection_it_asks_with_the_size_and_copies_if_told_to(monkeypatch, tmp_path):
+  asked = []
+  remote, connect, _ = _render(monkeypatch, tmp_path, {"kind": "cellular", "metered": True}, ask=lambda q: asked.append(q) or True)
+  assert "on cellular, which it is set to treat as metered" in asked[0] and "about 88 MB" in asked[0]
+  assert remote.fetched
+
+
+def test_not_now_uses_what_connect_has(monkeypatch, tmp_path):
+  remote, connect, _ = _render(monkeypatch, tmp_path, {"kind": "cellular", "metered": True}, ask=lambda q: False)
+  assert not hasattr(remote, "fetched") and connect.fetched == [("qlog.zst", "qcamera.ts")]
+
+
+def test_no_answer_from_the_comma_is_treated_as_metered(monkeypatch, tmp_path):
+  asked = []
+  _render(monkeypatch, tmp_path, None, ask=lambda q: asked.append(q) or False)
+  assert asked and asked[0].startswith("The comma did not say whether its connection is metered.")
+
+
+def test_not_now_with_full_detail_chosen_stops_and_says_how_to_go_on(monkeypatch, tmp_path):
+  with pytest.raises(SourceError, match="Choose Automatic detail"):
+    _render(monkeypatch, tmp_path, {"kind": "cellular", "metered": True}, ask=lambda q: False, detail="full")
+
+
+def test_the_window_answers_the_job_s_question_and_cancel_ends_the_wait(monkeypatch, tmp_path):
+  import threading
+  import time
+
+  from fastapi.testclient import TestClient
+
+  from test_server import _resolved, _wait_for
+
+  _resolved(monkeypatch, tmp_path)
+  answers = []
+
+  def fake_render(resolved, sources, cache, settings, output, app, progress, preview=False, started=None, ask=None):
+    answers.append(ask("Copy now?"))
+    answers.append(ask("Again?"))
+
+  monkeypatch.setattr(jobs, "render_resolved", fake_render)
+  c = TestClient(server.make_app(host="x", connect=None, output_dir=tmp_path))
+  job = c.post("/jobs", json={"route": "r"}).json()
+  assert _wait_for(c, job["id"], lambda j: j["question"])["question"] == "Copy now?"
+  c.post(f"/jobs/{job['id']}/answer", json={"copy_now": True})
+  assert _wait_for(c, job["id"], lambda j: j["question"] == "Again?")
+  assert c.post(f"/jobs/{job['id']}/cancel").json()["state"] == "cancelled"
+  time.sleep(1)
+  assert answers == [True] and c.get(f"/jobs/{job['id']}").json()["question"] is None
+  assert c.post(f"/jobs/{job['id']}/answer", json={"copy_now": True}).status_code == 409

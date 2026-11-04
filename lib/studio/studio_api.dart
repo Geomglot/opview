@@ -138,6 +138,10 @@ class StudioApi {
 
   Future<Map<String, dynamic>> cancel(String id) async => await _call('POST', '/jobs/$id/cancel', {});
 
+  /// the user's answer to a job's question: whether to copy over the comma's metered connection now
+  Future<Map<String, dynamic>> answer(String id, bool copyNow) async =>
+      await _call('POST', '/jobs/$id/answer', {'copy_now': copyNow});
+
   /// stop a render early but keep the frames made so far, as a clip marked partial
   Future<Map<String, dynamic>> finish(String id) async => await _call('POST', '/jobs/$id/finish', {});
 

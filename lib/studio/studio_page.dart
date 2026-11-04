@@ -342,12 +342,42 @@ class _StudioPageState extends State<StudioPage> {
           if (j['state'] == 'done' && j['preview'] == true) _previewFile = j['job_file'] as String?;
         });
         if (j['state'] != 'running') t.cancel();
+        final question = j['state'] == 'running' ? j['question'] as String? : null;
+        if (question != null && !_asking && _answered != j['id']) unawaited(_ask(j['id'] as String, question));
       });
     } catch (e) {
       setState(() {
         _job = null;
         _resolveError = '$e';
       });
+    }
+  }
+
+  bool _asking = false; // a job's question is open, so the next poll does not open it again
+  String? _answered; // the job whose question was answered; the server may still show it for a moment
+
+  /// a job waiting on the user: whether to copy through comma's server over the comma's metered connection
+  Future<void> _ask(String id, String question) async {
+    _asking = true;
+    try {
+      final copy = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: const Text('Copy over a metered connection?'),
+          content: SizedBox(width: 520, child: Text(question)),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Not now')),
+            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Copy now')),
+          ],
+        ),
+      );
+      _answered = id;
+      if (copy != null && mounted && _job?['id'] == id) await _sidecar!.api.answer(id, copy);
+    } on StudioError {
+      // the job ended or was cancelled while the question was open
+    } finally {
+      _asking = false;
     }
   }
 

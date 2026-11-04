@@ -52,7 +52,7 @@ def test_preview_job_returns_the_job_file_and_makes_no_mp4(monkeypatch, tmp_path
   monkeypatch.setattr(jobs, "resolve", lambda *a, **k: R())
   seen = {}
 
-  def fake_render(resolved, sources, cache, settings, output, app, progress, preview=False, started=None):
+  def fake_render(resolved, sources, cache, settings, output, app, progress, preview=False, started=None, ask=None):
     seen["preview"], seen["output"] = preview, output
     return tmp_path / "preview-job.json" if preview else None
 
@@ -112,7 +112,7 @@ def test_cancel_stops_a_job_and_it_stays_cancelled(monkeypatch, tmp_path):
       killed.append(True)
       go.set()
 
-  def fake_render(resolved, sources, cache, settings, output, app, progress, preview=False, started=None):
+  def fake_render(resolved, sources, cache, settings, output, app, progress, preview=False, started=None, ask=None):
     started(Renderer())
     entered.set()
     go.wait(5)
@@ -136,7 +136,7 @@ def test_a_running_render_shows_the_picture_it_has_reached_and_a_finished_one_do
   _resolved(monkeypatch, tmp_path)
   reported, go = threading.Event(), threading.Event()
 
-  def fake_render(resolved, sources, cache, settings, output, app, progress, preview=False, started=None):
+  def fake_render(resolved, sources, cache, settings, output, app, progress, preview=False, started=None, ask=None):
     progress("frame 20 of 100 after 1 s")  # before the renderer has written a picture
     render.snapshot_file(resolved.route_dir).write_bytes(b"png")
     progress("frame 40 of 100 after 2 s, segment 4, 0:02")
@@ -190,7 +190,7 @@ def test_finish_asks_the_renderer_to_stop_and_the_job_ends_with_the_partial_clip
     def kill(self):
       raise AssertionError("keeping what is done must not kill the renderer")
 
-  def fake_render(resolved, sources, cache, settings, output, app, progress, preview=False, started=None):
+  def fake_render(resolved, sources, cache, settings, output, app, progress, preview=False, started=None, ask=None):
     started(Renderer())
     progress("frame 20 of 100 after 1 s")
     stopped.wait(5)
@@ -216,7 +216,7 @@ def test_finish_before_the_renderer_has_started_is_a_cancel(monkeypatch, tmp_pat
   _resolved(monkeypatch, tmp_path)
   entered, go = threading.Event(), threading.Event()
 
-  def fake_render(resolved, sources, cache, settings, output, app, progress, preview=False, started=None):
+  def fake_render(resolved, sources, cache, settings, output, app, progress, preview=False, started=None, ask=None):
     entered.set()
     go.wait(5)
     progress("preparing the drive")  # where a cancelled job stops

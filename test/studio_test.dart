@@ -171,4 +171,72 @@ void main() {
     });
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets('a job asking whether to copy over a metered connection shows the question once and sends the answer', (tester) async {
+    HttpOverrides.global = null;
+    late HttpServer server;
+    String? question = 'The comma is on cellular, which it is set to treat as metered. Copy now?';
+    var finished = false;
+    final answers = <Map<String, dynamic>>[];
+    await tester.runAsync(() async {
+      server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      server.listen((req) async {
+        Object body;
+        if (req.uri.path == '/params') {
+          body = _params;
+        } else if (req.uri.path == '/routes') {
+          body = {'online': false, 'metric': true, 'routes': [
+            {'route': '0000005a--f16da7af40', 'segments': [0, 1], 'first': 0, 'last': 1, 'on_device': false, 'on_connect': true, 'detail': 'quick'},
+          ]};
+        } else if (req.uri.path.startsWith('/jobs')) {
+          if (req.uri.path.endsWith('/answer')) {
+            answers.add(jsonDecode(await utf8.decoder.bind(req).join()) as Map<String, dynamic>);
+            question = null;
+          }
+          body = {'id': 'a', 'state': finished ? 'done' : 'running', 'message': question == null ? 'fetching' : 'waiting for an answer', 'progress': null,
+              'output': '/tmp/x.mp4', 'error': null, 'preview': true, 'snapshot': null, 'question': question};
+        } else {
+          body = {'ok': true};
+        }
+        req.response.headers.contentType = ContentType.json;
+        req.response.write(jsonEncode(body));
+        await req.response.close();
+      });
+    });
+    tester.view.physicalSize = const Size(1320, 820);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    Future<void> settle(bool Function() done) async {
+      for (var i = 0; i < 40 && !done(); i++) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+        await tester.pump(const Duration(milliseconds: 300));
+      }
+    }
+
+    final api = StudioApi(Uri.parse('http://127.0.0.1:${server.port}'));
+    await tester.pumpWidget(MaterialApp(home: StudioPage(start: () async => Sidecar(null, api))));
+    await settle(() => find.text('0000005a--f16da7af40').evaluate().isNotEmpty);
+    await tester.tap(find.text('0000005a--f16da7af40'));
+    await tester.pump();
+    await tester.tap(find.text('Preview'));
+    await settle(() => find.text('Copy over a metered connection?').evaluate().isNotEmpty);
+    expect(find.text('Copy over a metered connection?'), findsOneWidget);
+    expect(find.textContaining('on cellular'), findsOneWidget);
+    await tester.tap(find.text('Copy now'));
+    await settle(() => answers.isNotEmpty);
+    for (var i = 0; i < 6; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+    expect(answers, [{'copy_now': true}]);
+    expect(find.text('Copy over a metered connection?'), findsNothing, reason: 'answered once, not asked again');
+    finished = true; // the poll stops once the job is done
+    for (var i = 0; i < 6; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+    await tester.runAsync(() => server.close(force: true));
+    await tester.pumpWidget(const SizedBox());
+  });
 }

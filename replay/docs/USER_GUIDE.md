@@ -48,8 +48,14 @@ long as it is online. It uses the same SSH key as on your network, so set that u
 comma does not answer on your network, and only for files Connect does not already have. The status line counts the
 megabytes as they arrive: about 90 MB for each minute of drive, or 165 MB with the wide camera.
 
-This uses the comma's own internet connection. To stop the app doing it, turn off **Reach the comma through comma's
-server** in App settings.
+This uses the comma's own internet connection. First the app asks the comma what it is connected to.
+- If the comma treats its connection as unmetered (its own **Wi-Fi Network Metered** and **Cellular Metered**
+  settings), the app copies straight away.
+- If the connection is metered, or the comma does not say, the app asks you first and shows the size.
+  - **Copy now** goes ahead.
+  - **Not now** uses what comma Connect has, which is usually less detail. With **Full** detail chosen, it stops instead.
+
+To stop the app doing this at all, turn off **Reach the comma through comma's server** in App settings.
 
 ### Adding a public drive
 

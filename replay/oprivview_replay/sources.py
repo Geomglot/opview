@@ -18,6 +18,7 @@ import certifi
 from . import ssh_source
 
 API = "https://api.comma.ai"
+ATHENA = "https://athena.comma.ai"  # the relay to the device itself
 # the computer's own trust store, plus certifi's list whatever Python built the app; a missing default path is ignored
 TLS = ssl.create_default_context()
 TLS.load_verify_locations(certifi.where())
@@ -214,6 +215,41 @@ class ConnectSource:
     devices = self.devices()
     ping = next((d.get("last_athena_ping") for d in devices if d["dongle_id"] == self.dongle()), None)
     return bool(ping) and time.time() - ping < within_s
+
+  def athena(self, method: str, params: dict | None = None, timeout: float = 15) -> object:
+    """call [method] on the device itself through comma's relay (athena), as Connect's website does; SourceError if the
+    relay or the device does not answer"""
+    try:
+      token = self.jwt_file.read_text().strip()
+    except OSError:
+      raise SourceError(f"no comma token at {self.jwt_file}")
+    body = {"method": method, "jsonrpc": "2.0", "id": 0, **({"params": params} if params is not None else {})}
+    req = urllib.request.Request(f"{ATHENA}/{self.dongle()}", data=json.dumps(body).encode(), method="POST",
+                                 headers={"Authorization": f"JWT {token}", "Content-Type": "application/json"})
+    try:
+      with urllib.request.urlopen(req, timeout=timeout, context=TLS) as r:
+        answer = json.loads(r.read())
+    except urllib.error.HTTPError as e:
+      raise SourceError(f"comma's relay answered {e.code}")
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError) as e:
+      raise SourceError(f"cannot reach comma's relay: {getattr(e, 'reason', e)}")
+    if "error" in answer:
+      raise SourceError(f"the comma did not answer: {answer['error']}")
+    return answer.get("result")
+
+  def network(self) -> dict | None:
+    """{"kind": "Wi-Fi" or "cellular" or ..., "metered": bool} as the comma reports its connection now, or None when it
+    does not answer. Metered is the comma's own setting: Wi-Fi Network Metered, or Cellular Metered."""
+    try:
+      state = (self.athena("getMessage", {"service": "deviceState", "timeout": 5000}) or {}).get("deviceState")
+    except SourceError:
+      return None
+    if not state or "networkMetered" not in state:
+      return None
+    kind = str(state.get("networkType", ""))
+    names = {"wifi": "Wi-Fi", "ethernet": "a wired connection", "none": "no connection"}
+    return {"kind": names.get(kind, "cellular" if kind.startswith("cell") else kind or "an unknown connection"),
+            "metered": bool(state["networkMetered"])}
 
   def listing(self, limit: int = 100) -> dict[str, dict]:
     """route name -> {segments, start_ms, end_ms, lat, lon, km}, newest first"""

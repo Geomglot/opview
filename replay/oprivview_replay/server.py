@@ -62,6 +62,10 @@ class Drive(BaseModel):
   text: str
 
 
+class Answer(BaseModel):
+  copy_now: bool
+
+
 class Seek(BaseModel):
   job_file: str
   frame: int
@@ -113,6 +117,7 @@ def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Pat
   public_sources: dict[str, ConnectSource] = {}
   state: dict[str, dict] = {}
   renderers: dict[str, object] = {}  # job -> its running renderer process
+  answers: dict[str, tuple[threading.Event, dict]] = {}  # job -> what its open question is waiting on, and the answer
   lock = threading.Lock()
 
   @app.get("/health")
@@ -227,7 +232,24 @@ def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Pat
     output = _chosen_output(req.output) if req.output else default_output(folder, resolved.describe(), req.route)
     job_id = uuid.uuid4().hex[:8]
     state[job_id] = {"id": job_id, "state": "running", "message": "starting", "progress": None, "output": str(output), "error": None, "preview": req.preview, "job_file": None, "snapshot": None, "stopping": False,
-                     "range": resolved.describe()}
+                     "question": None, "range": resolved.describe()}
+
+    def ask(question: str) -> bool:
+      """wait for the window to answer [question] (POST /jobs/{id}/answer); Cancel ends the wait, and the job"""
+      answered = threading.Event()
+      with lock:
+        answers[job_id] = (answered, {})
+        state[job_id].update(question=question, message="waiting for an answer")
+      try:
+        while not answered.wait(0.5):
+          with lock:
+            if state[job_id]["state"] == "cancelled":
+              raise Cancelled()
+        return answers[job_id][1]["copy"]
+      finally:
+        with lock:
+          answers.pop(job_id, None)
+          state[job_id]["question"] = None
 
     def progress(text: str):
       with lock:
@@ -247,7 +269,7 @@ def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Pat
         if not req.preview:
           output.parent.mkdir(parents=True, exist_ok=True)
         made = jobs.render_resolved(resolved, sources, cache, options, output, renderer, progress, preview=req.preview,
-                                    started=lambda p: renderers.__setitem__(job_id, p))
+                                    started=lambda p: renderers.__setitem__(job_id, p), ask=ask)
         with lock:
           if state[job_id]["state"] != "running":
             pass
@@ -284,6 +306,17 @@ def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Pat
     if running is not None:
       running.kill()
     with lock:
+      return dict(state[job_id])
+
+  @app.post("/jobs/{job_id}/answer")
+  def answer(job_id: str, a: Answer):
+    """the user's answer to the job's question: whether to copy over the comma's metered connection now"""
+    with lock:
+      waiting = answers.get(job_id)
+      if waiting is None:
+        raise HTTPException(409, "this job is not waiting for an answer")
+      waiting[1]["copy"] = a.copy_now
+      waiting[0].set()
       return dict(state[job_id])
 
   @app.post("/jobs/{job_id}/finish")
