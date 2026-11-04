@@ -278,6 +278,11 @@ def seek(job_path: Path, frame: int) -> dict:
           "clip_offset": index["offsets"][read_from], "frames_before": frame - read_from, "first_lines": params}
 
 
+def snapshot_file(route_dir: Path) -> Path:
+  """a small picture of the frame a render has reached, which the renderer replaces about once a second while it works"""
+  return route_dir / "render-snapshot.bmp"
+
+
 def part_file(output: Path) -> Path:
   """where a clip is written until it is complete; ffmpeg goes by the last part of the name, so that stays .mp4"""
   return output.with_name(output.stem + ".part" + output.suffix)
@@ -289,9 +294,12 @@ def run(tl: RouteTimeline, route_dir: Path, start: FramePos, end: FramePos, sett
   part = part_file(output)
   job_path = prepare(tl, route_dir, start, end, settings, part, progress, detail)
   wanted = json.loads(job_path.read_text())["frame_count"]
+  snapshot = snapshot_file(route_dir)
+  _remove(snapshot)  # one left by an earlier render would show the wrong picture
   progress(f"rendering to {output}")
   # the pipe to its stdin closes when this process ends, however it ends, and the renderer stops on that
-  proc = subprocess.Popen([str(app)], env={**os.environ, "OPRIVVIEW_JOB": str(job_path), "OPRIVVIEW_WATCH_STDIN": "1"},
+  proc = subprocess.Popen([str(app)], env={**os.environ, "OPRIVVIEW_JOB": str(job_path), "OPRIVVIEW_WATCH_STDIN": "1",
+                                           "OPRIVVIEW_SNAPSHOT": str(snapshot)},
                           stdin=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
   if started:
     started(proc)
@@ -310,4 +318,22 @@ def run(tl: RouteTimeline, route_dir: Path, start: FramePos, end: FramePos, sett
       raise RuntimeError(f"the render stopped early: {written} of {wanted} frames were written")
     part.replace(output)
   finally:
-    part.unlink(missing_ok=True)
+    for leftover in (part, snapshot, snapshot.with_name(snapshot.name + ".part")):
+      _remove(leftover, patience=3.0)
+
+
+def _remove(path: Path, patience: float = 0.0) -> None:
+  """Windows will not delete a file another program has open: ffmpeg holds the part file for a moment after a stopped
+  renderer, and the window may be reading the picture. Try again for up to [patience] seconds, then leave it; a later
+  render replaces both."""
+  import time
+
+  deadline = time.monotonic() + patience
+  while True:
+    try:
+      path.unlink(missing_ok=True)
+      return
+    except OSError:
+      if time.monotonic() >= deadline:
+        return
+      time.sleep(0.1)

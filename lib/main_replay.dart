@@ -3,6 +3,8 @@
 
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -11,6 +13,7 @@ import 'package:opview/common/app_clock.dart';
 import 'package:opview/replay/replay_feed.dart';
 import 'package:opview/replay/replay_job.dart';
 import 'package:opview/replay/replay_scene.dart';
+import 'package:opview/replay/snapshot.dart';
 import 'package:opview/selfdrive/ui/ui_state.dart';
 import 'package:opview/services/app_settings.dart';
 import 'package:opview/services/impl/cereal_adapter.dart';
@@ -64,6 +67,17 @@ class _ReplayRenderState extends State<ReplayRender> {
     exit(1);
   }
 
+  /// written beside and then moved over the last one, so the window never reads half a picture
+  void _writeSnapshot(Uint8List rgba, String path) {
+    try {
+      final part = File('$path.part');
+      part.writeAsBytesSync(snapshotBmp(rgba, widget.job.width, widget.job.height));
+      part.renameSync(path);
+    } on FileSystemException {
+      // on Windows the move fails while the window is reading the last one; the next picture will do
+    }
+  }
+
   Future<void> _run() async {
     final job = widget.job;
     final feed = await ReplayFeed.open(job, _uiState, _adapter);
@@ -75,6 +89,8 @@ class _ReplayRenderState extends State<ReplayRender> {
 
     var done = 0;
     final clock = Stopwatch()..start();
+    final snapshot = Platform.environment['OPRIVVIEW_SNAPSHOT'];
+    var nextSnapshotMs = 0;
     FeedFrame? frame;
     while ((frame = await feed.next()) != null) {
       final previous = _picture;
@@ -93,9 +109,19 @@ class _ReplayRenderState extends State<ReplayRender> {
       final image = await boundary.toImage();
       final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
       image.dispose();
-      encoder.stdin.add(data!.buffer.asUint8List());
+      final pixels = data!.buffer.asUint8List();
+      encoder.stdin.add(pixels);
       await encoder.stdin.flush();
-      if (++done % job.fps == 0) stderr.writeln('frame $done of ${job.frameCount} after ${clock.elapsed.inSeconds} s');
+      // the frame it has reached, for the window to show: about once a second, less often if making one is slow here
+      if (snapshot != null && clock.elapsedMilliseconds >= nextSnapshotMs) {
+        final took = Stopwatch()..start();
+        _writeSnapshot(pixels, snapshot);
+        nextSnapshotMs = clock.elapsedMilliseconds + max(1000, took.elapsedMilliseconds * snapshotSpacing);
+      }
+      if (++done % job.fps == 0) {
+        final where = job.segmentAt(done - 1);
+        stderr.writeln('frame $done of ${job.frameCount} after ${clock.elapsed.inSeconds} s${where == null ? '' : ', $where'}');
+      }
     }
     await feed.close();
     await encoder.stdin.close();

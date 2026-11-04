@@ -82,10 +82,15 @@ def test_a_typed_output_path_may_use_a_tilde_and_leave_off_the_extension():
   assert server._chosen_output("~/clips/run") == Path.home() / "clips" / "run.mp4"
 
 
-def _resolved(monkeypatch):
+def _resolved(monkeypatch, route_dir=None):
+  from pathlib import Path
+
   from oprivview_replay import jobs
 
   class R:
+    def __init__(self):
+      self.route_dir = route_dir or Path("no-such-route-dir")
+
     def describe(self):
       return {"zone": "UTC", "start_segment": 2, "end_segment": 3}
 
@@ -122,20 +127,53 @@ def test_cancel_stops_a_job_and_it_stays_cancelled(monkeypatch, tmp_path):
   assert c.get(f"/jobs/{job['id']}").json()["state"] == "cancelled" and killed
 
 
+def test_a_running_render_shows_the_picture_it_has_reached_and_a_finished_one_does_not(monkeypatch, tmp_path):
+  import threading
+  import time
+
+  from oprivview_replay import jobs, render
+
+  _resolved(monkeypatch, tmp_path)
+  reported, go = threading.Event(), threading.Event()
+
+  def fake_render(resolved, sources, cache, settings, output, app, progress, preview=False, started=None):
+    progress("frame 20 of 100 after 1 s")  # before the renderer has written a picture
+    render.snapshot_file(resolved.route_dir).write_bytes(b"png")
+    progress("frame 40 of 100 after 2 s, segment 4, 0:02")
+    reported.set()
+    go.wait(5)
+
+  monkeypatch.setattr(jobs, "render_resolved", fake_render)
+  c = TestClient(server.make_app(host="x", connect=None, output_dir=tmp_path))
+  job = c.post("/jobs", json={"route": "r"}).json()
+  assert reported.wait(5)
+  job = c.get(f"/jobs/{job['id']}").json()
+  assert job["snapshot"] == str(render.snapshot_file(tmp_path)) and job["progress"] == 0.4
+  go.set()
+  for _ in range(50):
+    job = c.get(f"/jobs/{job['id']}").json()
+    if job["state"] != "running":
+      break
+    time.sleep(0.05)
+  assert job["state"] == "done" and job["snapshot"] is None
+
+
 def _fake_renderer(tmp_path, code: int = 0):
-  """a renderer that writes something to the part file named in $PART and exits with [code]"""
+  """a renderer that writes something to the part file named in $PART, and a picture of its progress where it is
+  told to, and exits with [code]"""
   if sys.platform == "win32":  # Windows cannot run a #! script; a .cmd file is one it starts directly
     app = tmp_path / "renderer.cmd"
-    app.write_text(f'@echo clip> "%PART%"\r\n@exit /b {code}\r\n')
+    app.write_text(f'@echo clip> "%PART%"\r\n@echo png> "%OPRIVVIEW_SNAPSHOT%"\r\n@exit /b {code}\r\n')
     return app
   app = tmp_path / "renderer"
-  app.write_text(f'#!/bin/sh\necho clip > "$PART"; exit {code}\n')
+  app.write_text(f'#!/bin/sh\necho clip > "$PART"; echo png > "$OPRIVVIEW_SNAPSHOT"; exit {code}\n')
   app.chmod(0o755)
   return app
 
 
 def _run_render(monkeypatch, tmp_path, app, frames_written):
   import json
+  import subprocess
 
   from oprivview_replay import render
 
@@ -150,7 +188,22 @@ def _run_render(monkeypatch, tmp_path, app, frames_written):
   monkeypatch.setattr(render, "prepare", prepare)
   monkeypatch.setattr(render, "video_frames", lambda path: frames_written)
   monkeypatch.setenv("PART", str(render.part_file(output)))
-  render.run(None, tmp_path, None, None, {}, output, app, lambda t: None)
+  stale = render.snapshot_file(tmp_path)
+  stale.write_bytes(b"an earlier render's")
+  seen = []
+
+  class Proc(subprocess.Popen):
+    def wait(self, *a, **k):
+      code = super().wait(*a, **k)
+      seen.append(stale.read_bytes().strip())  # what the renderer left, before the render tidies up
+      return code
+
+  monkeypatch.setattr(subprocess, "Popen", Proc)
+  try:
+    render.run(None, tmp_path, None, None, {}, output, app, lambda t: None)
+  finally:
+    assert seen == [b"png"], "the renderer is told where to put its picture"
+    assert not stale.exists(), "no picture is left behind"
   return output
 
 

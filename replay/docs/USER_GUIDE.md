@@ -100,6 +100,8 @@ Press **Render MP4**. Progress stays in the window, and you can carry on using y
 the drive itself: about 2 minutes for each minute of drive on the Mac it was tested on. Windows has not been timed on a real
 PC yet; in a virtual machine with no graphics card it took about 3.5 minutes per minute of drive.
 
+- While it renders, the preview area shows the frame it has reached, updated about once a second, and the line under the
+  progress bar says which segment and how far into it.
 - Clips go to your Movies folder on a Mac, or your Videos folder on Windows, unless you pick a different folder in App
   settings, or an **Output file** with **Choose...**.
 - A clip is only saved if it is complete. **Cancel** stops the render and saves nothing.

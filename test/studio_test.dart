@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:opview/replay/snapshot.dart';
 import 'package:opview/studio/sidecar.dart';
 import 'package:opview/studio/studio_api.dart';
 import 'package:opview/studio/studio_page.dart';
@@ -84,6 +86,69 @@ void main() {
     expect(posted.single['route'], '0000005a--f16da7af40');
     expect(posted.single['options'], {'view': 'detailed', 'bottom_bar': 'laneCentering', 'collapsed_panels': ['lead']});
     await tester.runAsync(() => server.close(force: true));
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('a running render shows the picture it has reached, and the placeholder once it is done', (tester) async {
+    HttpOverrides.global = null;
+    late HttpServer server;
+    late Directory dir;
+    var state = 'running';
+    await tester.runAsync(() async {
+      dir = await Directory.systemTemp.createTemp('studio-snapshot-test');
+      final shot = File('${dir.path}/render-snapshot.bmp');
+      await shot.writeAsBytes(snapshotBmp(Uint8List(8 * 5 * 4), 8, 5)); // a small black picture, as the renderer writes them
+      server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      server.listen((req) async {
+        Object body;
+        if (req.uri.path == '/params') {
+          body = _params;
+        } else if (req.uri.path == '/routes') {
+          body = {'online': true, 'metric': true, 'routes': [
+            {'route': '0000005a--f16da7af40', 'segments': [0, 1], 'first': 0, 'last': 1, 'on_device': true, 'on_connect': false, 'detail': 'full'},
+          ]};
+        } else if (req.uri.path.startsWith('/jobs')) {
+          body = {'id': 'a', 'state': state, 'message': state == 'running' ? 'frame 40 of 100 after 2 s, segment 0, 0:02' : 'finished',
+              'progress': state == 'running' ? 0.4 : 1.0, 'output': '/tmp/x.mp4', 'error': null, 'preview': false,
+              'snapshot': state == 'running' ? shot.path : null};
+        } else {
+          body = {'ok': true};
+        }
+        req.response.headers.contentType = ContentType.json;
+        req.response.write(jsonEncode(body));
+        await req.response.close();
+      });
+    });
+    tester.view.physicalSize = const Size(1320, 820);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    Future<void> settle(bool Function() done) async {
+      for (var i = 0; i < 40 && !done(); i++) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+        await tester.pump(const Duration(milliseconds: 300)); // moves the once-a-second poll along
+      }
+    }
+
+    final api = StudioApi(Uri.parse('http://127.0.0.1:${server.port}'));
+    await tester.pumpWidget(MaterialApp(home: StudioPage(start: () async => Sidecar(null, api))));
+    await settle(() => find.text('0000005a--f16da7af40').evaluate().isNotEmpty);
+    await tester.tap(find.text('0000005a--f16da7af40'));
+    await tester.pump();
+    await tester.tap(find.text('Render MP4'));
+    await settle(() => find.byType(Image).evaluate().isNotEmpty);
+    expect(find.byType(Image), findsOneWidget);
+    expect(find.text('Working on it...'), findsNothing);
+    expect(find.textContaining('segment 0, 0:02'), findsOneWidget);
+
+    state = 'done';
+    await settle(() => find.byType(Image).evaluate().isEmpty);
+    expect(find.byType(Image), findsNothing);
+    expect(find.text('The preview plays here'), findsOneWidget);
+    await tester.runAsync(() async {
+      await server.close(force: true);
+      await dir.delete(recursive: true);
+    });
     await tester.pumpWidget(const SizedBox());
   });
 }

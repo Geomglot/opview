@@ -210,7 +210,7 @@ def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Pat
     folder = Path(settings["output_dir"]).expanduser() if settings["output_dir"] else output_dir
     output = _chosen_output(req.output) if req.output else default_output(folder, resolved.describe(), req.route)
     job_id = uuid.uuid4().hex[:8]
-    state[job_id] = {"id": job_id, "state": "running", "message": "starting", "progress": None, "output": str(output), "error": None, "preview": req.preview, "job_file": None,
+    state[job_id] = {"id": job_id, "state": "running", "message": "starting", "progress": None, "output": str(output), "error": None, "preview": req.preview, "job_file": None, "snapshot": None,
                      "range": resolved.describe()}
 
     def progress(text: str):
@@ -221,6 +221,9 @@ def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Pat
         if text.startswith("frame "):
           parts = text.split()
           state[job_id]["progress"] = int(parts[1]) / int(parts[3])
+          # the picture the renderer has reached, once it has written one, for the window to show while it waits
+          if not req.preview and render.snapshot_file(resolved.route_dir).exists():
+            state[job_id]["snapshot"] = str(render.snapshot_file(resolved.route_dir))
 
     def work():
       try:
@@ -230,7 +233,7 @@ def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Pat
                                         started=lambda p: renderers.__setitem__(job_id, p))
         with lock:
           if state[job_id]["state"] == "running":
-            state[job_id].update(state="done", message="ready" if req.preview else "finished", progress=1.0,
+            state[job_id].update(state="done", message="ready" if req.preview else "finished", progress=1.0, snapshot=None,
                                  job_file=str(job_file) if job_file else None)
       except Cancelled:
         pass
@@ -238,7 +241,7 @@ def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Pat
         detail = getattr(e, "stderr", None) or str(e)
         with lock:
           if state[job_id]["state"] == "running":
-            state[job_id].update(state="failed", error=str(detail)[-2000:])
+            state[job_id].update(state="failed", error=str(detail)[-2000:], snapshot=None)
       finally:
         renderers.pop(job_id, None)
 
@@ -251,7 +254,7 @@ def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Pat
       raise HTTPException(404, "no such job")
     with lock:
       if state[job_id]["state"] == "running":
-        state[job_id].update(state="cancelled", message="stopped")
+        state[job_id].update(state="cancelled", message="stopped", snapshot=None)
       running = renderers.get(job_id)
     if running is not None:
       running.kill()

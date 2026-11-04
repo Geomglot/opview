@@ -78,6 +78,7 @@ class _StudioPageState extends State<StudioPage> {
   bool _checking = false;
   Map<String, dynamic>? _job;
   String? _previewFile; // set once the server has prepared a preview, which starts playing
+  Uint8List? _snapshot; // the frame a render has reached, while it runs
   Timer? _poll;
   final _updater = ReplayUpdater();
 
@@ -313,6 +314,7 @@ class _StudioPageState extends State<StudioPage> {
       _job = {'state': 'running', 'message': 'starting', 'preview': preview};
       _resolveError = null;
       _previewFile = null;
+      _showSnapshot(null);
     });
     try {
       final out = _output.text.trim().isEmpty ? null : _output.text.trim();
@@ -321,8 +323,11 @@ class _StudioPageState extends State<StudioPage> {
       _poll?.cancel();
       _poll = Timer.periodic(const Duration(seconds: 1), (t) async {
         final j = await _sidecar!.api.job(_job!['id']);
+        final snapshot = await _readSnapshot(j);
+        if (!mounted) return;
         setState(() {
           _job = j;
+          _showSnapshot(snapshot);
           if (j['state'] == 'done' && j['preview'] == true) _previewFile = j['job_file'] as String?;
         });
         if (j['state'] != 'running') t.cancel();
@@ -335,10 +340,32 @@ class _StudioPageState extends State<StudioPage> {
     }
   }
 
+  /// the picture a running render has reached; the one already shown if the file is being replaced just then
+  Future<Uint8List?> _readSnapshot(Map<String, dynamic> j) async {
+    final path = j['state'] == 'running' ? j['snapshot'] as String? : null;
+    if (path == null) return null;
+    try {
+      return await File(path).readAsBytes();
+    } on FileSystemException {
+      return _snapshot;
+    }
+  }
+
+  /// each picture is new to Flutter's image cache, so the one it replaces is dropped from it
+  void _showSnapshot(Uint8List? bytes) {
+    final old = _snapshot;
+    if (identical(old, bytes)) return;
+    if (old != null) imageCache.evict(MemoryImage(old));
+    _snapshot = bytes;
+  }
+
   Future<void> _cancel() async {
     _poll?.cancel();
     final j = await _sidecar!.api.cancel(_job!['id'] as String);
-    setState(() => _job = j);
+    setState(() {
+      _job = j;
+      _showSnapshot(null);
+    });
   }
 
   @override
@@ -493,6 +520,8 @@ class _StudioPageState extends State<StudioPage> {
                   child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             _previewFile != null
                 ? _previewPlayer()
+                : running && _snapshot != null
+                ? Image.memory(_snapshot!, gaplessPlayback: true, fit: BoxFit.contain)
                 : AspectRatio(
                     aspectRatio: 16 / 9,
                     child: Container(
