@@ -161,20 +161,32 @@ def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Pat
     rows: dict[str, dict] = {}
     problems = []
     device_up = False
+    away = None
     try:
       for route, segs in sources.device.routes().items():
         rows[route] = {"route": route, "segments": segs, "on_device": True, "on_connect": False}
       device_up = True
     except SourceError as e:
-      problems.append(str(e))
+      away = str(e)
     metric = sources.device.is_metric() if device_up else None
+    connect_up = False
     if sources.connect is not None and sources.connect.available():
       try:
         for route, info in sources.connect.listing().items():
           row = rows.setdefault(route, {"route": route, "segments": info["segments"], "on_device": False})
           _connect_details(row, info)
+        connect_up = True
       except SourceError as e:
         problems.append(str(e))
+    if away is not None:
+      # with Connect answering, a comma away from this network is a normal case, not a fault: say what happens instead,
+      # and keep ssh's own words for the log
+      print(f"the comma on this network did not answer: {away}", file=sys.stderr)
+      if connect_up:
+        problems.insert(0, "The comma is not on this network, so the drives are listed from comma Connect."
+                        + (" With comma prime, full detail comes from the comma through comma's server." if settings["via_server"] else ""))
+      else:
+        problems.insert(0, away)
     problems += _add_public_rows(rows)
     for row in rows.values():
       segs = row["segments"]

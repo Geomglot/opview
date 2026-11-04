@@ -29,6 +29,10 @@ const choiceLabels = {
 
 String choiceLabel(String c) => choiceLabels[c] ?? '${c[0].toUpperCase()}${c.substring(1)}';
 
+/// under the picture of a render's progress, which jumps along because it is only the frame reached, about once a second
+const renderPictureNote = 'This shows the frame the render has reached, about once a second, so it looks jerky. '
+    'That is normal: the MP4 has every frame.';
+
 /// one line for the drive pane about an upload to Connect the app asked the comma for; null when there is none
 String? uploadLine(Map<String, dynamic>? u) {
   if (u == null || u['requested'] != true) return null;
@@ -381,20 +385,29 @@ class _StudioPageState extends State<StudioPage> {
   Future<void> _ask(String id, String question) async {
     _asking = true;
     try {
-      final copy = await showDialog<bool>(
+      // the dialog covers the window's own Cancel, so it has one of its own: for a range started by mistake
+      final choice = await showDialog<String>(
         context: context,
         barrierDismissible: false,
         builder: (context) => AlertDialog(
           title: const Text('Copy over a metered connection?'),
           content: SizedBox(width: 520, child: Text(question)),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Not now')),
-            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Copy now')),
+            TextButton(onPressed: () => Navigator.pop(context, 'cancel'), child: const Text('Cancel')),
+            TextButton(onPressed: () => Navigator.pop(context, 'not now'), child: const Text('Not now')),
+            FilledButton(onPressed: () => Navigator.pop(context, 'copy'), child: const Text('Copy now')),
           ],
         ),
       );
       _answered = id;
-      if (copy != null && mounted && _job?['id'] == id) await _sidecar!.api.answer(id, copy);
+      if (choice == null || !mounted || _job?['id'] != id) return;
+      if (choice == 'cancel') {
+        _poll?.cancel();
+        final j = await _sidecar!.api.cancel(id);
+        if (mounted) setState(() => _job = j);
+        return;
+      }
+      await _sidecar!.api.answer(id, choice == 'copy');
     } on StudioError {
       // the job ended or was cancelled while the question was open
     } finally {
@@ -649,7 +662,12 @@ class _StudioPageState extends State<StudioPage> {
             _previewFile != null
                 ? _previewPlayer()
                 : running && _snapshot != null
-                ? Image.memory(_snapshot!, gaplessPlayback: true, fit: BoxFit.contain)
+                ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    Image.memory(_snapshot!, gaplessPlayback: true, fit: BoxFit.contain),
+                    Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(renderPictureNote, style: Theme.of(context).textTheme.bodySmall)),
+                  ])
                 : AspectRatio(
                     aspectRatio: 16 / 9,
                     child: Container(

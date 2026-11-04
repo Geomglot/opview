@@ -135,15 +135,17 @@ def choose_files(r: Resolved, sources: Sources, needed: list[int], detail: str, 
 
 def _may_copy_through_server(r: Resolved, sources: Sources, source: DeviceSource, needed: list[int], earlier: int | None,
                              settings: dict, cache: Path, progress: Callable[[str], None],
-                             ask: Callable[[str], bool] | None) -> bool:
+                             ask: Callable[[str], bool] | None) -> str | None:
   """A copy through comma's server is plain SSH, so the comma cannot hold it back on a metered connection as it does its
-  own uploads. Ask the comma what it is on: unmetered, copy; metered, or no answer, ask the user, with the size."""
+  own uploads. Ask the comma what it is on: unmetered, copy; metered, or no answer, ask the user, with the size.
+  Returns None to copy, or what the user declined to copy over: "the comma's metered connection", or "a connection that
+  may be metered" when the comma did not say."""
   progress("checking the comma's connection")
   network = sources.connect.network() if sources.connect is not None else None
   if network is not None and not network["metered"]:
-    return True
+    return None
   if ask is None:  # nobody to ask, as on the command line
-    return True
+    return None
   files = [(s, n) for s in needed for n in FULL] + ([(earlier, FULL[0])] if earlier is not None else [])
   wide = [(s, "ecamera.hevc") for s in needed] if settings["camera"] != "road" else []
   try:
@@ -159,13 +161,16 @@ def _may_copy_through_server(r: Resolved, sources: Sources, source: DeviceSource
     return sum(size for s, n in items if (size := sizes.get(f"{r.route}--{s}/{n}")) is not None and here(s, n) != size) / 1e6
 
   if sizes and not to_copy(files) and not to_copy(wide):
-    return True  # everything is here already: the copy will send nothing, so there is nothing to ask
+    return None  # everything is here already: the copy will send nothing, so there is nothing to ask
   why = (f"The comma is on {network['kind']}, which it is set to treat as metered." if network is not None
          else "The comma did not say whether its connection is metered.")
   amount = f"about {to_copy(files):.0f} MB of its data" if sizes else "its data"
   extra = f", and up to {to_copy(wide):.0f} MB more if the wide camera is used" if sizes and wide and to_copy(wide) else ""
-  return ask(f"{why} Copying full detail for this range through comma's server would use {amount}{extra}. Copy now?\n\n"
-             "Not now uses what comma Connect has, which is usually less detail.")
+  instead = ("Not now stops, because Full detail needs these files." if settings["detail"] == "full"
+             else "Not now uses what comma Connect has, which is usually less detail.")
+  if ask(f"{why} Copying full detail for this range through comma's server would use {amount}{extra}. Copy now?\n\n{instead}"):
+    return None
+  return "the comma's metered connection" if network is not None else "a connection that may be metered"
 
 
 def _render_again(said: str) -> str:
@@ -219,11 +224,12 @@ def render_resolved(r: Resolved, sources: Sources, cache: Path, settings: dict, 
   except SourceError as e:
     said = upload(full_files + wide_files) if settings["detail"] == "full" else None
     raise SourceError(f"{e} {_render_again(said)}" if said else str(e)) from None
-  if getattr(source, "through_server", False) and not _may_copy_through_server(r, sources, source, needed, earlier, settings,
-                                                                                cache, progress, ask):
+  declined = (_may_copy_through_server(r, sources, source, needed, earlier, settings, cache, progress, ask)
+              if getattr(source, "through_server", False) else None)
+  if declined is not None:
     if settings["detail"] == "full":
       said = upload(full_files + wide_files)
-      raise SourceError("Full detail was not copied over the comma's metered connection. Choose Automatic detail to use "
+      raise SourceError(f"Full detail was not copied over {declined}. Choose Automatic detail to use "
                         "what comma Connect has now, or render again when the comma is on an unmetered connection."
                         + (f" {_render_again(said)}" if said else ""))
     source, detail = choose_files(r, sources, wanted, settings["detail"], allow_server=False)

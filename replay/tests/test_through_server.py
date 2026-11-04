@@ -363,7 +363,7 @@ def test_nothing_is_asked_when_everything_is_here_already(monkeypatch, tmp_path)
   monkeypatch.setattr(connect, "network", lambda: {"kind": "cellular", "metered": True}, raising=False)
   sources = jobs.Sources(Fake("device", None), connect, through_server=lambda: remote)
   r = jobs.Resolved("r", [0, 1], tmp_path, None, SimpleNamespace(segment=0), SimpleNamespace(segment=0), connect)
-  assert jobs._may_copy_through_server(r, sources, remote, [0], None, {"camera": "road"}, tmp_path, lambda t: None,
+  assert None is jobs._may_copy_through_server(r, sources, remote, [0], None, {"camera": "road", "detail": "auto"}, tmp_path, lambda t: None,
                                        ask=lambda q: pytest.fail("asked about 0 MB"))
 
 
@@ -384,3 +384,34 @@ def test_a_command_through_the_server_that_cannot_connect_is_tried_once_more(mon
   with pytest.raises(subprocess.CalledProcessError):
     ssh_source.run(through, "false")
   assert len(calls) == 1, "a command that ran and failed is not repeated"
+
+
+def test_with_full_detail_the_question_says_not_now_stops_and_the_error_matches_what_the_comma_said(monkeypatch, tmp_path):
+  asked = []
+  with pytest.raises(SourceError, match="not copied over a connection that may be metered"):
+    _render(monkeypatch, tmp_path, None, ask=lambda q: asked.append(q) or False, detail="full")
+  assert asked[0].endswith("Not now stops, because Full detail needs these files.")
+  with pytest.raises(SourceError, match="not copied over the comma's metered connection"):
+    _render(monkeypatch, tmp_path, {"kind": "cellular", "metered": True}, ask=lambda q: False, detail="full")
+
+
+def test_the_drive_list_says_plainly_that_the_comma_is_away_when_connect_lists_the_drives(monkeypatch, tmp_path, capsys):
+  from fastapi.testclient import TestClient
+
+  class Listing:
+    public = False
+
+    def available(self):
+      return True
+
+    def use_device(self, d):
+      pass
+
+    def listing(self):
+      return {}
+
+  settings = Settings(tmp_path / "s.json")
+  got = TestClient(server.make_app(host="192.0.2.1", connect=Listing(), settings=settings)).get("/routes").json()
+  assert got["error"] == ("The comma is not on this network, so the drives are listed from comma Connect. "
+                          "With comma prime, full detail comes from the comma through comma's server.")
+  assert "192.0.2.1" in capsys.readouterr().err, "ssh's own words go to the log"

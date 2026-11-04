@@ -141,6 +141,7 @@ void main() {
     await settle(() => find.byType(Image).evaluate().isNotEmpty);
     expect(find.byType(Image), findsOneWidget);
     expect(find.text('Working on it...'), findsNothing);
+    expect(find.text(renderPictureNote), findsOneWidget, reason: 'the picture jumps along, and says that is normal');
     expect(find.textContaining('segment 0, 0:02'), findsOneWidget);
 
     // Cancel asks first; carrying on sends nothing, and Save asks the server to finish early
@@ -223,6 +224,8 @@ void main() {
     await settle(() => find.text('Copy over a metered connection?').evaluate().isNotEmpty);
     expect(find.text('Copy over a metered connection?'), findsOneWidget);
     expect(find.textContaining('on cellular'), findsOneWidget);
+    expect(find.descendant(of: find.byType(AlertDialog), matching: find.text('Cancel')), findsOneWidget,
+        reason: 'the dialog covers the window\'s own Cancel');
     await tester.tap(find.text('Copy now'));
     await settle(() => answers.isNotEmpty);
     for (var i = 0; i < 6; i++) {
