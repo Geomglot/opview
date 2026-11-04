@@ -1,8 +1,10 @@
 name: Replay for Windows
 
-# Builds OPRivView Replay for Windows as a zip, with no dependence on any one computer: ffmpeg from source (MSYS2), the
-# server (PyInstaller) and the app (Flutter), put together by replay/packaging/build_windows.ps1.
-# The zip is kept as a workflow artifact; download it from the run's page.
+# Builds OPRivView Replay for Windows and its installer, with no dependence on any one computer: ffmpeg from source
+# (MSYS2), the server (PyInstaller) and the app (Flutter), put together by replay/packaging/build_windows.ps1 and
+# Inno Setup. It then installs it, checks the installed server starts and reaches comma Connect, and uninstalls it.
+# On a push the installer is a "-dev" build kept as a workflow artifact; replay-release.yml calls this with the release's
+# version and makes a draft release from the artifact.
 on:
   push:
     branches: [rivian-support]
@@ -11,9 +13,18 @@ on:
     branches: [rivian-support]
     paths: ['replay/**', 'windows/**', 'lib/**', 'pubspec.*', '.github/workflows/replay-windows.yml']
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      version:
+        description: the full version, e.g. 0.1.2-test.1; empty for a -dev build
+        type: string
+        default: ''
+      build_number:
+        type: string
+        default: '1'
 
 jobs:
-  zip:
+  windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v6
@@ -21,7 +32,7 @@ jobs:
       # ffmpeg takes a quarter of an hour to build and only changes with its build script, so it is kept between runs
       - name: ffmpeg from the cache
         id: ffmpeg-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: replay/build/ffmpeg-win
           key: ffmpeg-win-${{ hashFiles('replay/packaging/build_ffmpeg_windows.sh') }}
@@ -42,7 +53,7 @@ jobs:
         working-directory: replay
         run: bash packaging/build_ffmpeg_windows.sh build/ffmpeg-win
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: pip
@@ -54,9 +65,12 @@ jobs:
           python -m venv .venv
           .venv\Scripts\python -m pip install -r requirements.txt
 
+      # with the ffmpeg just built on the PATH, so the tests that need ffmpeg (test_keyframe_cut.py) run too
       - name: Server tests
         working-directory: replay
-        run: .venv\Scripts\python -m pytest -q
+        run: |
+          $env:PATH = "$pwd\build\ffmpeg-win;$env:PATH"
+          .venv\Scripts\python -m pytest -q
 
       - uses: subosito/flutter-action@v2
         with:
@@ -65,12 +79,66 @@ jobs:
 
       - run: flutter pub get
 
-      - name: Build and zip
+      - name: Inno Setup
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
+
+      - name: Build the program and its installer
         working-directory: replay
-        run: powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1
+        run: |
+          $version = '${{ inputs.version }}'
+          if ($version) {
+            powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1 -Version $version -BuildNumber ${{ inputs.build_number }}
+          } else {
+            powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1 -BuildNumber ${{ github.run_number }}
+          }
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      # as a tester would: the installer, silently, for this user only; then the installed copy is checked
+      - name: The installer installs
+        working-directory: replay
+        run: |
+          $installer = (Get-Item dist\OPRivView-Replay-*-Windows.exe).FullName
+          Start-Process $installer -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait
+          $dir = "$env:LOCALAPPDATA\Programs\OPRivView Replay"
+          foreach ($f in "OPRivViewReplay.exe", "unins000.exe", "oprivview-replay-server\oprivview-replay-server.exe", "ffmpeg\ffmpeg.exe") {
+            if (-not (Test-Path "$dir\$f")) { throw "the installer did not put $f in $dir" }
+          }
+          if (-not (Test-Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\OPRivView Replay.lnk")) { throw "no Start menu shortcut" }
+
+      # a dummy token must reach comma Connect and be refused there: anything else means the server's trust store is wrong
+      - name: The installed server starts and reaches comma Connect over TLS
+        shell: bash
+        run: |
+          dir="$LOCALAPPDATA/Programs/OPRivView Replay"
+          mkdir -p "$USERPROFILE/.comma"
+          echo not-a-real-token > "$USERPROFILE/.comma/jwt"
+          "$dir/oprivview-replay-server/oprivview-replay-server.exe" --port 8799 --host 127.0.0.1 --app "$dir/OPRivViewReplay.exe" &
+          pid=$!
+          for i in $(seq 60); do
+            if curl -sf http://127.0.0.1:8799/health >/dev/null; then break; fi
+            sleep 1
+          done
+          routes=$(curl -sf http://127.0.0.1:8799/routes) || { echo "the server did not answer /routes"; kill $pid || true; exit 1; }
+          kill $pid || true
+          rm -f "$USERPROFILE/.comma/jwt"
+          echo "$routes"
+          case "$routes" in
+            *"cannot reach comma Connect"*) echo "the bundled server does not trust comma Connect's certificate"; exit 1 ;;
+            *"comma Connect answered 401"*) echo "Connect was reached over TLS and refused the dummy token, as expected" ;;
+            *) echo "unexpected /routes answer"; exit 1 ;;
+          esac
+
+      - name: The uninstaller removes it
+        run: |
+          $dir = "$env:LOCALAPPDATA\Programs\OPRivView Replay"
+          Start-Process "$dir\unins000.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait
+          # the uninstaller finishes in a copy of itself, so give it a moment
+          for ($i = 0; $i -lt 30 -and (Test-Path "$dir\OPRivViewReplay.exe"); $i++) { Start-Sleep 1 }
+          if (Test-Path "$dir\OPRivViewReplay.exe") { throw "the uninstaller left the app in $dir" }
 
       - uses: actions/upload-artifact@v7
         with:
           name: OPRivView-Replay-Windows
-          path: replay/dist/OPRivView-Replay-*-Windows.zip
+          path: replay/dist/OPRivView-Replay-*-Windows.exe
           if-no-files-found: error

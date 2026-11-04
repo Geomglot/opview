@@ -58,7 +58,8 @@ to /Applications; `make clean` removes the build and the installed copy. It stil
 which ship with macOS.
 
 `make dmg` also puts it in one file for release, `dist/OPRivView-Replay-<version>-macOS-<Intel|ARM>.dmg`, with a shortcut to
-Applications and a read-me. The version comes from `pubspec.yaml`, and the name says which Mac the release is for: it
+Applications and a read-me. The version is explained under [Versions and releases](#versions-and-releases), and the name
+says which Mac the release is for: it
 defaults to the one that built it, so running `make dmg` on Apple silicon makes an `ARM` release, and
 `make dmg ARCH=Intel` the other kind. A release for one kind of Mac is checked at build time, so it never silently
 holds the other kind's ffmpeg or server. A first build needs `brew install nasm`.
@@ -84,8 +85,12 @@ Flutter (and Visual Studio's C++ tools) and the replay `.venv` set up as above, 
 powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1
 ```
 
-It leaves `dist\OPRivView Replay\`, which runs from any folder, and the release file in `dist\`. Like `make dmg`, it takes
-the version from `pubspec.yaml`.
+It leaves `dist\OPRivView Replay\`, which runs from any folder, and the installer,
+`dist\OPRivView-Replay-<version>-Windows.exe`, made with Inno Setup 6 (`winget install JRSoftware.InnoSetup`) from
+`packaging/windows-installer.iss`. `-SkipInstaller` stops at the folder. The installer installs for the current user
+only (no administrator), in `%LOCALAPPDATA%\Programs\OPRivView Replay`, adds a Start menu shortcut, replaces an older
+version in place, and has an uninstaller in Windows' Apps list that offers to delete the settings and stored drives.
+Its `AppId` must never change, or a new version would install beside the old one.
 
 ffmpeg for Windows is built from the same official source by `packaging/build_ffmpeg_windows.sh`, in an MSYS2 MINGW64
 shell (the script lists the packages it needs), with the same short list of parts as the Mac's. Encoding goes through the
@@ -101,8 +106,26 @@ pinned by `tests/test_mac_pins.py`.
 
 Limits of the Windows release:
 - 64-bit Windows 10 or 11.
-- It is not code signed, so SmartScreen stops it the first time ("More info", then "Run anyway").
+- It is not code signed, so SmartScreen stops the installer the first time ("More info", then "Run anyway").
 - It has so far been tested only in a virtual machine with no graphics card.
+
+## Versions and releases
+
+`replay/VERSION` holds the version being worked towards, such as `0.1.2`. It is the replay app's own version, separate
+from the Android app's in `pubspec.yaml`. Local builds (`make dmg`, `build_windows.ps1`) call themselves `<VERSION>-dev`.
+The app shows its version in the **?** menu, and a release build opens the guides of its own tag.
+
+A release is made by pushing a tag, `replay-v<VERSION>` or, for a test version, `replay-v<VERSION>-test.<n>`.
+`.github/workflows/replay-release.yml` then checks the tag matches `replay/VERSION`, builds all three files with the
+release's version (`replay-windows.yml` and `replay-mac.yml`, for Apple silicon on `macos-latest` and for Intel on
+`macos-15-intel`), and puts them with `SHA256SUMS` in a **draft** release, pre-release for a test version, with notes
+listing the commits since the previous replay tag. Nothing is public until the draft is published by hand.
+
+- GitHub's Mac runners are sometimes too busy to start a job. `replay-release-retry.yml` then re-runs the failed jobs, up
+  to three more times, and the re-run adds to the same draft. A build that ran and failed is not retried.
+- If the Intel runners are retired, build that dmg on an Intel Mac with `make dmg VERSION=<the full version>` and add it
+  to the draft with `gh release upload <tag> <dmg> --clobber`, updating `SHA256SUMS` to match.
+- Bump `replay/VERSION` in its own commit once a version is released, before the next one's first test tag.
 
 ## Where files come from, and how much detail
 

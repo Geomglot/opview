@@ -1,0 +1,32 @@
+name: Replay release retry
+
+# GitHub's Mac runners are sometimes too busy: a job waits, is never given a machine ("not acquired by Runner"), and is
+# cancelled, which fails the release run. This re-runs the failed jobs of such a run, up to three more times, so a
+# release tag does not need someone watching it. Only jobs that never started count: a build that ran and failed is
+# left for a person to look at.
+on:
+  workflow_run:
+    workflows: ['Replay release']
+    types: [completed]
+
+permissions:
+  actions: write
+
+jobs:
+  retry:
+    if: github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.run_attempt < 4
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RUN: ${{ github.event.workflow_run.id }}
+      ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+    steps:
+      - name: Re-run jobs that never got a machine
+        run: |
+          # a job that never got a machine is cancelled with no runner and no steps
+          unstarted=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN/attempts/$ATTEMPT/jobs" --paginate \
+            -q '.jobs[] | select(.conclusion == "cancelled" and (.runner_name // "") == "" and (.steps | length) == 0) | .name')
+          if [ -z "$unstarted" ]; then echo "every job got a machine; nothing to retry"; exit 0; fi
+          echo "never started:"; echo "$unstarted"
+          sleep 300  # give the busy runners a few minutes
+          gh run rerun "$RUN" --failed -R "$GITHUB_REPOSITORY"

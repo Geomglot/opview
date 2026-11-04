@@ -1,0 +1,147 @@
+name: Replay release
+
+# Pushing a tag replay-v<version> or replay-v<version>-test.<n>, where <version> is replay/VERSION, builds OPRivView
+# Replay for Windows, Apple silicon Macs and Intel Macs, with the same checks as on every push, and puts the three files
+# and SHA256SUMS in a DRAFT release. Nothing is public until the owner reviews the draft and presses Publish.
+# GitHub's Mac runners sometimes never start a job; replay-release-retry.yml then re-runs the failed jobs, and this
+# workflow is written so a re-run adds to the same draft (--clobber) rather than making another.
+on:
+  push:
+    tags: ['replay-v*']
+
+permissions:
+  contents: read
+
+# one release run per tag at a time, never cancelled half-way
+concurrency:
+  group: replay-release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      prerelease: ${{ steps.v.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v6
+      - id: v
+        name: The tag matches replay/VERSION
+        run: |
+          base=$(head -n1 replay/VERSION | tr -d '[:space:]')
+          version=${GITHUB_REF_NAME#replay-v}
+          if [ "$version" = "$base" ]; then
+            prerelease=false
+          elif printf '%s' "$version" | grep -Eqx "$(printf '%s' "$base" | sed 's/\./\\./g')-test\.[0-9]+"; then
+            prerelease=true
+          else
+            echo "::error::tag $GITHUB_REF_NAME must be replay-v$base or replay-v$base-test.<n> (replay/VERSION is $base)"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+          echo "Release $version (pre-release: $prerelease)"
+
+  windows:
+    needs: version
+    uses: ./.github/workflows/replay-windows.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+      build_number: ${{ github.run_number }}
+
+  mac-arm:
+    needs: version
+    uses: ./.github/workflows/replay-mac.yml
+    with:
+      arch: ARM
+      runner: macos-latest
+      version: ${{ needs.version.outputs.version }}
+      build_number: ${{ github.run_number }}
+
+  mac-intel:
+    needs: version
+    uses: ./.github/workflows/replay-mac.yml
+    with:
+      arch: Intel
+      runner: macos-15-intel
+      version: ${{ needs.version.outputs.version }}
+      build_number: ${{ github.run_number }}
+
+  # runs even when a build failed, so the draft holds whatever was built; a re-run of the failed build runs this again
+  draft:
+    needs: [version, windows, mac-arm, mac-intel]
+    if: always() && needs.version.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.ref_name }}
+      VERSION: ${{ needs.version.outputs.version }}
+      PRERELEASE: ${{ needs.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # the notes list the commits since the previous replay release
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: OPRivView-Replay-*
+          merge-multiple: true
+          path: files
+
+      - name: Make or update the draft release
+        run: |
+          shopt -s nullglob
+          cd files
+          want=("OPRivView-Replay-$VERSION-Windows.exe" "OPRivView-Replay-$VERSION-macOS-ARM.dmg" "OPRivView-Replay-$VERSION-macOS-Intel.dmg")
+          have=(); missing=()
+          for f in "${want[@]}"; do if [ -f "$f" ]; then have+=("$f"); else missing+=("$f"); fi; done
+          ls -l
+          if [ ${#have[@]} -eq 0 ]; then echo "::error::nothing was built"; exit 1; fi
+          sha256sum "${have[@]}" > SHA256SUMS
+          cat SHA256SUMS
+
+          # a draft is not found by its tag the way a published release is, so look through the list
+          draft=$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate -q ".[] | select(.tag_name == \"$TAG\") | .draft")
+          if [ -n "$draft" ]; then
+            if [ "$draft" != true ]; then echo "::error::$TAG is already published; not changing it"; exit 1; fi
+            echo "adding to the existing draft (its notes are left as they are)"
+          else
+            title="OPRivView Replay ${VERSION/-test./ test }"
+            previous=$(git -C .. describe --tags --abbrev=0 --match 'replay-v*' "$TAG^" 2>/dev/null || true)
+            docs="https://github.com/Geomglot/opview/blob/$TAG/replay/docs"
+            {
+              echo "OPRivView Replay plays back a drive as it looked on the OPRivView screen and saves it as an MP4. It is separate from the OPRivView Android app."
+              echo
+              if [ "$PRERELEASE" = true ]; then echo "**Test version.** Please report problems on the [issues page](https://github.com/Geomglot/opview/issues), and say which computer you have."; echo; fi
+              echo "| Download | For |"
+              echo "| --- | --- |"
+              echo "| \`OPRivView-Replay-$VERSION-macOS-ARM.dmg\` | Apple silicon Macs (M1 and later), macOS 14 or later |"
+              echo "| \`OPRivView-Replay-$VERSION-macOS-Intel.dmg\` | Intel Macs, macOS 14 or later |"
+              echo "| \`OPRivView-Replay-$VERSION-Windows.exe\` | 64-bit Windows 10 or 11 |"
+              echo
+              echo "The app is not signed by Apple or Microsoft, so the first time you open it, macOS or Windows SmartScreen asks you to allow it. The install guides have the steps: [Mac]($docs/INSTALL.md), [Windows]($docs/INSTALL-WINDOWS.md). How to use it: [user guide]($docs/USER_GUIDE.md)."
+              echo
+              echo "Checksums are in \`SHA256SUMS\`."
+              echo
+              echo "## What's new"
+              echo
+              if [ -n "$previous" ]; then
+                git -C .. log --no-merges --format='- %s' "$previous..$TAG" -- replay lib/studio lib/replay lib/main_replay.dart macos windows
+                echo
+                echo "Since [$previous](https://github.com/Geomglot/opview/releases/tag/$previous)."
+              else
+                echo "- (first release made by this workflow)"
+              fi
+            } > notes.md
+            pre=(); [ "$PRERELEASE" = true ] && pre=(--prerelease)
+            gh release create "$TAG" --draft --verify-tag "${pre[@]}" --title "$title" --notes-file notes.md
+          fi
+
+          gh release upload "$TAG" "${have[@]}" SHA256SUMS --clobber
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::the draft is missing ${missing[*]}; re-run the failed jobs to add it"
+            exit 1
+          fi
+          echo "Draft ready: $(gh release view "$TAG" --json url -q .url)"

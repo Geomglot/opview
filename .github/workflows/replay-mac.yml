@@ -4,6 +4,7 @@ name: Replay for Apple silicon Macs
 # M-series Mac of our own: ffmpeg from source, the server (PyInstaller) and the app (Flutter), put together by
 # `make dmg` in replay/. It then starts the server and ffmpeg from the built app, so a release that cannot run on
 # Apple silicon fails here. The disk image is kept as a workflow artifact; download it from the run's page.
+# replay-release.yml calls this twice, for ARM on macos-latest and for Intel on macos-15-intel, with the release's version.
 on:
   push:
     branches: [rivian-support]
@@ -12,34 +13,54 @@ on:
     branches: [rivian-support]
     paths: ['replay/**', 'macos/**', 'lib/**', 'pubspec.*', '.github/workflows/replay-mac.yml']
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      arch:
+        description: ARM or Intel, the kind of Mac the disk image is for
+        type: string
+        default: ARM
+      runner:
+        type: string
+        default: macos-latest
+      version:
+        description: the full version, e.g. 0.1.2-test.1; empty for a -dev build
+        type: string
+        default: ''
+      build_number:
+        type: string
+        default: '1'
 
 jobs:
   dmg:
-    runs-on: macos-latest
+    runs-on: ${{ inputs.runner || 'macos-latest' }}
+    env:
+      MAC_ARCH: ${{ inputs.arch || 'ARM' }}
+      SIDE_ARCH: ${{ (inputs.arch || 'ARM') == 'Intel' && 'x86_64' || 'arm64' }}
     steps:
       - uses: actions/checkout@v6
 
-      - name: This runner is Apple silicon
-        run: test "$(uname -m)" = arm64
+      # make dmg builds for the Mac it runs on, so the runner must be the kind of Mac the disk image is named for
+      - name: This runner is the kind of Mac the disk image is for
+        run: test "$(uname -m)" = "$SIDE_ARCH"
 
       # ffmpeg takes several minutes to build and only changes with its build script, so it is kept between runs
       - name: ffmpeg from the cache
         id: ffmpeg-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
-          path: replay/build/ffmpeg-arm64
-          key: ffmpeg-mac-arm64-${{ hashFiles('replay/packaging/build_ffmpeg.sh') }}
+          path: replay/build/ffmpeg-${{ env.SIDE_ARCH }}
+          key: ffmpeg-mac-${{ env.SIDE_ARCH }}-${{ hashFiles('replay/packaging/build_ffmpeg.sh') }}
 
       # the checkout makes the build script newer than the cached ffmpeg, which make would take as a reason to rebuild
       - name: Cached ffmpeg is up to date
         if: steps.ffmpeg-cache.outputs.cache-hit == 'true'
-        run: touch replay/build/ffmpeg-arm64/ffmpeg
+        run: touch "replay/build/ffmpeg-$SIDE_ARCH/ffmpeg"
 
       - name: nasm for the ffmpeg build
         if: steps.ffmpeg-cache.outputs.cache-hit != 'true'
         run: brew install nasm
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: pip
@@ -62,10 +83,15 @@ jobs:
 
       - run: flutter pub get
 
-      # ARCH is left to default to this runner's arch (ARM); the Makefile checks every bundled program is arm64
+      # make picks the arch of this runner, which is MAC_ARCH (checked above); the Makefile checks every bundled program is that arch
       - name: Build the disk image
         working-directory: replay
-        run: make dmg
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            make dmg VERSION="${{ inputs.version }}" BUILD_NUMBER=${{ inputs.build_number }}
+          else
+            make dmg BUILD_NUMBER=${{ github.run_number }}
+          fi
 
       - name: The bundled server starts
         working-directory: replay
@@ -114,6 +140,6 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: OPRivView-Replay-macOS-ARM
-          path: replay/dist/OPRivView-Replay-*-macOS-ARM.dmg
+          name: OPRivView-Replay-macOS-${{ env.MAC_ARCH }}
+          path: replay/dist/OPRivView-Replay-*-macOS-${{ env.MAC_ARCH }}.dmg
           if-no-files-found: error
