@@ -350,3 +350,17 @@ def test_the_window_answers_the_job_s_question_and_cancel_ends_the_wait(monkeypa
   time.sleep(1)
   assert answers == [True] and c.get(f"/jobs/{job['id']}").json()["question"] is None
   assert c.post(f"/jobs/{job['id']}/answer", json={"copy_now": True}).status_code == 409
+
+
+def test_nothing_is_asked_when_everything_is_here_already(monkeypatch, tmp_path):
+  for name in ("rlog.zst", "fcamera.hevc"):
+    (tmp_path / "r" / "0").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "r" / "0" / name).write_bytes(b"x" * 10)
+  monkeypatch.setattr(ssh_source, "remote_sizes", lambda host, paths: {p: 10 for p in paths})
+  remote = Remote("the comma through comma's server", None, FULL)
+  connect = Connect("connect", {"r": [0, 1]}, ("qlog.zst", "qcamera.ts"))
+  monkeypatch.setattr(connect, "network", lambda: {"kind": "cellular", "metered": True}, raising=False)
+  sources = jobs.Sources(Fake("device", None), connect, through_server=lambda: remote)
+  r = jobs.Resolved("r", [0, 1], tmp_path, None, SimpleNamespace(segment=0), SimpleNamespace(segment=0), connect)
+  assert jobs._may_copy_through_server(r, sources, remote, [0], None, {"camera": "road"}, tmp_path, lambda t: None,
+                                       ask=lambda q: pytest.fail("asked about 0 MB"))

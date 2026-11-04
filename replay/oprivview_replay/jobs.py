@@ -156,6 +156,8 @@ def _may_copy_through_server(r: Resolved, sources: Sources, source: DeviceSource
       return f.stat().st_size if f.exists() else -1
     return sum(size for s, n in items if (size := sizes.get(f"{r.route}--{s}/{n}")) is not None and here(s, n) != size) / 1e6
 
+  if sizes and not to_copy(files) and not to_copy(wide):
+    return True  # everything is here already: the copy will send nothing, so there is nothing to ask
   why = (f"The comma is on {network['kind']}, which it is set to treat as metered." if network is not None
          else "The comma did not say whether its connection is metered.")
   amount = f"about {to_copy(files):.0f} MB of its data" if sizes else "its data"
