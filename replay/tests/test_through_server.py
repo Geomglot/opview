@@ -1,5 +1,6 @@
 """The comma reached through comma's own SSH server (comma prime), for when it is not on this network."""
 import shlex
+import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -364,3 +365,22 @@ def test_nothing_is_asked_when_everything_is_here_already(monkeypatch, tmp_path)
   r = jobs.Resolved("r", [0, 1], tmp_path, None, SimpleNamespace(segment=0), SimpleNamespace(segment=0), connect)
   assert jobs._may_copy_through_server(r, sources, remote, [0], None, {"camera": "road"}, tmp_path, lambda t: None,
                                        ask=lambda q: pytest.fail("asked about 0 MB"))
+
+
+def test_a_command_through_the_server_that_cannot_connect_is_tried_once_more(monkeypatch, through):
+  calls = []
+
+  def run(args, **kw):
+    calls.append(args)
+    if len(calls) == 1:
+      raise subprocess.CalledProcessError(255, args)
+    return SimpleNamespace(stdout="ok")
+
+  monkeypatch.setattr(ssh_source.subprocess, "run", run)
+  monkeypatch.setattr("time.sleep", lambda s: None)
+  assert ssh_source.run(through, "true") == "ok" and len(calls) == 2
+  calls.clear()
+  monkeypatch.setattr(ssh_source.subprocess, "run", lambda args, **kw: calls.append(args) or (_ for _ in ()).throw(subprocess.CalledProcessError(1, args)))
+  with pytest.raises(subprocess.CalledProcessError):
+    ssh_source.run(through, "false")
+  assert len(calls) == 1, "a command that ran and failed is not repeated"

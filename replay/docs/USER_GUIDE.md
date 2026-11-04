@@ -60,6 +60,22 @@ This uses the comma's own internet connection. First the app asks the comma what
 
 To stop the app doing this at all, turn off **Reach the comma through comma's server** in App settings.
 
+#### A copy on comma Connect for later
+
+With the comma away from your network, the app also asks it to upload the full files of the range to comma Connect, so
+they are there later, when the comma is offline or has deleted the drive. It does this after copying them from the comma
+through comma's server. It also does it when it cannot get full detail now: the comma is offline, you chose **Not now**,
+or you do not have comma prime.
+- **Only what Connect lacks.** It asks only for the range you chose, plus the segment before it, never the whole drive, and
+  not again within 7 days.
+- **The comma decides when.** It uploads only on a connection it treats as unmetered. If it is offline, comma keeps the
+  request for 7 days and gives it to the comma when it is back.
+- **The drive pane shows how it is going.** For example, "Upload to comma Connect: 1 of 3 files there", or "The comma is
+  waiting for an unmetered connection". When all the files are there, the drive is listed again with what Connect now has.
+
+Connect keeps uploaded files for 1 year with comma prime, and 3 days without. To stop these uploads, turn off **Keep a
+copy on comma Connect** in App settings.
+
 ### Adding a public drive
 
 Paste a comma Connect link, `device/route`, or a device id into the box above the drive list, and press **Add**. A device id
@@ -157,8 +173,8 @@ settings. Your settings and stored drives are kept. The **?** menu also shows wh
 
 ## Known limits in this version
 
-- A drive deleted from the comma is available only as what Connect kept. Requesting the full files back from the comma through
-  Connect is not supported.
+- A drive deleted from the comma is available only as what Connect kept. The full files are on Connect only if they were
+  uploaded before the comma deleted them (see [A copy on comma Connect for later](#a-copy-on-comma-connect-for-later)).
 - The app cannot read logs you have already copied to your computer yet.
 - About one drive in six has no position from Connect, so it shows no town name unless its logs are already stored.
 - The Automatic wide camera rule has not yet been checked on a real experimental mode drive.

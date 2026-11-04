@@ -64,7 +64,18 @@ def _name(host: Host) -> str:
 
 
 def run(host: Host, command: str) -> str:
-  return subprocess.run(["ssh", *_options(host), _name(host), command], check=True, capture_output=True, text=True, timeout=20).stdout
+  args = ["ssh", *_options(host), _name(host), command]
+  if isinstance(host, ThroughServer):
+    # two connections in a row (to comma's server, then on to the comma), and either can fail now and then and work a
+    # moment later; ssh says 255 when it could not connect at all, so that is tried once more
+    try:
+      return subprocess.run(args, check=True, capture_output=True, text=True, timeout=20).stdout
+    except subprocess.CalledProcessError as e:
+      if e.returncode != 255:
+        raise
+      import time
+      time.sleep(2)
+  return subprocess.run(args, check=True, capture_output=True, text=True, timeout=20).stdout
 
 
 def parse_listing(listing: str) -> dict[str, list[int]]:
