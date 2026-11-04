@@ -65,5 +65,6 @@ comma tools use that file too, so delete it only if nothing else needs it.
 - **macOS says the app needs a newer version of macOS.** You need macOS 14 or later.
 - **The app says the replay server did not start.** Quit it and open it again. If that does not help, please report it.
 
-To report a problem, use the [issues page](https://github.com/Geomglot/opview/issues) and say which version of the app and of
-macOS you have, and what you were doing. Check screenshots before you post them, because they can show licence plates.
+To report a problem, use the [issues page](https://github.com/Geomglot/opview/issues) and say which version of the app
+(at the bottom of its **?** menu) and of macOS you have, and what you were doing. Check screenshots before you post
+them, because they can show licence plates.

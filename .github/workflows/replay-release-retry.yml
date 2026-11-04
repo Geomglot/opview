@@ -1,9 +1,11 @@
 name: Replay release retry
 
 # GitHub's Mac runners are sometimes too busy: a job waits, is never given a machine ("not acquired by Runner"), and is
-# cancelled, which fails the release run. This re-runs the failed jobs of such a run, up to three more times, so a
-# release tag does not need someone watching it. Only jobs that never started count: a build that ran and failed is
-# left for a person to look at.
+# cancelled, which fails the release run. This re-runs the failed jobs of such a run, up to three times, so a release
+# tag does not need someone watching it. Only jobs that never started count: a build that ran and failed is left for a
+# person to look at.
+# It all happens in one job, started by the release run's first attempt: a re-run requested with GITHUB_TOKEN may not
+# start workflows of its own, so this job waits for each re-run to finish and looks again itself.
 on:
   workflow_run:
     workflows: ['Replay release']
@@ -14,19 +16,30 @@ permissions:
 
 jobs:
   retry:
-    if: github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.run_attempt < 4
+    if: github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.run_attempt == 1
     runs-on: ubuntu-latest
+    timeout-minutes: 300
     env:
       GH_TOKEN: ${{ github.token }}
       RUN: ${{ github.event.workflow_run.id }}
-      ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
     steps:
       - name: Re-run jobs that never got a machine
         run: |
-          # a job that never got a machine is cancelled with no runner and no steps
-          unstarted=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN/attempts/$ATTEMPT/jobs" --paginate \
-            -q '.jobs[] | select(.conclusion == "cancelled" and (.runner_name // "") == "" and (.steps | length) == 0) | .name')
-          if [ -z "$unstarted" ]; then echo "every job got a machine; nothing to retry"; exit 0; fi
-          echo "never started:"; echo "$unstarted"
-          sleep 300  # give the busy runners a few minutes
-          gh run rerun "$RUN" --failed -R "$GITHUB_REPOSITORY"
+          attempt=1
+          while :; do
+            # a job that never got a machine is cancelled with no runner and no steps
+            unstarted=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN/attempts/$attempt/jobs" --paginate \
+              -q '.jobs[] | select(.conclusion == "cancelled" and (.runner_name // "") == "" and (.steps | length) == 0) | .name')
+            if [ -z "$unstarted" ]; then echo "attempt $attempt: every job got a machine; nothing to retry"; exit 0; fi
+            echo "attempt $attempt never started:"; echo "$unstarted"
+            if [ "$attempt" -ge 4 ]; then echo "::error::still no machine after 3 retries; re-run the failed jobs by hand later"; exit 1; fi
+            sleep 300  # give the busy runners a few minutes
+            gh run rerun "$RUN" --failed -R "$GITHUB_REPOSITORY"
+            attempt=$((attempt + 1))
+            # wait for that attempt to start and then to finish
+            until [ "$(gh run view "$RUN" -R "$GITHUB_REPOSITORY" --json attempt -q .attempt)" -ge "$attempt" ]; do sleep 30; done
+            until [ "$(gh run view "$RUN" -R "$GITHUB_REPOSITORY" --json status -q .status)" = completed ]; do sleep 60; done
+            if [ "$(gh run view "$RUN" -R "$GITHUB_REPOSITORY" --json conclusion -q .conclusion)" = success ]; then
+              echo "attempt $attempt succeeded"; exit 0
+            fi
+          done

@@ -12,7 +12,14 @@ on:
   pull_request:
     branches: [rivian-support]
     paths: ['replay/**', 'macos/**', 'lib/**', 'pubspec.*', '.github/workflows/replay-mac.yml']
+  # by hand from the Actions page, for either kind of Mac (Intel runs on macos-15-intel)
   workflow_dispatch:
+    inputs:
+      arch:
+        description: the kind of Mac to build for
+        type: choice
+        options: [ARM, Intel]
+        default: ARM
   workflow_call:
     inputs:
       arch:
@@ -32,7 +39,7 @@ on:
 
 jobs:
   dmg:
-    runs-on: ${{ inputs.runner || 'macos-latest' }}
+    runs-on: ${{ inputs.runner || (inputs.arch == 'Intel' && 'macos-15-intel' || 'macos-latest') }}
     env:
       MAC_ARCH: ${{ inputs.arch || 'ARM' }}
       SIDE_ARCH: ${{ (inputs.arch || 'ARM') == 'Intel' && 'x86_64' || 'arm64' }}
@@ -134,8 +141,18 @@ jobs:
         working-directory: replay
         run: |
           ffmpeg="dist/OPRivView Replay.app/Contents/Resources/ffmpeg/ffmpeg"
-          head -c $((256 * 144 * 3 / 2 * 20)) /dev/zero |
-            "$ffmpeg" -v error -f rawvideo -pix_fmt yuv420p -s 256x144 -r 20 -i - -c:v h264_videotoolbox -f mp4 out.mp4
+          encode() {
+            head -c $((256 * 144 * 3 / 2 * 20)) /dev/zero |
+              "$ffmpeg" -v error -f rawvideo -pix_fmt yuv420p -s 256x144 -r 20 -i - -c:v h264_videotoolbox "$@" -y -f mp4 out.mp4
+          }
+          # GitHub's Intel Macs are virtual machines with no graphics hardware, and VideoToolbox refuses its software
+          # encoder unless asked; a real Intel Mac has the hardware. There, encoding in software still proves the encoder
+          # is built in and the bundled ffmpeg runs.
+          if ! encode; then
+            if [ "$MAC_ARCH" != Intel ]; then exit 1; fi
+            echo "::warning::no hardware H.264 encoder on this Intel runner; checked VideoToolbox's software encoder instead"
+            encode -allow_sw 1
+          fi
           "dist/OPRivView Replay.app/Contents/Resources/ffmpeg/ffprobe" -v error -show_entries stream=codec_name -of csv=p=0 out.mp4 | grep -x h264
 
       - uses: actions/upload-artifact@v7

@@ -9,6 +9,8 @@
 # Needs nasm (brew install nasm). Leaves <work folder>/ffmpeg, ffprobe, the source archive and the licence.
 set -euo pipefail
 
+# ffmpeg's version, set here and never taken from the environment: make passes the app's own VERSION (0.1.2-test.1)
+# down to this script
 VERSION=8.1
 SHA256=b072aed6871998cce9b36e7774033105ca29e33632be5b6347f3206898e0756a
 MIN_MACOS=12.0
