@@ -23,8 +23,8 @@ class Sidecar {
       // on Windows the server may run under a launcher (a venv's python.exe), so say which process to outlive
       if (Platform.isWindows) ...['--parent-pid', '$pid'],
     ];
-    // a Mac app keeps its parts in Contents/Resources; on Windows they sit in the folder beside the .exe
-    final resources = Platform.isWindows
+    // a Mac app keeps its parts in Contents/Resources; on Windows and Linux they sit in the folder beside the program
+    final resources = Platform.isWindows || Platform.isLinux
         ? File(Platform.resolvedExecutable).parent.path
         : '${File(Platform.resolvedExecutable).parent.parent.path}/Resources';
     final packaged = File('$resources/oprivview-replay-server/oprivview-replay-server${Platform.isWindows ? '.exe' : ''}');

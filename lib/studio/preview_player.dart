@@ -120,13 +120,18 @@ class _PreviewPlayerState extends State<PreviewPlayer> {
     }
   }
 
-  /// where stalls are logged: the Mac's Logs folder, or on Windows (which has no HOME) the app's local data folder
+  /// where stalls are logged: the Mac's Logs folder, on Windows (which has no HOME) the app's local data folder, and on
+  /// Linux the app's folder in the place for such things (XDG_STATE_HOME, normally ~/.local/state)
   static String? get _stallLog {
     if (Platform.isWindows) {
       final local = Platform.environment['LOCALAPPDATA'];
       return local == null ? null : '$local\\OPRivViewReplay\\Logs\\preview.log';
     }
     final home = Platform.environment['HOME'];
+    if (Platform.isLinux) {
+      final state = Platform.environment['XDG_STATE_HOME'] ?? (home == null ? null : '$home/.local/state');
+      return state == null ? null : '$state/OPRivViewReplay/logs/preview.log';
+    }
     return home == null ? null : '$home/Library/Logs/OPRivViewReplay/preview.log';
   }
 
@@ -382,9 +387,9 @@ class _PreviewPlayerState extends State<PreviewPlayer> {
       ]),
       if (_gpuReset)
         Text(
-            Platform.isWindows
-                ? 'The picture stopped for 5 seconds or more. If text or the picture looks wrong, quit and reopen this app.'
-                : 'The Mac restarted its graphics chip. If text or the picture looks wrong, quit and reopen this app.',
+            Platform.isMacOS
+                ? 'The Mac restarted its graphics chip. If text or the picture looks wrong, quit and reopen this app.'
+                : 'The picture stopped for 5 seconds or more. If text or the picture looks wrong, quit and reopen this app.',
             style: const TextStyle(color: Colors.orange)),
     ]);
   }

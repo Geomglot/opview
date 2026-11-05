@@ -90,7 +90,22 @@ def _chosen_output(text: str) -> Path:
   return path if path.suffix.lower() == ".mp4" else path.with_name(path.name + ".mp4")
 
 
-DEFAULT_OUTPUT_DIR = Path.home() / ("Videos" if sys.platform == "win32" else "Movies")
+def _linux_videos() -> Path:
+  """the Videos folder the desktop names (xdg-user-dir; another language may call it something else), else ~/Videos"""
+  try:
+    named = subprocess.run(["xdg-user-dir", "VIDEOS"], capture_output=True, text=True, timeout=5).stdout.strip()
+  except (OSError, subprocess.TimeoutExpired):
+    named = ""
+  # with no Videos folder set, xdg-user-dir answers the home folder itself, which is no place for clips
+  return Path(named) if named and Path(named) != Path.home() else Path.home() / "Videos"
+
+
+if sys.platform == "win32":
+  DEFAULT_OUTPUT_DIR = Path.home() / "Videos"
+elif sys.platform.startswith("linux"):
+  DEFAULT_OUTPUT_DIR = _linux_videos()
+else:
+  DEFAULT_OUTPUT_DIR = Path.home() / "Movies"
 
 
 def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Path = DEFAULT_APP, output_dir: Path = DEFAULT_OUTPUT_DIR,
@@ -237,7 +252,7 @@ def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Pat
         local = when.astimezone()
         offset = local.strftime("%z")
         return local.strftime("%Y-%m-%d %H:%M") + f" UTC{offset[:3]}:{offset[3:]} (this computer's time)"
-      return when.astimezone().strftime("%Y-%m-%d %H:%M %Z") + " (Mac time)"
+      return when.astimezone().strftime("%Y-%m-%d %H:%M %Z") + (" (Mac time)" if sys.platform == "darwin" else " (this computer's time)")
     return when.astimezone(zone_for(*place)).strftime("%Y-%m-%d %H:%M %Z")
 
   def _position(row: dict) -> tuple[float, float] | None:

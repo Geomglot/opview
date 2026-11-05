@@ -109,10 +109,10 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
-  // the computer's own folder dialog; no plugin needed. On Windows the app's window code opens it
-  // (windows/runner/flutter_window.cpp)
+  // the computer's own folder dialog; no plugin needed. On Windows and Linux the app's window code opens it
+  // (windows/runner/flutter_window.cpp, linux/runner/my_application.cc)
   Future<void> _chooseFolder() async {
-    if (Platform.isWindows) {
+    if (Platform.isWindows || Platform.isLinux) {
       final chosen = await const MethodChannel('oprivview/window').invokeMethod<String>('chooseFolder');
       if (chosen != null) await _change({'output_dir': chosen});
       return;
@@ -192,7 +192,7 @@ class _AdminPageState extends State<AdminPage> {
       ]);
 
   /// what the settings call the computer the app runs on
-  static String get _thisComputer => Platform.isWindows ? 'this computer' : 'this Mac';
+  static String get _thisComputer => thisComputer;
   static String _capital(String s) => '${s[0].toUpperCase()}${s.substring(1)}';
 
   Widget _sshSection(Map<String, dynamic> s) {
@@ -209,7 +209,7 @@ class _AdminPageState extends State<AdminPage> {
         Row(children: [
           Expanded(
               child: SelectableText(public,
-                  maxLines: 2, style: TextStyle(fontFamily: Platform.isWindows ? 'Consolas' : 'Menlo', fontSize: 11))),
+                  maxLines: 2, style: TextStyle(fontFamily: monospaceFont, fontSize: 11))),
           TextButton(onPressed: () => Clipboard.setData(ClipboardData(text: public)), child: const Text('Copy')),
         ]),
         _note('If the comma does not let $_thisComputer in:\n'

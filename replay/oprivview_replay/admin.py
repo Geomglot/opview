@@ -45,7 +45,12 @@ def local_prefixes(ifconfig: str | None = None) -> list[str]:
     prefixes = _windows_prefixes()
   else:
     if ifconfig is None:
-      ifconfig = subprocess.run(["/sbin/ifconfig"], capture_output=True, text=True).stdout
+      # Linux often has no ifconfig now; its ip command lists addresses with the same "inet 1.2.3.4" wording
+      command = ["ip", "-4", "-o", "addr", "show"] if sys.platform.startswith("linux") else ["/sbin/ifconfig"]
+      try:
+        ifconfig = subprocess.run(command, capture_output=True, text=True).stdout
+      except OSError:
+        ifconfig = ""
     prefixes = _ADDRESS.findall(ifconfig)
   found: list[str] = []
   for prefix in prefixes:

@@ -17,6 +17,9 @@ _REPO = Path(__file__).resolve().parents[2]
 if sys.platform == "win32":
   DEFAULT_CACHE = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData/Local") / "OPRivViewReplay/Cache"
   DEFAULT_APP = _REPO / "build/windows/x64/runner/Release/OPRivViewReplay.exe"
+elif sys.platform.startswith("linux"):
+  DEFAULT_CACHE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "OPRivViewReplay"
+  DEFAULT_APP = _REPO / "build/linux/x64/release/bundle/oprivview-replay"
 else:
   DEFAULT_CACHE = Path.home() / "Library/Caches/OPRivViewReplay"
   DEFAULT_APP = _REPO / "build/macos/Build/Products/Release/OPRivView Replay.app/Contents/MacOS/OPRivView Replay"

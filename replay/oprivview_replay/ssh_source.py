@@ -3,6 +3,7 @@
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -129,7 +130,8 @@ def _copy(command: list[str], cwd: Path | None = None, tick: Callable[[], None] 
 def fetch(host: Host, route: str, segments: list[int], files: tuple[str, ...], cache: Path,
           tick: Callable[[], None] | None = None) -> None:
   """copy [files] of each segment into cache/<route>/<segment>/, skipping what is already complete"""
-  if sys.platform == "win32":
+  # Windows has no rsync, and some Linux computers do not have it installed; both copy with scp instead
+  if sys.platform == "win32" or (sys.platform.startswith("linux") and shutil.which("rsync") is None):
     _fetch_with_scp(host, route, segments, files, cache, tick)
     return
   for seg in segments:
@@ -158,7 +160,7 @@ def remote_sizes(host: Host, paths: list[str]) -> dict[str, int]:
 
 def _fetch_with_scp(host: Host, route: str, segments: list[int], files: tuple[str, ...], cache: Path,
                     tick: Callable[[], None] | None = None) -> None:
-  """Windows has no rsync. Its own OpenSSH has scp, which uses the same ssh config, keys and known hosts as [run].
+  """For Windows, which has no rsync, and Linux without it. OpenSSH has scp, which uses the same ssh config, keys and known hosts as [run].
   scp cannot skip what is already here, so ask the comma for its sizes first and copy only files that differ. Copies go
   to a holding folder and move into place when whole, so a copy cut short never passes for a complete file."""
   wanted = [f"{route}--{seg}/{name}" for seg in segments for name in files]

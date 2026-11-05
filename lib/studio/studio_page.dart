@@ -330,11 +330,11 @@ class _StudioPageState extends State<StudioPage> {
     }
   }
 
-  // the computer's own save dialog, which also asks before replacing a file; no plugin needed. On Windows the app's
-  // window code opens it (windows/runner/flutter_window.cpp)
+  // the computer's own save dialog, which also asks before replacing a file; no plugin needed. On Windows and Linux the
+  // app's window code opens it (windows/runner/flutter_window.cpp, linux/runner/my_application.cc)
   Future<void> _chooseOutput() async {
     final name = _route == null ? 'replay.mp4' : '${_route!.route}.mp4';
-    if (Platform.isWindows) {
+    if (Platform.isWindows || Platform.isLinux) {
       final chosen = await _window.invokeMethod<String>('chooseSaveFile', name);
       if (chosen != null) _output.text = chosen;
       return;
@@ -575,7 +575,7 @@ class _StudioPageState extends State<StudioPage> {
                 onSelected: (v) => v == 'update' ? _checkForUpdate() : openOnDesktop(v),
                 itemBuilder: (_) => [
                   PopupMenuItem(value: '$guidesUrl/USER_GUIDE.md', child: const Text('User guide')),
-                  PopupMenuItem(value: '$guidesUrl/${Platform.isWindows ? 'INSTALL-WINDOWS.md' : 'INSTALL.md'}', child: const Text('Install guide')),
+                  PopupMenuItem(value: '$guidesUrl/$installGuide', child: const Text('Install guide')),
                   const PopupMenuItem(value: 'update', child: Text('Check for updates')),
                   if (replayVersion.isNotEmpty) PopupMenuItem(enabled: false, child: Text('Version $replayVersion')),
                 ],
@@ -684,7 +684,7 @@ class _StudioPageState extends State<StudioPage> {
                         alignment: Alignment.center,
                         color: Colors.white10,
                         child: Text(running ? 'Working on it...' : 'The preview plays here'))),
-            if (_resolved != null) Padding(padding: const EdgeInsets.only(top: 12), child: SelectableText(_resolved!, style: TextStyle(fontFamily: Platform.isWindows ? 'Consolas' : 'Menlo', fontSize: 12))),
+            if (_resolved != null) Padding(padding: const EdgeInsets.only(top: 12), child: SelectableText(_resolved!, style: TextStyle(fontFamily: monospaceFont, fontSize: 12))),
             if (_resolveError != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(_resolveError!, style: const TextStyle(color: Colors.red))),
             if (_job != null) _jobStatus(),
           ]))),
@@ -695,10 +695,10 @@ class _StudioPageState extends State<StudioPage> {
                     controller: _output,
                     decoration: InputDecoration(
                         labelText: 'Output file',
-                        hintText: 'Leave empty to save in ${Platform.isWindows ? 'Videos' : 'Movies'}',
+                        hintText: 'Leave empty to save in ${Platform.isMacOS ? 'Movies' : 'Videos'}',
                         floatingLabelBehavior: FloatingLabelBehavior.always,
                         isDense: true))),
-            if (Platform.isMacOS || Platform.isWindows) ...[
+            if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) ...[
               const SizedBox(width: 8),
               TextButton(onPressed: _chooseOutput, child: const Text('Choose...')),
             ],
