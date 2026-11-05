@@ -175,7 +175,7 @@ class Updater extends ChangeNotifier {
       final dir = await (_updateDir?.call() ??
           system.updateDir().then((d) => Directory(d ?? '${Directory.systemTemp.path}/updates')));
       await dir.create(recursive: true);
-      final file = File('${dir.path}/OPRivView-${release.version}.apk');
+      final file = File('${dir.path}/GeoRivView-${release.version}.apk');
       // other versions' downloads, and the single file older builds used, are no longer needed
       await for (final old in dir.list()) {
         if (old is File && old.path != file.path && old.path.endsWith('.apk')) await old.delete();
@@ -192,7 +192,7 @@ class Updater extends ChangeNotifier {
       if (!await system.canInstallApks()) {
         // Android asks once to allow installs from this app; after that, Update again
         await system.openInstallSettings();
-        _set(UpdateStatus.available, 'Allow "Install unknown apps" for OPRivView, then Update again');
+        _set(UpdateStatus.available, 'Allow "Install unknown apps" for GeoRivView, then Update again');
         return;
       }
       await system.installApk(file.path);

@@ -1,6 +1,6 @@
 name: Replay for Linux
 
-# Builds OPRivView Replay for Linux (x86_64) as one AppImage, with no dependence on any one computer: ffmpeg from source,
+# Builds GeoRivView Replay for Linux (x86_64) as one AppImage, with no dependence on any one computer: ffmpeg from source,
 # the server (PyInstaller) and the app (Flutter), put together by replay/packaging/build_linux.sh. It builds on the oldest
 # Ubuntu GitHub offers, so the result runs on that and on later distributions. It then checks the AppImage as a tester
 # would use it: its server starts and reaches comma Connect, it renders a clip without a window, and it opens.
@@ -94,7 +94,7 @@ jobs:
       - name: Unpack the AppImage
         working-directory: replay
         run: |
-          appimage=$(ls dist/OPRivView-Replay-*-Linux-x86_64.AppImage)
+          appimage=$(ls dist/GeoRivView-Replay-*-Linux-x86_64.AppImage)
           ls -l "$appimage"
           "$PWD/$appimage" --appimage-extract >/dev/null
           app=squashfs-root/usr/lib/oprivview-replay
@@ -155,7 +155,7 @@ jobs:
       - name: The AppImage opens and stays open
         working-directory: replay
         run: |
-          appimage=$(ls dist/OPRivView-Replay-*-Linux-x86_64.AppImage)
+          appimage=$(ls dist/GeoRivView-Replay-*-Linux-x86_64.AppImage)
           set +e
           timeout 30 xvfb-run -a -s "-screen 0 1920x1080x24" "$PWD/$appimage" > open.log 2>&1
           code=$?
@@ -167,6 +167,6 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: OPRivView-Replay-Linux
-          path: replay/dist/OPRivView-Replay-*-Linux-x86_64.AppImage
+          name: GeoRivView-Replay-Linux
+          path: replay/dist/GeoRivView-Replay-*-Linux-x86_64.AppImage
           if-no-files-found: error

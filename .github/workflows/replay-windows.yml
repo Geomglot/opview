@@ -1,6 +1,6 @@
 name: Replay for Windows
 
-# Builds OPRivView Replay for Windows and its installer, with no dependence on any one computer: ffmpeg from source
+# Builds GeoRivView Replay for Windows and its installer, with no dependence on any one computer: ffmpeg from source
 # (MSYS2), the server (PyInstaller) and the app (Flutter), put together by replay/packaging/build_windows.ps1 and
 # Inno Setup. It then installs it, checks the installed server starts and reaches comma Connect, and uninstalls it.
 # On a push the installer is a "-dev" build kept as a workflow artifact; replay-release.yml calls this with the release's
@@ -100,19 +100,19 @@ jobs:
       - name: The installer installs
         working-directory: replay
         run: |
-          $installer = (Get-Item dist\OPRivView-Replay-*-Windows.exe).FullName
+          $installer = (Get-Item dist\GeoRivView-Replay-*-Windows.exe).FullName
           Start-Process $installer -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait
-          $dir = "$env:LOCALAPPDATA\Programs\OPRivView Replay"
+          $dir = "$env:LOCALAPPDATA\Programs\GeoRivView Replay"
           foreach ($f in "OPRivViewReplay.exe", "unins000.exe", "oprivview-replay-server\oprivview-replay-server.exe", "ffmpeg\ffmpeg.exe") {
             if (-not (Test-Path "$dir\$f")) { throw "the installer did not put $f in $dir" }
           }
-          if (-not (Test-Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\OPRivView Replay.lnk")) { throw "no Start menu shortcut" }
+          if (-not (Test-Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\GeoRivView Replay.lnk")) { throw "no Start menu shortcut" }
 
       # a dummy token must reach comma Connect and be refused there: anything else means the server's trust store is wrong
       - name: The installed server starts and reaches comma Connect over TLS
         shell: bash
         run: |
-          dir="$LOCALAPPDATA/Programs/OPRivView Replay"
+          dir="$LOCALAPPDATA/Programs/GeoRivView Replay"
           mkdir -p "$USERPROFILE/.comma"
           echo not-a-real-token > "$USERPROFILE/.comma/jwt"
           "$dir/oprivview-replay-server/oprivview-replay-server.exe" --port 8799 --host 127.0.0.1 --app "$dir/OPRivViewReplay.exe" &
@@ -133,7 +133,7 @@ jobs:
 
       - name: The uninstaller removes it
         run: |
-          $dir = "$env:LOCALAPPDATA\Programs\OPRivView Replay"
+          $dir = "$env:LOCALAPPDATA\Programs\GeoRivView Replay"
           Start-Process "$dir\unins000.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait
           # the uninstaller finishes in a copy of itself, so give it a moment
           for ($i = 0; $i -lt 30 -and (Test-Path "$dir\OPRivViewReplay.exe"); $i++) { Start-Sleep 1 }
@@ -141,6 +141,6 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: OPRivView-Replay-Windows
-          path: replay/dist/OPRivView-Replay-*-Windows.exe
+          name: GeoRivView-Replay-Windows
+          path: replay/dist/GeoRivView-Replay-*-Windows.exe
           if-no-files-found: error

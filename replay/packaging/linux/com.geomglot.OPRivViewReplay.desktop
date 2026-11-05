@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
-Name=OPRivView Replay
-Comment=Play back a comma drive as it looked on the OPRivView screen and save it as an MP4
+Name=GeoRivView Replay
+Comment=Play back a comma drive as it looked on the GeoRivView screen and save it as an MP4
 Exec=oprivview-replay
 Icon=com.geomglot.OPRivViewReplay
 Categories=AudioVideo;Video;

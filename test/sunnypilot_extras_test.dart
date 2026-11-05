@@ -317,6 +317,6 @@ void main() {
   testWidgets('Connecting screen shows which build is installed', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1280, 600));
     await tester.pumpWidget(MaterialApp(home: AugmentedRoadView(uiState: UIState())));
-    expect(find.text('OPRivView $opviewBuild'), findsOneWidget);
+    expect(find.text('GeoRivView $opviewBuild'), findsOneWidget);
   });
 }

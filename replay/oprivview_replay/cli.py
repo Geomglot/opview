@@ -1,4 +1,4 @@
-"""Render a drive as an MP4 of the OPRivView screen.
+"""Render a drive as an MP4 of the GeoRivView screen.
 
   python -m oprivview_replay.cli --list
   python -m oprivview_replay.cli 0000005a--f16da7af40 --start-segment 5 --end-segment 6 --view detailed
@@ -22,11 +22,11 @@ elif sys.platform.startswith("linux"):
   DEFAULT_APP = _REPO / "build/linux/x64/release/bundle/oprivview-replay"
 else:
   DEFAULT_CACHE = Path.home() / "Library/Caches/OPRivViewReplay"
-  DEFAULT_APP = _REPO / "build/macos/Build/Products/Release/OPRivView Replay.app/Contents/MacOS/OPRivView Replay"
+  DEFAULT_APP = _REPO / "build/macos/Build/Products/Release/GeoRivView Replay.app/Contents/MacOS/GeoRivView Replay"
 
 
 def build_parser() -> argparse.ArgumentParser:
-  p = argparse.ArgumentParser(prog="oprivview-replay", description="Render a drive as an MP4 of the OPRivView screen.")
+  p = argparse.ArgumentParser(prog="oprivview-replay", description="Render a drive as an MP4 of the GeoRivView screen.")
   p.add_argument("route", nargs="?", help="route name, such as 0000005a--f16da7af40")
   p.add_argument("--list", action="store_true", help="list the routes on the comma")
   p.add_argument("--start-segment", type=int, help="first segment to include")

@@ -145,7 +145,7 @@ class _SettingsBody extends StatelessWidget {
                   _note('All layouts. Auto hides it until the comma has a speed limit'),
                   _label('BRIGHTNESS'),
                   _brightnessRow(),
-                  _note('Auto follows the head unit. Set here, it applies while OPRivView is open'),
+                  _note('Auto follows the head unit. Set here, it applies while GeoRivView is open'),
                 ],
               ),
             ),
@@ -200,7 +200,7 @@ class _SettingsBody extends StatelessWidget {
           Padding(
             padding: EdgeInsets.only(top: 9 * unit),
             child: Text(
-              'OPRivView · $buildName',
+              'GeoRivView · $buildName',
               textAlign: TextAlign.center,
               style: TextStyle(color: const Color(0x66FFFFFF), fontSize: 8 * unit, height: 1.0),
             ),

@@ -77,7 +77,7 @@ class _OpviewAppState extends State<OpviewApp> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'OPRivView',
+      title: 'GeoRivView',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark(useMaterial3: true).copyWith(
         scaffoldBackgroundColor: Colors.black,

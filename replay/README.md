@@ -1,6 +1,6 @@
-# OPRivView replay
+# GeoRivView replay
 
-Renders a drive as an MP4 of the OPRivView screen. The real onroad layouts draw the drive, fed the same messages
+Renders a drive as an MP4 of the GeoRivView screen. The real onroad layouts draw the drive, fed the same messages
 the comma sent the app live, so the result looks as it did in the car.
 
 There is a Mac app, a Windows app and a Linux app, built from the same code. To use one, see the install guide for the
@@ -8,7 +8,7 @@ There is a Mac app, a Windows app and a Linux app, built from the same code. To 
 [user guide](docs/USER_GUIDE.md). The rest of this page is for working on the code. Building for Windows and for Linux is
 described [below](#building-for-windows).
 
-OPRivView Replay is an independent project. It is not made or endorsed by comma.ai. It uses your own comma Connect sign-in,
+GeoRivView Replay is an independent project. It is not made or endorsed by comma.ai. It uses your own comma Connect sign-in,
 and for reaching the comma away from home, your own comma prime subscription.
 
 ## Setup
@@ -38,7 +38,7 @@ Run from `replay/`:
 
 ## The window
 
-Open `build/macos/Build/Products/Release/OPRivView Replay.app` with no job set and it shows the replay window:
+Open `build/macos/Build/Products/Release/GeoRivView Replay.app` with no job set and it shows the replay window:
 a list of the drives on the comma, a start and end (each a segment number, the default, or a local time), a form for every
 option (built from the list in `params.py`, so a new option appears with no interface work), and a Render button
 with progress. In a development build it starts `python -m oprivview_replay.server` from this folder; set
@@ -56,12 +56,12 @@ cache until the cache cap exists.
 
 ## Building the app
 
-`make app` (in this folder) builds `dist/OPRivView Replay.app` with everything inside: the window, the server
+`make app` (in this folder) builds `dist/GeoRivView Replay.app` with everything inside: the window, the server
 (PyInstaller) and ffmpeg. It runs from any folder on a Mac with no Python or ffmpeg installed. `make install` copies it
 to /Applications; `make clean` removes the build and the installed copy. It still needs `ssh` and `rsync`, both of
 which ship with macOS.
 
-`make dmg` also puts it in one file for release, `dist/OPRivView-Replay-<version>-macOS-<Intel|ARM>.dmg`, with a shortcut to
+`make dmg` also puts it in one file for release, `dist/GeoRivView-Replay-<version>-macOS-<Intel|ARM>.dmg`, with a shortcut to
 Applications and a read-me. The version is explained under [Versions and releases](#versions-and-releases), and the name
 says which Mac the release is for: it
 defaults to the one that built it, so running `make dmg` on Apple silicon makes an `ARM` release, and
@@ -89,10 +89,10 @@ Flutter (and Visual Studio's C++ tools) and the replay `.venv` set up as above, 
 powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1
 ```
 
-It leaves `dist\OPRivView Replay\`, which runs from any folder, and the installer,
-`dist\OPRivView-Replay-<version>-Windows.exe`, made with Inno Setup 6 (`winget install JRSoftware.InnoSetup`) from
+It leaves `dist\GeoRivView Replay\`, which runs from any folder, and the installer,
+`dist\GeoRivView-Replay-<version>-Windows.exe`, made with Inno Setup 6 (`winget install JRSoftware.InnoSetup`) from
 `packaging/windows-installer.iss`. `-SkipInstaller` stops at the folder. The installer installs for the current user
-only (no administrator), in `%LOCALAPPDATA%\Programs\OPRivView Replay`, adds a Start menu shortcut, replaces an older
+only (no administrator), in `%LOCALAPPDATA%\Programs\GeoRivView Replay`, adds a Start menu shortcut, replaces an older
 version in place, and has an uninstaller in Windows' Apps list that offers to delete the settings and stored drives.
 Its `AppId` must never change, or a new version would install beside the old one.
 
@@ -127,7 +127,7 @@ packaging/build_ffmpeg_linux.sh build/ffmpeg-linux   # needs build-essential nas
 packaging/build_linux.sh
 ```
 
-It leaves `build/AppDir` and `dist/OPRivView-Replay-<version>-Linux-x86_64.AppImage`. The app's folder is
+It leaves `build/AppDir` and `dist/GeoRivView-Replay-<version>-Linux-x86_64.AppImage`. The app's folder is
 `usr/lib/oprivview-replay` inside it, with the server and ffmpeg beside the program as on Windows; `AppRun` starts it.
 appimagetool (downloaded the first time) makes it with the static AppImage runtime, which needs no libfuse2.
 

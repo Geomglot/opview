@@ -1,4 +1,4 @@
-// In-app updates for OPRivView Replay on the Mac, Windows and Linux: find the newest replay release on GitHub that has a file
+// In-app updates for GeoRivView Replay on the Mac, Windows and Linux: find the newest replay release on GitHub that has a file
 // for this computer, offer it, download it, check it against GitHub's SHA-256, and install it.
 // Separate from the Android app's updater (lib/services/updater.dart): replay releases are tagged replay-v<version>,
 // have a .dmg, .exe or .AppImage rather than an APK, and order their test versions before the final one.
@@ -87,7 +87,8 @@ ReplayRelease? newestReplayRelease(Object? json, {required String suffix, requir
     final prerelease = r['prerelease'] == true;
     if ((prerelease || version.test != null) && !includeTests) continue;
     final assets = (r['assets'] as List? ?? const []).whereType<Map<String, dynamic>>();
-    final file = assets.where((a) => a['name'] == 'OPRivView-Replay-$version$suffix').firstOrNull;
+    final file = assets.where((a) => a['name'] == 'GeoRivView-Replay-$version$suffix').firstOrNull ??
+        assets.where((a) => a['name'] == 'OPRivView-Replay-$version$suffix').firstOrNull; // the name before GeoRivView
     if (file == null) continue;
     if (best != null && !(version > best.version)) continue;
     final digest = file['digest'] as String? ?? '';
@@ -283,16 +284,18 @@ Future<String> installForThisComputer(File file) async {
     return 'Installing'; // not reached once the app has quit
   }
   if (Platform.isLinux) return _installLinux(file);
-  final app = File(Platform.resolvedExecutable).parent.parent.parent.path; // .../OPRivView Replay.app
+  final app = File(Platform.resolvedExecutable).parent.parent.parent.path; // .../GeoRivView Replay.app
   final writable = (await Process.run('/bin/test', ['-w', File(app).parent.path])).exitCode == 0;
   final refusal = macInstallRefusal(app, writable: writable);
   if (refusal != null) return _byHand(file, refusal);
   try {
     final arch = await assetSuffixForThisComputer() == '-macOS-ARM.dmg' ? 'arm64' : 'x86_64';
-    final staged = await _stageMacApp(file, app, arch);
+    final (staged, name) = await _stageMacApp(file, app, arch);
     final script = File('${file.parent.path}/swap-app.sh');
     await script.writeAsString(macSwapScript);
-    await Process.start('/usr/bin/nohup', ['/bin/bash', script.path, app, staged, '${file.parent.path}/swap-app.log'],
+    // the new app goes in under its own name, so a renamed app (OPRivView Replay to GeoRivView Replay) is renamed too
+    await Process.start('/usr/bin/nohup',
+        ['/bin/bash', script.path, app, staged, '${file.parent.path}/swap-app.log', '${File(app).parent.path}/$name'],
         mode: ProcessStartMode.detached);
   } on _MacInstallError catch (e) {
     return _byHand(file, e.message);
@@ -359,8 +362,8 @@ class _MacInstallError implements Exception {
 
 /// copies the app out of [dmg] to a hidden bundle beside [app] (the same disk, so the swap is a rename) and checks the
 /// copy will run here: its server and ffmpeg are this Mac's arch (the app's own binary is universal, so it says
-/// nothing), and its signature is whole. Returns the copy's path.
-Future<String> _stageMacApp(File dmg, String app, String arch) async {
+/// nothing), and its signature is whole. Returns the copy's path, and the name of the app in the disk image.
+Future<(String, String)> _stageMacApp(File dmg, String app, String arch) async {
   Future<void> run(String what, String exe, List<String> args) async {
     final r = await Process.run(exe, args);
     if (r.exitCode != 0) throw _MacInstallError('$what failed: ${'${r.stderr}'.trim()}');
@@ -368,12 +371,14 @@ Future<String> _stageMacApp(File dmg, String app, String arch) async {
 
   final staged = '${File(app).parent.path}/.${app.split('/').last.replaceFirst(RegExp(r'\.app$'), '')}-update.app';
   final mount = await Directory.systemTemp.createTemp('OPRivViewReplay-mount');
+  late String name;
   try {
     await run('Opening the disk image', '/usr/bin/hdiutil',
         ['attach', '-nobrowse', '-readonly', '-noautoopen', '-mountpoint', mount.path, dmg.path]);
     try {
       final inside = Directory(mount.path).listSync().whereType<Directory>().where((d) => d.path.endsWith('.app')).toList();
       if (inside.length != 1) throw _MacInstallError('The disk image does not hold one app');
+      name = inside.single.path.split('/').last;
       if (await Directory(staged).exists()) await Directory(staged).delete(recursive: true);
       await run('Copying the new app', '/usr/bin/ditto', [inside.single.path, staged]);
     } finally {
@@ -396,34 +401,37 @@ Future<String> _stageMacApp(File dmg, String app, String arch) async {
     await Directory(staged).delete(recursive: true);
     rethrow;
   }
-  return staged;
+  return (staged, name);
 }
 
 /// run detached, after the app has quit: puts the new bundle in the old one's place and opens it. The old bundle is kept
 /// aside until the new one is seen running, and put back (and opened) if anything goes wrong.
-/// Arguments: the installed app, the checked copy beside it, a log file.
+/// Arguments: the installed app, the checked copy beside it, a log file, and where the new app goes (the installed app's
+/// place unless the app has been renamed; an older app's updater leaves it out).
 const macSwapScript = r'''
-app=$1 new=$2
+app=$1 new=$2 target=${4:-$1}
 exec >>"$3" 2>&1
-echo "$(date): replacing $app"
+echo "$(date): replacing $app with $target"
 old="$(dirname "$app")/.$(basename "$app" .app)-old.app"
-running() { pgrep -f -- "$app/Contents/" >/dev/null; }
+running() { pgrep -f -- "$1/Contents/" >/dev/null; }
 # the app, its server and any ffmpeg all run from inside the bundle; give them half a minute to go
-for i in $(seq 60); do running || break; sleep 0.5; done
-running && echo "still running after 30 s; replacing anyway (a running program is not harmed by its folder moving)"
+for i in $(seq 60); do running "$app" || break; sleep 0.5; done
+running "$app" && echo "still running after 30 s; replacing anyway (a running program is not harmed by its folder moving)"
+# something else already has the new name: keep the old one rather than touch it
+if [ "$target" != "$app" ] && [ -e "$target" ]; then echo "$target is already there; keeping the name $app"; target=$app; fi
 rm -rf "$old"
 if ! mv "$app" "$old"; then echo "could not move the old app aside"; rm -rf "$new"; open "$app"; exit 1; fi
-if ! mv "$new" "$app"; then echo "could not move the new app in"; mv "$old" "$app"; open "$app"; exit 1; fi
-open "$app"
+if ! mv "$new" "$target"; then echo "could not move the new app in"; mv "$old" "$app"; open "$app"; exit 1; fi
+open "$target"
 # seen running, and still running 5 s later: a new app that fails at once is caught even if it was glimpsed starting
-for i in $(seq 20); do running && break; sleep 0.5; done
+for i in $(seq 20); do running "$target" && break; sleep 0.5; done
 sleep 5
-if running; then
+if running "$target"; then
   rm -rf "$old"
   echo "the new app is running"
 else
   echo "the new app did not start; putting the old one back"
-  rm -rf "$app"
+  rm -rf "$target"
   mv "$old" "$app"
   open "$app"
   exit 1

@@ -1,17 +1,20 @@
-# OPRivView user guide
+# GeoRivView user guide
 
-OPRivView shows your comma device's driving screen live on an Android phone, tablet or car head
+GeoRivView was called OPRivView until November 2026. Only the name has changed: an update keeps your
+settings.
+
+GeoRivView shows your comma device's driving screen live on an Android phone, tablet or car head
 unit, including the EV Play box that puts Android on a Rivian's center screen. You see the road
 camera with the openpilot / sunnypilot overlay on top: the planned path, lane lines, lead car,
 speeds, alerts and the status of steering and cruise control.
 
-It only watches. Nothing you do in OPRivView changes how the car drives or any setting on the comma.
+It only watches. Nothing you do in GeoRivView changes how the car drives or any setting on the comma.
 
 This guide covers version 0.1.2-rivian.7.
 
 ## What you need
 
-- **A comma device** (comma 3X or comma four) running a build that streams to OPRivView, with
+- **A comma device** (comma 3X or comma four) running a build that streams to GeoRivView, with
   streaming turned on. [AdventurePilot](https://github.com/AdventurePilotDev/AdventurePilot)
   (branches `dev` and `dev-a`) does; see
   [Turning on streaming on the comma](#turning-on-streaming-on-the-comma). Other openpilot and
@@ -42,7 +45,7 @@ read. Remote joystick control through comma Connect does not work while it is on
 
 ## Installing
 
-Download the newest `OPRivView-<version>.apk` from
+Download the newest `GeoRivView-<version>.apk` from
 [Geomglot/opview releases](https://github.com/Geomglot/opview/releases). Releases are marked
 "Pre-release"; that is normal.
 
@@ -52,12 +55,12 @@ Download the newest `OPRivView-<version>.apk` from
    allow it, go back, and tap **Install**.
 
 ### On the EV Play
-> **EV Play warning: never set a password on the EV Play while installing OPRivView.** If anything on
+> **EV Play warning: never set a password on the EV Play while installing GeoRivView.** If anything on
 > the EV Play asks you to set a password, PIN or screen lock, do not do it. Back out instead. A password
 > makes the EV Play unreachable, and getting it back takes a tricky recovery process. If it happens,
 > contact EV Play support at alex@evplay.net for recovery instructions.
 
-The EV Play Max is an Android computer, so OPRivView installs on it like any Android app. Either:
+The EV Play Max is an Android computer, so GeoRivView installs on it like any Android app. Either:
 - open the releases page in the EV Play's web browser and download the `.apk` there, or
 - download the `.apk` on a computer, copy it to a USB thumb drive, plug the drive into the EV Play
   and open the file with its file manager.
@@ -66,8 +69,8 @@ Then allow installs from that app when Android asks, and tap **Install**. The me
 EV Play may differ slightly from a phone's.
 
 ### Updating
-OPRivView checks for new releases itself: open **Settings** (press and hold anywhere on the
-driving screen) and look under **OPRivView updates**. Tap to download, then confirm Android's
+GeoRivView checks for new releases itself: open **Settings** (press and hold anywhere on the
+driving screen) and look under **GeoRivView updates**. Tap to download, then confirm Android's
 install prompt. Your settings are kept.
 
 If you cancel Android's install prompt by mistake, just tap **Update** again: the app reuses the
@@ -88,7 +91,7 @@ Put the comma and the Android device on one Wi-Fi network. Common ways:
 - **Home Wi-Fi**, for trying things out in the driveway.
 
 Make sure streaming is turned on (see
-[Turning on streaming on the comma](#turning-on-streaming-on-the-comma)), then open OPRivView. It
+[Turning on streaming on the comma](#turning-on-streaming-on-the-comma)), then open GeoRivView. It
 finds the comma on the network by itself and shows what it is doing on the
 **Connecting** screen, along with the installed version. The Rivian hotspot gives the comma a new
 address on most drives, so alongside the usual search the app checks every address on the network it
@@ -102,7 +105,7 @@ uses it whenever it is on that network; on any other network it searches as usua
 hotspot, where the address changes, a typed address goes stale, so clear it afterward (tap **Change**,
 empty the box and tap **Save**).
 
-The connection repairs itself: if the picture or data stalls, OPRivView rebuilds the stream on its
+The connection repairs itself: if the picture or data stalls, GeoRivView rebuilds the stream on its
 own, and it reconnects after the network drops or you switch apps.
 
 ## Using it
@@ -200,17 +203,17 @@ Press and hold anywhere on the driving screen.
 | **Layout** | Classic, Enhanced or Detailed. Same as swiping |
 | **Bottom bar** | For the current layout: Torque, Lane centering, Auto or Off |
 | **Speed limit** | Auto (shown once the comma knows the limit), Always, or Off. All layouts |
-| **Brightness** | Auto follows the device's own setting; a level set here applies while OPRivView is open |
+| **Brightness** | Auto follows the device's own setting; a level set here applies while GeoRivView is open |
 | **Comma device** | The comma's address, found automatically or entered by hand with **Change** |
 | **Road name** | Show or hide the road name, whatever the comma's own setting |
 | **Clock** | 12 hr or 24 hr time for the clock shown in every layout. Tapping the clock does the same |
-| **Picture-in-picture** | On: when you leave OPRivView, a small floating view stays on screen (where the device supports it) |
-| **OPRivView updates** | Checks for, downloads and installs new releases |
+| **Picture-in-picture** | On: when you leave GeoRivView, a small floating view stays on screen (where the device supports it) |
+| **GeoRivView updates** | Checks for, downloads and installs new releases |
 
 The installed version is shown at the bottom of the settings.
 
 ## Picture-in-picture
-With **Picture-in-picture** on, going to the Home screen or opening another app shrinks OPRivView to
+With **Picture-in-picture** on, going to the Home screen or opening another app shrinks GeoRivView to
 a small floating window with the essentials. Tap it to return to full screen. Not every head unit
 supports this; where it doesn't, the switch has no effect.
 
@@ -228,14 +231,14 @@ supports this; where it doesn't, the switch has no effect.
 
 ## Credits
 
-OPRivView builds on:
+GeoRivView builds on:
 - [comma.ai openpilot](https://github.com/commaai/openpilot), whose driving screen it reproduces.
 - [eFiniLan/opview](https://github.com/eFiniLan/opview), the original Flutter app.
 - [Gerrylum/opview](https://github.com/gerrylum/opview): the Enhanced and Detailed layouts, the settings
   menu, swiping between layouts, brightness control, picture-in-picture, in-app updates, signed
-  release builds, and the OPRivView name and icon.
-- Geomglot: sunnypilot support, MADS colors, lane centering and the bottom bar, and the Rivian
-  releases.
+  release builds, and the OPRivView name and the icon's design.
+- Geomglot: sunnypilot support, MADS colors, lane centering and the bottom bar, the Rivian
+  releases, and the GeoRivView name.
 - [AdventurePilot](https://github.com/AdventurePilotDev/AdventurePilot), which carries the comma side
   of the stream on `dev` and `dev-a`. Its guide to setting this up is
   [OPRivView](https://github.com/AdventurePilotDev/AdventurePilot/blob/instructions/oprivview.md).

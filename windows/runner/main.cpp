@@ -30,7 +30,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // the window places and sizes itself once it knows which screen it is on (flutter_window.cpp)
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(1320, 820);
-  if (!window.Create(L"OPRivView Replay", origin, size)) {
+  if (!window.Create(L"GeoRivView Replay", origin, size)) {
     return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);

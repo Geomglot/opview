@@ -5,7 +5,7 @@
 // 'flutter create' template.
 
 // The application's name. By default this is also the title of the Flutter window.
-PRODUCT_NAME = OPRivView Replay
+PRODUCT_NAME = GeoRivView Replay
 
 // The application's bundle identifier
 PRODUCT_BUNDLE_IDENTIFIER = com.geomglot.opview

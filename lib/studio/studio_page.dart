@@ -255,7 +255,7 @@ class _StudioPageState extends State<StudioPage> {
       case ReplayUpdateStatus.available:
         await _offerUpdate();
       case ReplayUpdateStatus.upToDate:
-        say('OPRivView Replay $replayVersion is the newest version.');
+        say('GeoRivView Replay $replayVersion is the newest version.');
       default:
         say(_updater.message);
     }
@@ -273,7 +273,7 @@ class _StudioPageState extends State<StudioPage> {
         builder: (context, _) {
           final busy = _updater.status == ReplayUpdateStatus.downloading || _updater.status == ReplayUpdateStatus.installing;
           return AlertDialog(
-            title: Text('OPRivView Replay ${release.version} is available'),
+            title: Text('GeoRivView Replay ${release.version} is available'),
             content: SizedBox(
                 width: 560,
                 child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [

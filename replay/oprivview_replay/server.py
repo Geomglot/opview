@@ -114,7 +114,7 @@ else:
 def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Path = DEFAULT_APP, output_dir: Path = DEFAULT_OUTPUT_DIR,
              connect: ConnectSource | None = ConnectSource(), settings: Settings | None = None) -> FastAPI:
   """[settings] is the user's saved choices; [host] is one given on the command line, which wins over them"""
-  app = FastAPI(title="OPRivView replay")
+  app = FastAPI(title="GeoRivView replay")
   settings = settings or Settings(Path(tempfile.mkdtemp()) / "settings.json")
   if connect is not None and settings["dongle"]:
     connect.use_device(settings["dongle"])

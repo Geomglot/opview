@@ -49,7 +49,7 @@ def test_cache_folder(mac_modules):
 
 def test_built_renderer_path(mac_modules):
   # Mac value pinned before the Windows port; must not change on darwin.
-  assert str(cli.DEFAULT_APP).endswith("build/macos/Build/Products/Release/OPRivView Replay.app/Contents/MacOS/OPRivView Replay")
+  assert str(cli.DEFAULT_APP).endswith("build/macos/Build/Products/Release/GeoRivView Replay.app/Contents/MacOS/GeoRivView Replay")
 
 
 def test_settings_file(mac_modules):

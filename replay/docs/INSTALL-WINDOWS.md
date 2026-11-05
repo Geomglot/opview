@@ -1,6 +1,6 @@
-# Installing OPRivView Replay on Windows
+# Installing GeoRivView Replay on Windows
 
-OPRivView Replay plays back a drive as it looked on the OPRivView screen, and saves it as an MP4.
+GeoRivView Replay plays back a drive as it looked on the GeoRivView screen, and saves it as an MP4.
 
 This is an early test version of the Windows app. For how to use it, see the [user guide](USER_GUIDE.md), which covers
 the Mac and Windows and notes where they differ.
@@ -17,7 +17,7 @@ You do not need Python, ffmpeg or anything else installed.
 
 ## Install
 
-1. Download `OPRivView-Replay-<version>-Windows.exe` from the
+1. Download `GeoRivView-Replay-<version>-Windows.exe` from the
    [releases page](https://github.com/Geomglot/opview/releases). Test versions are marked Pre-release, and their names
    start with `replay-`. If your browser warns that the file is not commonly downloaded, choose to keep it.
 2. Open it. The installer is not signed, so Windows SmartScreen may stop it with "Windows protected your PC". Click
@@ -25,14 +25,14 @@ You do not need Python, ffmpeg or anything else installed.
 3. Follow the installer. It installs for you only, in your own folder, so it does not ask for an administrator. You can
    choose to add a desktop shortcut. At the end it can open the app.
 
-The app is then in the Start menu as **OPRivView Replay**. To pin it to the taskbar, right-click it there and choose
+The app is then in the Start menu as **GeoRivView Replay**. To pin it to the taskbar, right-click it there and choose
 **Pin to taskbar**.
 
 If you would like to check the download first, each release lists the checksums of its files in `SHA256SUMS`. To see
 yours, run this in PowerShell:
 
 ```powershell
-Get-FileHash "$HOME\Downloads\OPRivView-Replay-*-Windows.exe" -Algorithm SHA256
+Get-FileHash "$HOME\Downloads\GeoRivView-Replay-*-Windows.exe" -Algorithm SHA256
 ```
 
 ## Reaching your comma
@@ -53,7 +53,7 @@ it is open. Your settings and stored drives are kept, because they are not in th
 
 ## Removing it
 
-Open Settings, Apps, find **OPRivView Replay**, and choose **Uninstall**. It asks whether to delete your settings and
+Open Settings, Apps, find **GeoRivView Replay**, and choose **Uninstall**. It asks whether to delete your settings and
 the drives the app stored as well. Those are in these folders, which you can also delete yourself by pasting each one
 into the address bar of File Explorer:
 
@@ -63,7 +63,7 @@ into the address bar of File Explorer:
 Clips you saved stay in your Videos folder, or wherever you chose. Your comma Connect token is in
 `%USERPROFILE%\.comma\jwt`. Other comma tools use that file too, so delete it only if nothing else needs it.
 
-Versions before 0.1.2 came as a zip with no installer. If you used one, delete its **OPRivView Replay** folder.
+Versions before 0.1.2 came as a zip with no installer. If you used one, delete its **GeoRivView Replay** folder.
 
 ## Differences from the Mac
 

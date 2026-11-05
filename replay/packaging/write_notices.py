@@ -14,10 +14,10 @@ BUILD_ONLY = {"altgraph", "iniconfig", "macholib", "pip", "pluggy", "pygments", 
 if sys.platform != "win32":
   BUILD_ONLY.add("tzdata")  # installed everywhere for the tests, but only the Windows server carries it (server.spec)
 NO_LICENCE_FILE = {"flatbuffers": "Apache License 2.0; the package carries no licence file. See https://github.com/google/flatbuffers"}
-HEAD = """OPRivView Replay: licences for the software inside this app
+HEAD = """GeoRivView Replay: licences for the software inside this app
 
-OPRivView Replay
-  The app itself. See section "OPRivView Replay" at the end of this file.
+GeoRivView Replay
+  The app itself. See section "GeoRivView Replay" at the end of this file.
 
 FFmpeg 8.1 (ffmpeg and ffprobe)
   https://ffmpeg.org. LGPL version 2.1 or later: see ffmpeg-LICENSE.txt in this folder. The complete source is
@@ -75,7 +75,7 @@ def main(dest: Path, ffmpeg_work: Path) -> None:
       sys.exit(f"{name} has no licence file; say what its licence is in NO_LICENCE_FILE")
     body = "\n\n".join(f.locate().read_text(encoding="utf-8", errors="replace").strip() for f in files) or NO_LICENCE_FILE[name.lower()]
     parts.append(section(f"{name} {dist.version}", body))
-  parts.append(section("OPRivView Replay", (REPO / "LICENSE").read_text(encoding="utf-8")))
+  parts.append(section("GeoRivView Replay", (REPO / "LICENSE").read_text(encoding="utf-8")))
   (dest / "THIRD-PARTY-NOTICES.txt").write_text("".join(parts), encoding="utf-8")  # Windows would otherwise use its own code page
   (dest / "ffmpeg-LICENSE.txt").write_bytes((ffmpeg_work / "COPYING.LGPLv2.1").read_bytes())
   shutil.copy2(ffmpeg_work / "ffmpeg-8.1.tar.xz", dest / "ffmpeg-8.1.tar.xz")

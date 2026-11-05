@@ -1,8 +1,11 @@
-# OPRivView Replay user guide
+# GeoRivView Replay user guide
 
-OPRivView Replay redraws a drive as it looked on the OPRivView screen: the camera picture with the speed, path, lane lines
+GeoRivView Replay was called OPRivView Replay until November 2026. Only the name has changed: an update keeps your settings
+and stored drives.
+
+GeoRivView Replay redraws a drive as it looked on the GeoRivView screen: the camera picture with the speed, path, lane lines
 and panels on top. You can watch it in the app and save any part of it as an MP4. It draws from the drive's logs, using the
-same screen layouts as the OPRivView app, so you can also choose a different view from the one you had in the car.
+same screen layouts as the GeoRivView app, so you can also choose a different view from the one you had in the car.
 
 The app runs on Macs, Windows PCs and Linux PCs and works the same way on all of them. Where they differ, this guide
 says so. To install it, see the install guide for the [Mac](INSTALL.md), [Windows](INSTALL-WINDOWS.md) or
@@ -10,7 +13,7 @@ says so. To install it, see the install guide for the [Mac](INSTALL.md), [Window
 
 The **?** button above the drive list opens this guide and the install guide.
 
-OPRivView Replay is an independent project. It is not made or endorsed by comma.ai. It uses your own comma Connect sign-in,
+GeoRivView Replay is an independent project. It is not made or endorsed by comma.ai. It uses your own comma Connect sign-in,
 and for reaching the comma away from home, your own comma prime subscription.
 
 ## Getting your drives into the app
@@ -100,7 +103,7 @@ adds all of that device's public drives. To take one off the list, use **Remove 
 
 | Option | Choices |
 | --- | --- |
-| View | Classic, Enhanced or Detailed, the same layouts as in the OPRivView app |
+| View | Classic, Enhanced or Detailed, the same layouts as in the GeoRivView app |
 | Bottom bar | App default, Torque bar, Lane keeping, Automatic or Off |
 | Detail | How much of the drive to use, explained below |
 | Camera | Automatic, road or wide. Automatic follows the app, which uses the wide camera at low speed in experimental mode |
@@ -150,8 +153,8 @@ Press **Preview** to play the range in the window.
   view start again from there.
 - **Playback speed** runs from 0.25x to 4x. Above 1x, frames may be skipped.
 - **Full screen** leaves only the picture and controls. Press Esc to come back.
-- **Settings** opens the OPRivView settings screen. You can also press and hold the picture for about half a second.
-- Swipes and taps work as they do in the OPRivView app, and any change they make also shows in the options.
+- **Settings** opens the GeoRivView settings screen. You can also press and hold the picture for about half a second.
+- Swipes and taps work as they do in the GeoRivView app, and any change they make also shows in the options.
 
 ## Saving an MP4
 
@@ -208,7 +211,7 @@ settings. Your settings and stored drives are kept. The **?** menu also shows wh
 - The app cannot read logs you have already copied to your computer yet.
 - About one drive in six has no position from Connect, so it shows no town name unless its logs are already stored.
 - The Automatic wide camera rule has not yet been checked on a real experimental mode drive.
-- The OPRivView app takes a second or two to change cameras while driving. The replay changes at once.
+- The GeoRivView app takes a second or two to change cameras while driving. The replay changes at once.
 - Public drives from other forks of openpilot may not decode.
 - The Linux version is new and has not yet been tried on a real Linux PC with a graphics card. In a virtual machine the
   preview can be jerky: the processor decodes the video, and with 4 cores it only just keeps up. More cores help.

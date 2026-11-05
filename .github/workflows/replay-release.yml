@@ -1,6 +1,6 @@
 name: Replay release
 
-# Pushing a tag replay-v<version> or replay-v<version>-test.<n>, where <version> is replay/VERSION, builds OPRivView
+# Pushing a tag replay-v<version> or replay-v<version>-test.<n>, where <version> is replay/VERSION, builds GeoRivView
 # Replay for Windows, Apple silicon Macs, Intel Macs and Linux, with the same checks as on every push, and puts the four files
 # and SHA256SUMS in a DRAFT release. Nothing is public until the owner reviews the draft and presses Publish.
 # GitHub's Mac runners sometimes never start a job; replay-release-retry.yml then re-runs the failed jobs, and this
@@ -93,7 +93,7 @@ jobs:
 
       - uses: actions/download-artifact@v8
         with:
-          pattern: OPRivView-Replay-*
+          pattern: GeoRivView-Replay-*
           merge-multiple: true
           path: files
 
@@ -101,13 +101,17 @@ jobs:
         run: |
           shopt -s nullglob
           cd files
-          want=("OPRivView-Replay-$VERSION-Windows.exe" "OPRivView-Replay-$VERSION-macOS-ARM.dmg" "OPRivView-Replay-$VERSION-macOS-Intel.dmg"
-                "OPRivView-Replay-$VERSION-Linux-x86_64.AppImage")
+          want=("GeoRivView-Replay-$VERSION-Windows.exe" "GeoRivView-Replay-$VERSION-macOS-ARM.dmg" "GeoRivView-Replay-$VERSION-macOS-Intel.dmg"
+                "GeoRivView-Replay-$VERSION-Linux-x86_64.AppImage")
           have=(); missing=()
           for f in "${want[@]}"; do if [ -f "$f" ]; then have+=("$f"); else missing+=("$f"); fi; done
           ls -l
           if [ ${#have[@]} -eq 0 ]; then echo "::error::nothing was built"; exit 1; fi
-          sha256sum "${have[@]}" > SHA256SUMS
+          # each file again under the name from before GeoRivView, the only name copies of the app from before the rename
+          # look for when they update themselves; these can stop once those copies have all updated
+          old=()
+          for f in "${have[@]}"; do cp "$f" "OPRivView-${f#GeoRivView-}"; old+=("OPRivView-${f#GeoRivView-}"); done
+          sha256sum "${have[@]}" "${old[@]}" > SHA256SUMS
           cat SHA256SUMS
 
           # a draft is not found by its tag the way a published release is, so look through the list
@@ -116,23 +120,23 @@ jobs:
             if [ "$draft" != true ]; then echo "::error::$TAG is already published; not changing it"; exit 1; fi
             echo "adding to the existing draft (its notes are left as they are)"
           else
-            title="OPRivView Replay ${VERSION/-test./ test }"
+            title="GeoRivView Replay ${VERSION/-test./ test }"
             previous=$(git -C .. describe --tags --abbrev=0 --match 'replay-v*' "$TAG^" 2>/dev/null || true)
             docs="https://github.com/Geomglot/opview/blob/$TAG/replay/docs"
             {
-              echo "OPRivView Replay plays back a drive as it looked on the OPRivView screen and saves it as an MP4. It is separate from the OPRivView Android app."
+              echo "GeoRivView Replay plays back a drive as it looked on the GeoRivView screen and saves it as an MP4. It is separate from the GeoRivView Android app."
               echo
               if [ "$PRERELEASE" = true ]; then echo "**Test version.** Please report problems on the [issues page](https://github.com/Geomglot/opview/issues), and say which computer you have."; echo; fi
               echo "| Download | For |"
               echo "| --- | --- |"
-              echo "| \`OPRivView-Replay-$VERSION-macOS-ARM.dmg\` | Apple silicon Macs (M1 and later), macOS 14 or later |"
-              echo "| \`OPRivView-Replay-$VERSION-macOS-Intel.dmg\` | Intel Macs, macOS 14 or later |"
-              echo "| \`OPRivView-Replay-$VERSION-Windows.exe\` | 64-bit Windows 10 or 11 |"
-              echo "| \`OPRivView-Replay-$VERSION-Linux-x86_64.AppImage\` | 64-bit Linux on a PC: Ubuntu 22.04 or later, Debian 12, Fedora 36 or later, Mint 21 or later |"
+              echo "| \`GeoRivView-Replay-$VERSION-macOS-ARM.dmg\` | Apple silicon Macs (M1 and later), macOS 14 or later |"
+              echo "| \`GeoRivView-Replay-$VERSION-macOS-Intel.dmg\` | Intel Macs, macOS 14 or later |"
+              echo "| \`GeoRivView-Replay-$VERSION-Windows.exe\` | 64-bit Windows 10 or 11 |"
+              echo "| \`GeoRivView-Replay-$VERSION-Linux-x86_64.AppImage\` | 64-bit Linux on a PC: Ubuntu 22.04 or later, Debian 12, Fedora 36 or later, Mint 21 or later |"
               echo
               echo "The app is not signed by Apple or Microsoft, so the first time you open it, macOS or Windows SmartScreen asks you to allow it. On Linux, the AppImage is made runnable once. The install guides have the steps: [Mac]($docs/INSTALL.md), [Windows]($docs/INSTALL-WINDOWS.md), [Linux]($docs/INSTALL-LINUX.md). How to use it: [user guide]($docs/USER_GUIDE.md)."
               echo
-              echo "Checksums are in \`SHA256SUMS\`."
+              echo "Checksums are in \`SHA256SUMS\`. The files whose names start \`OPRivView\` are the same files under the app's old name, for copies of the app from before it was renamed to update themselves; download the \`GeoRivView\` ones."
               echo
               echo "## What's new"
               echo
@@ -148,7 +152,7 @@ jobs:
             gh release create "$TAG" --draft --verify-tag "${pre[@]}" --title "$title" --notes-file notes.md
           fi
 
-          gh release upload "$TAG" "${have[@]}" SHA256SUMS --clobber
+          gh release upload "$TAG" "${have[@]}" "${old[@]}" SHA256SUMS --clobber
           if [ ${#missing[@]} -gt 0 ]; then
             echo "::error::the draft is missing ${missing[*]}; re-run the failed jobs to add it"
             exit 1

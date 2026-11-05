@@ -1,12 +1,14 @@
 <p align="center">
-  <img src="docs/oprivview_icon.svg" width="128" alt="OPRivView">
+  <img src="docs/georivview_icon.svg" width="128" alt="GeoRivView">
 </p>
 
-# OPRivView
+# GeoRivView
+
+GeoRivView was called OPRivView until November 2026. The name changed; the app and its settings did not.
 
 **English** | [繁體中文](README_zh-TW.md) (describes the original opview)
 
-OPRivView shows a comma device's driving screen live on an Android phone, tablet or car head unit,
+GeoRivView shows a comma device's driving screen live on an Android phone, tablet or car head unit,
 including the EV Play box on a Rivian's center screen: the road camera with the openpilot /
 sunnypilot overlay drawn on top. It is a fork of [eFiniLan/opview](https://github.com/eFiniLan/opview),
 a clone of [openpilot](https://github.com/commaai/openpilot)'s onroad UI built in Flutter, with
@@ -88,7 +90,7 @@ except OSError:
 
 ## Install
 
-Download the newest `OPRivView-<version>.apk` from
+Download the newest `GeoRivView-<version>.apk` from
 [releases](https://github.com/Geomglot/opview/releases) (all are marked pre-release) and install it.
 The [user guide](docs/USER_GUIDE.md) covers phones, tablets and the EV Play.
 
@@ -98,13 +100,13 @@ The [user guide](docs/USER_GUIDE.md) covers phones, tablets and the EV Play.
 ├── assets/                                # Fonts, icons, source logo
 ├── docs/
 │   ├── USER_GUIDE.md                      # How to install and use the app
-│   ├── oprivview_icon.svg                 # App icon
+│   ├── georivview_icon.svg                # App icon
 │   └── gallery/                           # Screenshot gallery
 ├── scripts/
 │   ├── build.sh                           # Build script (Android/iOS)
 │   ├── release.sh                         # Original version-bump script (see Release)
 │   ├── screenshots.sh                     # Regenerate the golden screenshots
-│   └── generate_icons.py                  # Icon generator
+│   └── make_icons.py                      # Every platform's app icons, from docs/georivview_icon.svg
 ├── lib/
 │   ├── main.dart                          # Entry point, landscape lock, immersive
 │   ├── app.dart                           # MaterialApp shell, lifecycle (pause/resume)
@@ -192,23 +194,23 @@ copies.
 - **Android Auto / Apple CarPlay:** not supported. Both restrict apps to navigation, media, messaging
   or EV charging categories with template UIs and no custom drawing.
 
-## OPRivView Replay (Mac, Windows and Linux)
+## GeoRivView Replay (Mac, Windows and Linux)
 
 A separate app for Macs, Windows PCs and Linux PCs, in the [`replay/`](replay) folder, that plays a drive back as it looked on the
-OPRivView screen and saves it as an MP4. It draws with this app's own screen layouts, so it lives in the same branch. Test
+GeoRivView screen and saves it as an MP4. It draws with this app's own screen layouts, so it lives in the same branch. Test
 versions are on the [releases page](https://github.com/Geomglot/opview/releases) (names starting `replay-`). To use it, see
 the install guide for the [Mac](replay/docs/INSTALL.md), [Windows](replay/docs/INSTALL-WINDOWS.md) or
 [Linux](replay/docs/INSTALL-LINUX.md), and the
 [user guide](replay/docs/USER_GUIDE.md). Notes for working on it are in [replay/README.md](replay/README.md).
 
-OPRivView Replay is an independent project. It is not made or endorsed by comma.ai. It uses your own comma Connect sign-in,
+GeoRivView Replay is an independent project. It is not made or endorsed by comma.ai. It uses your own comma Connect sign-in,
 and for reaching the comma away from home, your own comma prime subscription.
 
 ## Branches
 
 | Branch | Description |
 |--------|-------------|
-| `rivian-support` | OPRivView and OPRivView Replay: current development, and the source of releases. The default branch |
+| `rivian-support` | GeoRivView and GeoRivView Replay: current development, and the source of releases. The default branch |
 | `main` | The original opview, tracking eFiniLan. Kept as a reference and not changed |
 
 `comma3x-support`, `pip-switch` and `rivian-replay` were merged into `rivian-support` and deleted; their commits are in its history.
@@ -222,10 +224,11 @@ and for reaching the comma away from home, your own comma prime subscription.
 - **[Gerrylum](https://github.com/gerrylum/opview)**: the Enhanced and Detailed layouts, the settings
   menu and clock, swiping between layouts, brightness control, picture-in-picture, in-app updates,
   signed and numbered release builds, the data watchdog, smoother streaming on slow head units, and the
-  OPRivView name and icon.
+  OPRivView name and the icon's design.
 - **Geomglot**: connection to current sunnypilot / openpilot, sunnypilot's speed limit, road name and
   MADS colors, lane line alignment, the lane centering indicator and bottom bar, the device-side
-  streaming changes in Geomglot's sunnypilot build and AdventurePilot, and the Rivian releases.
+  streaming changes in Geomglot's sunnypilot build and AdventurePilot, the Rivian releases, and the GeoRivView
+  name.
 
 ### Ported from
 

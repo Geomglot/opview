@@ -9,7 +9,7 @@
 
 // the window's size on opening and the smallest it can be made, in logical pixels as on the Mac and Windows
 static constexpr int kWidth = 1320, kHeight = 820, kMinWidth = 1100, kMinHeight = 640;
-static constexpr char kTitle[] = "OPRivView Replay";
+static constexpr char kTitle[] = "GeoRivView Replay";
 
 struct _MyApplication {
   GtkApplication parent_instance;

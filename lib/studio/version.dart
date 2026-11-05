@@ -1,4 +1,4 @@
-// Which version of OPRivView Replay this is. replay/VERSION holds the version being worked towards (e.g. 0.1.2); a release
+// Which version of GeoRivView Replay this is. replay/VERSION holds the version being worked towards (e.g. 0.1.2); a release
 // build adds the tag's test number (0.1.2-test.1) and local builds add "-dev" (Makefile, packaging/build_windows.ps1),
 // passed in with --dart-define. A bare `flutter run` has none.
 

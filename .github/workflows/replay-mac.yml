@@ -1,6 +1,6 @@
 name: Replay for Apple silicon Macs
 
-# Builds OPRivView Replay for Apple silicon Macs as a disk image, on GitHub's Apple silicon runner, with no need for an
+# Builds GeoRivView Replay for Apple silicon Macs as a disk image, on GitHub's Apple silicon runner, with no need for an
 # M-series Mac of our own: ffmpeg from source, the server (PyInstaller) and the app (Flutter), put together by
 # `make dmg` in replay/. It then starts the server and ffmpeg from the built app, so a release that cannot run on
 # Apple silicon fails here. The disk image is kept as a workflow artifact; download it from the run's page.
@@ -114,9 +114,9 @@ jobs:
       - name: The bundled server starts
         working-directory: replay
         run: |
-          app="dist/OPRivView Replay.app/Contents"
+          app="dist/GeoRivView Replay.app/Contents"
           "$app/Resources/oprivview-replay-server/oprivview-replay-server" --port 8799 --no-connect \
-            --app "$app/MacOS/OPRivView Replay" &
+            --app "$app/MacOS/GeoRivView Replay" &
           for i in $(seq 60); do
             if curl -sf http://127.0.0.1:8799/health; then echo; kill $!; exit 0; fi
             sleep 1
@@ -127,11 +127,11 @@ jobs:
       - name: The bundled server reaches comma Connect over TLS
         working-directory: replay
         run: |
-          app="dist/OPRivView Replay.app/Contents"
+          app="dist/GeoRivView Replay.app/Contents"
           mkdir -p "$HOME/.comma"
           echo not-a-real-token > "$HOME/.comma/jwt"
           "$app/Resources/oprivview-replay-server/oprivview-replay-server" --port 8799 --host 127.0.0.1 \
-            --app "$app/MacOS/OPRivView Replay" &
+            --app "$app/MacOS/GeoRivView Replay" &
           pid=$!
           for i in $(seq 60); do
             if curl -sf http://127.0.0.1:8799/health >/dev/null; then break; fi
@@ -151,7 +151,7 @@ jobs:
       - name: The bundled ffmpeg encodes with VideoToolbox
         working-directory: replay
         run: |
-          ffmpeg="dist/OPRivView Replay.app/Contents/Resources/ffmpeg/ffmpeg"
+          ffmpeg="dist/GeoRivView Replay.app/Contents/Resources/ffmpeg/ffmpeg"
           encode() {
             head -c $((256 * 144 * 3 / 2 * 20)) /dev/zero |
               "$ffmpeg" -v error -f rawvideo -pix_fmt yuv420p -s 256x144 -r 20 -i - -c:v h264_videotoolbox "$@" -y -f mp4 out.mp4
@@ -164,10 +164,10 @@ jobs:
             echo "::warning::no hardware H.264 encoder on this Intel runner; checked VideoToolbox's software encoder instead"
             encode -allow_sw 1
           fi
-          "dist/OPRivView Replay.app/Contents/Resources/ffmpeg/ffprobe" -v error -show_entries stream=codec_name -of csv=p=0 out.mp4 | grep -x h264
+          "dist/GeoRivView Replay.app/Contents/Resources/ffmpeg/ffprobe" -v error -show_entries stream=codec_name -of csv=p=0 out.mp4 | grep -x h264
 
       - uses: actions/upload-artifact@v7
         with:
-          name: OPRivView-Replay-macOS-${{ env.MAC_ARCH }}
-          path: replay/dist/OPRivView-Replay-*-macOS-${{ env.MAC_ARCH }}.dmg
+          name: GeoRivView-Replay-macOS-${{ env.MAC_ARCH }}
+          path: replay/dist/GeoRivView-Replay-*-macOS-${{ env.MAC_ARCH }}.dmg
           if-no-files-found: error

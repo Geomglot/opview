@@ -15,10 +15,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 Map<String, dynamic> _release(String tag, {bool apk = true}) => {
       'tag_name': tag,
-      'body': "## What's Changed\n\n- Swipe sideways to change the layout\n- Smaller road name\n\n## Download\n\n- **OPRivView APK**",
+      'body': "## What's Changed\n\n- Swipe sideways to change the layout\n- Smaller road name\n\n## Download\n\n- **GeoRivView APK**",
       'assets': [
         if (apk)
-          {'name': 'OPRivView-${tag.substring(1)}.apk', 'browser_download_url': 'https://example.invalid/a.apk', 'size': 19000000},
+          {'name': 'GeoRivView-${tag.substring(1)}.apk', 'browser_download_url': 'https://example.invalid/a.apk', 'size': 19000000},
       ],
     };
 
@@ -152,7 +152,7 @@ void main() {
                 'body': '',
                 'assets': [
                   {
-                    'name': 'OPRivView-0.1.1-mici.5.apk',
+                    'name': 'GeoRivView-0.1.1-mici.5.apk',
                     'browser_download_url': 'https://example.invalid/a.apk',
                     'size': apk.length,
                     if (digest) 'digest': 'sha256:$apkSha',
@@ -168,7 +168,7 @@ void main() {
           }),
         );
 
-    File saved() => File('${dir.path}/OPRivView-0.1.1-mici.5.apk');
+    File saved() => File('${dir.path}/GeoRivView-0.1.1-mici.5.apk');
 
     test('the release carries GitHub\'s SHA-256', () async {
       final u = updater();

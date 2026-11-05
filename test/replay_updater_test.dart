@@ -45,30 +45,42 @@ void main() {
 
   group('choosing a release', () {
     final list = [
-      release('v0.1.2-rivian.9', ['OPRivView-0.1.2-rivian.9.apk'], prerelease: true), // the Android app's
-      release('replay-v0.1.3-test.1', ['OPRivView-Replay-0.1.3-test.1-Windows.exe'], draft: true, prerelease: true),
-      release('replay-v0.1.2-test.2', ['OPRivView-Replay-0.1.2-test.2-Windows.exe', 'OPRivView-Replay-0.1.2-test.2-macOS-ARM.dmg'],
+      release('v0.1.2-rivian.9', ['GeoRivView-0.1.2-rivian.9.apk'], prerelease: true), // the Android app's
+      release('replay-v0.1.3-test.1', ['GeoRivView-Replay-0.1.3-test.1-Windows.exe'], draft: true, prerelease: true),
+      release('replay-v0.1.2-test.2', ['GeoRivView-Replay-0.1.2-test.2-Windows.exe', 'GeoRivView-Replay-0.1.2-test.2-macOS-ARM.dmg'],
           prerelease: true),
-      release('replay-v0.1.2', ['OPRivView-Replay-0.1.2-Windows.exe', 'OPRivView-Replay-0.1.2-macOS-Intel.dmg']),
-      release('replay-v0.1.1-windows-test.1', ['OPRivView-Replay-0.1.1-Windows.zip'], prerelease: true),
+      release('replay-v0.1.2', ['GeoRivView-Replay-0.1.2-Windows.exe', 'GeoRivView-Replay-0.1.2-macOS-Intel.dmg']),
+      release('replay-v0.1.1-windows-test.1', ['GeoRivView-Replay-0.1.1-Windows.zip'], prerelease: true),
     ];
 
     test('the newest version with a file for this computer; drafts and the Android app are left out', () {
       expect(newestReplayRelease(list, suffix: '-Windows.exe', includeTests: true)!.version.toString(), '0.1.2');
       expect(newestReplayRelease(list, suffix: '-macOS-ARM.dmg', includeTests: true)!.version.toString(), '0.1.2-test.2');
       expect(newestReplayRelease(list, suffix: '-macOS-Intel.dmg', includeTests: true)!.fileName,
-          'OPRivView-Replay-0.1.2-macOS-Intel.dmg');
+          'GeoRivView-Replay-0.1.2-macOS-Intel.dmg');
     });
 
     test('a Linux computer is offered only a release with an AppImage', () {
       final withLinux = [
-        release('replay-v0.1.3-test.1', ['OPRivView-Replay-0.1.3-test.1-Windows.exe'], prerelease: true),
-        release('replay-v0.1.2-test.3', ['OPRivView-Replay-0.1.2-test.3-Linux-x86_64.AppImage'], prerelease: true),
+        release('replay-v0.1.3-test.1', ['GeoRivView-Replay-0.1.3-test.1-Windows.exe'], prerelease: true),
+        release('replay-v0.1.2-test.3', ['GeoRivView-Replay-0.1.2-test.3-Linux-x86_64.AppImage'], prerelease: true),
         ...list,
       ];
       expect(newestReplayRelease(withLinux, suffix: '-Linux-x86_64.AppImage', includeTests: true)!.fileName,
-          'OPRivView-Replay-0.1.2-test.3-Linux-x86_64.AppImage');
+          'GeoRivView-Replay-0.1.2-test.3-Linux-x86_64.AppImage');
       expect(newestReplayRelease(withLinux, suffix: '-Linux-x86_64.AppImage', includeTests: false), isNull);
+    });
+
+    test('releases from before the rename, named OPRivView, are still found; the new name is taken when both are there', () {
+      final old = [release('replay-v0.1.2-test.3', ['OPRivView-Replay-0.1.2-test.3-Windows.exe'], prerelease: true)];
+      expect(newestReplayRelease(old, suffix: '-Windows.exe', includeTests: true)!.fileName,
+          'OPRivView-Replay-0.1.2-test.3-Windows.exe');
+      final both = [
+        release('replay-v0.1.2-test.4', ['OPRivView-Replay-0.1.2-test.4-Windows.exe', 'GeoRivView-Replay-0.1.2-test.4-Windows.exe'],
+            prerelease: true)
+      ];
+      expect(newestReplayRelease(both, suffix: '-Windows.exe', includeTests: true)!.fileName,
+          'GeoRivView-Replay-0.1.2-test.4-Windows.exe');
     });
 
     test('test versions only when asked for', () {
@@ -82,8 +94,8 @@ void main() {
     });
 
     test("a SHA256SUMS line gives a file's checksum", () {
-      final sums = '${'a' * 64}  OPRivView-Replay-0.1.2-Windows.exe\n${'B' * 64}  OPRivView-Replay-0.1.2-macOS-ARM.dmg\n';
-      expect(sha256From(sums, 'OPRivView-Replay-0.1.2-macOS-ARM.dmg'), 'b' * 64);
+      final sums = '${'a' * 64}  GeoRivView-Replay-0.1.2-Windows.exe\n${'B' * 64}  GeoRivView-Replay-0.1.2-macOS-ARM.dmg\n';
+      expect(sha256From(sums, 'GeoRivView-Replay-0.1.2-macOS-ARM.dmg'), 'b' * 64);
       expect(sha256From(sums, 'other'), isNull);
     });
   });
@@ -112,26 +124,26 @@ void main() {
 
     test('a newer release is offered, downloaded, checked and installed; a second Update reuses the download', () async {
       final got = <String>[], installed = <String>[];
-      final u = updater([release('replay-v0.1.2-test.2', ['OPRivView-Replay-0.1.2-test.2-Windows.exe'], prerelease: true,
-          digests: {'OPRivView-Replay-0.1.2-test.2-Windows.exe': good})], got: got, installed: installed);
+      final u = updater([release('replay-v0.1.2-test.2', ['GeoRivView-Replay-0.1.2-test.2-Windows.exe'], prerelease: true,
+          digests: {'GeoRivView-Replay-0.1.2-test.2-Windows.exe': good})], got: got, installed: installed);
       await u.check(includeTests: true);
       expect(u.status, ReplayUpdateStatus.available);
       await u.downloadAndInstall();
-      expect(installed.single, endsWith('OPRivView-Replay-0.1.2-test.2-Windows.exe'));
+      expect(installed.single, endsWith('GeoRivView-Replay-0.1.2-test.2-Windows.exe'));
       expect(u.message, 'installed');
       await u.downloadAndInstall();
       expect(got.where((url) => url.endsWith('.exe')), hasLength(1), reason: 'the saved download matched');
     });
 
     test('nothing newer, nothing offered', () async {
-      final u = updater([release('replay-v0.1.2-test.1', ['OPRivView-Replay-0.1.2-test.1-Windows.exe'], prerelease: true)], got: []);
+      final u = updater([release('replay-v0.1.2-test.1', ['GeoRivView-Replay-0.1.2-test.1-Windows.exe'], prerelease: true)], got: []);
       await u.check(includeTests: true);
       expect(u.status, ReplayUpdateStatus.upToDate);
     });
 
     test('a download that does not match its checksum is thrown away and not installed', () async {
       final installed = <String>[];
-      final u = updater([release('replay-v0.1.2', ['OPRivView-Replay-0.1.2-Windows.exe'], digests: {'OPRivView-Replay-0.1.2-Windows.exe': 'f' * 64})],
+      final u = updater([release('replay-v0.1.2', ['GeoRivView-Replay-0.1.2-Windows.exe'], digests: {'GeoRivView-Replay-0.1.2-Windows.exe': 'f' * 64})],
           got: [], installed: installed);
       await u.check(includeTests: false);
       await u.downloadAndInstall();
@@ -142,7 +154,7 @@ void main() {
 
     test('without a digest the checksum comes from SHA256SUMS, and with neither nothing is downloaded', () async {
       final got = <String>[];
-      final r = release('replay-v0.1.2', ['OPRivView-Replay-0.1.2-Windows.exe', 'SHA256SUMS']);
+      final r = release('replay-v0.1.2', ['GeoRivView-Replay-0.1.2-Windows.exe', 'SHA256SUMS']);
       final u = ReplayUpdater(
         installed: '0.1.2-test.1',
         suffix: () async => '-Windows.exe',
@@ -151,7 +163,7 @@ void main() {
         client: () => MockClient((req) async {
           got.add(req.url.toString());
           if (req.url.host == 'api.github.com') return http.Response(jsonEncode([r]), 200);
-          if (req.url.path.endsWith('SHA256SUMS')) return http.Response('$good  OPRivView-Replay-0.1.2-Windows.exe\n', 200);
+          if (req.url.path.endsWith('SHA256SUMS')) return http.Response('$good  GeoRivView-Replay-0.1.2-Windows.exe\n', 200);
           return http.Response.bytes(bytes, 200);
         }),
       );
@@ -159,7 +171,7 @@ void main() {
       await u.downloadAndInstall();
       expect(u.message, 'installed');
 
-      final bare = updater([release('replay-v0.1.2', ['OPRivView-Replay-0.1.2-Windows.exe'])], got: got..clear());
+      final bare = updater([release('replay-v0.1.2', ['GeoRivView-Replay-0.1.2-Windows.exe'])], got: got..clear());
       await bare.check(includeTests: false);
       await bare.downloadAndInstall();
       expect(bare.status, ReplayUpdateStatus.failed);
@@ -169,28 +181,28 @@ void main() {
 
   group('Mac install', () {
     test('an app in Applications, or any folder the user can change, replaces itself', () {
-      expect(macInstallRefusal('/Applications/OPRivView Replay.app', writable: true), isNull);
-      expect(macInstallRefusal('/Users/me/Apps/OPRivView Replay.app', writable: true), isNull);
+      expect(macInstallRefusal('/Applications/GeoRivView Replay.app', writable: true), isNull);
+      expect(macInstallRefusal('/Users/me/Apps/GeoRivView Replay.app', writable: true), isNull);
     });
 
     test('an app on the disk image, moved by macOS to a temporary place, or in a folder it cannot change, does not', () {
-      expect(macInstallRefusal('/Volumes/OPRivView Replay/OPRivView Replay.app', writable: true), contains('disk image'));
-      expect(macInstallRefusal('/private/var/folders/x/T/AppTranslocation/ABC/d/OPRivView Replay.app', writable: true),
+      expect(macInstallRefusal('/Volumes/GeoRivView Replay/GeoRivView Replay.app', writable: true), contains('disk image'));
+      expect(macInstallRefusal('/private/var/folders/x/T/AppTranslocation/ABC/d/GeoRivView Replay.app', writable: true),
           contains('temporary place'));
-      expect(macInstallRefusal('/Applications/OPRivView Replay.app', writable: false), contains('cannot change'));
+      expect(macInstallRefusal('/Applications/GeoRivView Replay.app', writable: false), contains('cannot change'));
       expect(macInstallRefusal('/usr/local/bin', writable: true), isNotNull);
     });
   });
 
   group('Linux install', () {
     test('an AppImage in a folder the user can change replaces itself', () {
-      expect(linuxInstallRefusal('/home/me/Applications/OPRivView-Replay-0.1.2-Linux-x86_64.AppImage', writable: true), isNull);
+      expect(linuxInstallRefusal('/home/me/Applications/GeoRivView-Replay-0.1.2-Linux-x86_64.AppImage', writable: true), isNull);
     });
 
     test('not run from an AppImage, or in a folder the user cannot change, it does not', () {
       expect(linuxInstallRefusal(null, writable: true), contains('not running from its AppImage'));
       expect(linuxInstallRefusal('', writable: true), contains('not running from its AppImage'));
-      expect(linuxInstallRefusal('/opt/OPRivView-Replay.AppImage', writable: false), contains('cannot change'));
+      expect(linuxInstallRefusal('/opt/GeoRivView-Replay.AppImage', writable: false), contains('cannot change'));
     });
   });
 }

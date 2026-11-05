@@ -1,6 +1,6 @@
-# Installing OPRivView Replay on Linux
+# Installing GeoRivView Replay on Linux
 
-OPRivView Replay plays back a drive as it looked on the OPRivView screen, and saves it as an MP4.
+GeoRivView Replay plays back a drive as it looked on the GeoRivView screen, and saves it as an MP4.
 
 This is an early test version of the Linux app. For how to use it, see the [user guide](USER_GUIDE.md), which covers
 the Mac, Windows and Linux and notes where they differ.
@@ -23,7 +23,7 @@ You do not need Python or anything else installed. The app brings its own small 
 
 ## Install
 
-1. Download `OPRivView-Replay-<version>-Linux-x86_64.AppImage` from the
+1. Download `GeoRivView-Replay-<version>-Linux-x86_64.AppImage` from the
    [releases page](https://github.com/Geomglot/opview/releases). Test versions are marked Pre-release, and their names
    start with `replay-`.
 2. Move it where you keep programs, for example a folder called `Applications` in your home folder. Keep it somewhere
@@ -32,7 +32,7 @@ You do not need Python or anything else installed. The app brings its own small 
    as program** (the wording differs a little between desktops). Or in a terminal:
 
    ```sh
-   chmod +x ~/Applications/OPRivView-Replay-*-Linux-x86_64.AppImage
+   chmod +x ~/Applications/GeoRivView-Replay-*-Linux-x86_64.AppImage
    ```
 
 4. Double-click it to open it.
@@ -44,7 +44,7 @@ If you would like to check the download first, each release lists the checksums 
 yours:
 
 ```sh
-sha256sum ~/Applications/OPRivView-Replay-*-Linux-x86_64.AppImage
+sha256sum ~/Applications/GeoRivView-Replay-*-Linux-x86_64.AppImage
 ```
 
 ## Reaching your comma

@@ -23,7 +23,7 @@ class Param:
 
 
 PARAMS = (
-  Param("view", "Which OPRivView screen layout to draw", "classic", ("classic", "enhanced", "detailed")),
+  Param("view", "Which GeoRivView screen layout to draw", "classic", ("classic", "enhanced", "detailed")),
   Param("bottom_bar", "App default is what the app normally shows for this view", None,
         ("torque", "laneCentering", "auto", "off")),
   Param("detail", "Full uses the complete log and camera video. Log with small video has the path and lane lines over a lower "

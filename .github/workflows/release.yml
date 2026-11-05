@@ -69,7 +69,7 @@ jobs:
       - name: Rename APK
         run: |
           version="${GITHUB_REF_NAME#v}"
-          cp build/app/outputs/flutter-apk/app-release.apk "OPRivView-${version}.apk"
+          cp build/app/outputs/flutter-apk/app-release.apk "GeoRivView-${version}.apk"
 
       - name: Generate changelog
         id: changelog
@@ -98,5 +98,5 @@ jobs:
 
             ## Download
 
-            - **OPRivView APK** — Universal Android APK (sideload)
-          files: OPRivView-*.apk
+            - **GeoRivView APK** — Universal Android APK (sideload)
+          files: GeoRivView-*.apk

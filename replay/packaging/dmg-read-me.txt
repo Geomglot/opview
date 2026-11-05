@@ -1,16 +1,16 @@
-OPRivView Replay
+GeoRivView Replay
 
 Needs macOS 14 or later, on {{ARCH_NEEDED}}.
 
 To install
-1. Drag OPRivView Replay onto the Applications folder.
+1. Drag GeoRivView Replay onto the Applications folder.
 2. Eject this disk.
 
 The first time you open it
 This app is not notarized by Apple, so macOS will refuse it the first time and say it cannot check it.
 1. Open the app from Applications and click Done (not Move to Trash).
 2. Open System Settings, then Privacy & Security, and scroll down to Security.
-3. Click Open Anyway beside OPRivView Replay, and confirm with your password or Touch ID.
+3. Click Open Anyway beside GeoRivView Replay, and confirm with your password or Touch ID.
 You only need to do this once.
 
 Using it

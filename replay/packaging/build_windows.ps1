@@ -1,4 +1,4 @@
-# OPRivView Replay: build the Windows program with its server and ffmpeg beside it, and its installer for release.
+# GeoRivView Replay: build the Windows program with its server and ffmpeg beside it, and its installer for release.
 # The Windows counterpart of "make dmg" in the Makefile. Run from the replay folder:
 #   powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1 [-Version <v>] [-BuildNumber <n>]
 #     [-FfmpegDir <folder>] [-SkipFlutter] [-SkipInstaller]
@@ -7,7 +7,7 @@
 # for the installer (winget install JRSoftware.InnoSetup).
 # The version is replay\VERSION with "-dev" on the end, which the app takes as a local build (its updater stays off);
 # the release workflow passes the full one, e.g. -Version 0.1.2-test.1, and its run number as -BuildNumber.
-# Leaves dist\OPRivView Replay\ and dist\OPRivView-Replay-<version>-Windows.exe.
+# Leaves dist\GeoRivView Replay\ and dist\GeoRivView-Replay-<version>-Windows.exe.
 param(
   [string]$Version,
   [int]$BuildNumber = 1,
@@ -32,8 +32,8 @@ $base = (Get-Content "$replay\VERSION" -TotalCount 1).Trim()
 if (-not $Version) { $Version = "$base-dev" }
 if ($Version -notmatch "^$([regex]::Escape($base))(-[0-9A-Za-z.]+)?$") { throw "-Version $Version does not start with replay\VERSION ($base)" }
 if ($base -notmatch '^\d+\.\d+\.\d+$') { throw "replay\VERSION ($base) must be three numbers, such as 0.1.2" }
-$out = "dist\OPRivView Replay"
-$installer = "dist\OPRivView-Replay-$Version-Windows.exe"
+$out = "dist\GeoRivView Replay"
+$installer = "dist\GeoRivView-Replay-$Version-Windows.exe"
 
 foreach ($f in "ffmpeg.exe", "ffprobe.exe", "COPYING.LGPLv2.1", "ffmpeg-8.1.tar.xz") {
   if (-not (Test-Path "$FfmpegDir\$f")) { throw "$FfmpegDir\$f is missing: build ffmpeg first (see the top of this file)" }

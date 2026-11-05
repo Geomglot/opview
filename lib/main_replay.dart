@@ -1,4 +1,4 @@
-// OPRivView replay: draws a drive through the real onroad layouts and writes it to an MP4
+// GeoRivView replay: draws a drive through the real onroad layouts and writes it to an MP4
 // with OPRIVVIEW_JOB set (by the replay server) it renders that job; without it, it opens the replay window
 
 import 'dart:async';

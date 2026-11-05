@@ -1,6 +1,6 @@
-# Installing OPRivView Replay
+# Installing GeoRivView Replay
 
-OPRivView Replay is a Mac app that plays back a drive as it looked on the OPRivView screen, and saves it as an MP4.
+GeoRivView Replay is a Mac app that plays back a drive as it looked on the GeoRivView screen, and saves it as an MP4.
 
 This is an early test version. For how to use it, see the [user guide](USER_GUIDE.md).
 
@@ -15,23 +15,23 @@ You do not need Python, ffmpeg or anything else installed.
 
 ## Install
 
-1. Download the `OPRivView-Replay-<version>-macOS-<Intel|ARM>.dmg` for your Mac (Intel or Apple silicon) from the
+1. Download the `GeoRivView-Replay-<version>-macOS-<Intel|ARM>.dmg` for your Mac (Intel or Apple silicon) from the
    [releases page](https://github.com/Geomglot/opview/releases). Test versions are marked Pre-release, and their names start
    with `replay-`.
-2. Open the file. A disk called OPRivView Replay appears.
-3. Drag **OPRivView Replay** onto the **Applications** folder.
+2. Open the file. A disk called GeoRivView Replay appears.
+3. Drag **GeoRivView Replay** onto the **Applications** folder.
 4. Eject the disk.
 
 Run the app from Applications, not from the disk.
 
 ## The first time you open it
 
-The app is not notarized by Apple, so macOS refuses to open it at first. It says "OPRivView Replay.app" Not Opened, and that
+The app is not notarized by Apple, so macOS refuses to open it at first. It says "GeoRivView Replay.app" Not Opened, and that
 Apple could not verify it is free of malware. This is a one-time step:
 
 1. Open the app from Applications. When the message appears, click **Done**. Do not click Move to Trash.
 2. Open **System Settings**, then **Privacy & Security**, and scroll down to the **Security** section.
-3. Click **Open Anyway** beside OPRivView Replay, then confirm with your password or Touch ID.
+3. Click **Open Anyway** beside GeoRivView Replay, then confirm with your password or Touch ID.
 
 The app opens, and from then on it opens normally.
 
@@ -39,7 +39,7 @@ If you would like to check the download first, each release lists the file's SHA
 Terminal:
 
 ```bash
-shasum -a 256 ~/Downloads/OPRivView-Replay-*.dmg
+shasum -a 256 ~/Downloads/GeoRivView-Replay-*.dmg
 ```
 
 ## Updating

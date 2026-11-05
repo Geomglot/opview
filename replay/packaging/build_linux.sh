@@ -1,5 +1,5 @@
 #!/bin/bash
-# OPRivView Replay: build the Linux program with its server and ffmpeg beside it, as one AppImage file for release.
+# GeoRivView Replay: build the Linux program with its server and ffmpeg beside it, as one AppImage file for release.
 # The Linux counterpart of "make dmg" in the Makefile and build_windows.ps1. Run from the replay folder:
 #   packaging/build_linux.sh [version] [build number]
 # Needs Flutter with its Linux tools (clang cmake ninja-build pkg-config libgtk-3-dev), the replay .venv with
@@ -9,7 +9,7 @@
 # computer's C library or a later one.
 # The version is replay/VERSION with "-dev" on the end, which the app takes as a local build (its updater stays off);
 # the release workflow passes the full one, e.g. 0.1.2-test.3, and its run number.
-# Leaves build/AppDir and dist/OPRivView-Replay-<version>-Linux-x86_64.AppImage.
+# Leaves build/AppDir and dist/GeoRivView-Replay-<version>-Linux-x86_64.AppImage.
 set -euo pipefail
 
 replay=$(cd "$(dirname "$0")/.." && pwd)
@@ -21,7 +21,7 @@ build_number=${2:-1}
 ffmpeg=${FFMPEG_DIR:-build/ffmpeg-linux}
 python=${PYTHON:-$replay/.venv/bin/python}
 id=com.geomglot.OPRivViewReplay
-appimage="dist/OPRivView-Replay-$version-Linux-x86_64.AppImage"
+appimage="dist/GeoRivView-Replay-$version-Linux-x86_64.AppImage"
 
 [[ $base =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "replay/VERSION ($base) must be three numbers, such as 0.1.2"; exit 1; }
 [[ $version == "$base" || $version =~ ^${base//./\\.}-[0-9A-Za-z.]+$ ]] || { echo "version $version does not start with replay/VERSION ($base)"; exit 1; }
