@@ -104,6 +104,16 @@ jobs:
           ldd "$app/oprivview-replay" | tee ldd.txt
           if grep -q 'not found' ldd.txt; then echo "::error::the app needs a library this computer lacks"; exit 1; fi
 
+      # the server inside, not this machine's Python, chooses the encoder: with no graphics card here it must get to
+      # Ubuntu's own ffmpeg and find x264 working, which fails if the computer's ffmpeg is run with the server's libraries
+      - name: The server inside can encode with the computer's own ffmpeg
+        working-directory: replay
+        run: |
+          app=squashfs-root/usr/lib/oprivview-replay
+          got=$(OPRIVVIEW_FFMPEG_DIR="$app/ffmpeg" "$app/oprivview-replay-server/oprivview-replay-server" --print-encoding)
+          echo "$got"
+          [ "$got" = "Encoding(ffmpeg='/usr/bin/ffmpeg', encoder='libx264', device=None)" ]
+
       # a dummy token must reach comma Connect and be refused there: anything else means the server's trust store is wrong
       - name: The server inside starts and reaches comma Connect over TLS
         working-directory: replay
