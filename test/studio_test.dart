@@ -242,4 +242,85 @@ void main() {
     await tester.runAsync(() => server.close(force: true));
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets('a long fetch is asked about first, shows the time left, and Cancel asks before stopping it', (tester) async {
+    HttpOverrides.global = null;
+    late HttpServer server;
+    String? question = 'This range needs 30 segments (about 30 minutes of drive) that are not on this computer yet.';
+    var cancelled = false;
+    final answers = <Map<String, dynamic>>[];
+    await tester.runAsync(() async {
+      server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      server.listen((req) async {
+        Object body;
+        if (req.uri.path == '/params') {
+          body = _params;
+        } else if (req.uri.path == '/routes') {
+          body = {'online': false, 'metric': true, 'routes': [
+            {'route': '0000005a--f16da7af40', 'segments': [0, 1], 'first': 0, 'last': 1, 'on_device': false, 'on_connect': true, 'detail': 'quick'},
+          ]};
+        } else if (req.uri.path.startsWith('/jobs')) {
+          if (req.uri.path.endsWith('/answer')) {
+            answers.add(jsonDecode(await utf8.decoder.bind(req).join()) as Map<String, dynamic>);
+            question = null;
+          }
+          if (req.uri.path.endsWith('/cancel')) cancelled = true;
+          final fetching = question == null && !cancelled;
+          body = {'id': 'a', 'state': cancelled ? 'cancelled' : 'running',
+              'message': fetching ? 'fetching the quick files from connect: 120 of 800 MB, about 4 min left' : 'waiting for an answer',
+              'progress': fetching ? 0.15 : null, 'output': '/tmp/x.mp4', 'error': null, 'preview': true, 'snapshot': null,
+              'question': question, 'question_kind': question == null ? null : 'many',
+              'fetch': fetching ? {'what': 'x', 'done': 120000000, 'total': 800000000, 'seconds_left': 240} : null};
+        } else {
+          body = {'ok': true};
+        }
+        req.response.headers.contentType = ContentType.json;
+        req.response.write(jsonEncode(body));
+        await req.response.close();
+      });
+    });
+    tester.view.physicalSize = const Size(1320, 820);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    Future<void> settle(bool Function() done) async {
+      for (var i = 0; i < 40 && !done(); i++) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+        await tester.pump(const Duration(milliseconds: 300));
+      }
+    }
+
+    final api = StudioApi(Uri.parse('http://127.0.0.1:${server.port}'));
+    await tester.pumpWidget(MaterialApp(home: StudioPage(start: () async => Sidecar(null, api))));
+    await settle(() => find.text('0000005a--f16da7af40').evaluate().isNotEmpty);
+    await tester.tap(find.text('0000005a--f16da7af40'));
+    await tester.pump();
+    await tester.tap(find.text('Preview'));
+    await settle(() => find.text('Fetch a long range?').evaluate().isNotEmpty);
+    expect(find.textContaining('30 segments'), findsOneWidget);
+    expect(find.text('Not now'), findsNothing, reason: 'only fetch, or cancel');
+    await tester.tap(find.text('Fetch'));
+    await settle(() => find.textContaining('about 4 min left').evaluate().isNotEmpty);
+    expect(answers, [{'copy_now': true}]);
+    expect(find.text('fetching the quick files from connect: 120 of 800 MB, about 4 min left'), findsOneWidget);
+
+    await tester.tap(find.text('Cancel'));
+    await settle(() => find.text('Stop fetching?').evaluate().isNotEmpty);
+    expect(find.text('Fetched 120 of 800 MB, about 4 min left'), findsOneWidget);
+    await tester.tap(find.text('Keep fetching'));
+    await settle(() => find.text('Stop fetching?').evaluate().isEmpty);
+    expect(cancelled, isFalse, reason: 'Cancel pressed by mistake carries on');
+
+    await tester.tap(find.text('Cancel'));
+    await settle(() => find.text('Stop fetching?').evaluate().isNotEmpty);
+    await tester.tap(find.text('Stop fetching'));
+    await settle(() => cancelled);
+    expect(cancelled, isTrue);
+    for (var i = 0; i < 4; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+    await tester.runAsync(() => server.close(force: true));
+    await tester.pumpWidget(const SizedBox());
+  });
 }

@@ -59,6 +59,25 @@ String madeSoFar(Map<String, dynamic> job) {
   return 'Made so far: ${clock(done * total)} of ${clock(total)}';
 }
 
+/// how much of a running fetch has come and how long the rest should take, e.g. "Fetched 120 of 800 MB, about 4 min
+/// left"; the job's own message when it is not fetching
+String fetchedSoFar(Map<String, dynamic> job) {
+  final f = job['fetch'] as Map<String, dynamic>?;
+  if (f == null) return '${job['message'] ?? ''}';
+  String mb(num n) => (n / 1e6).round().toString();
+  return 'Fetched ${mb(f['done'] as num)} of ${mb(f['total'] as num)} MB, ${timeLeft(f['seconds_left'] as num?)}';
+}
+
+/// as the server says it (replay/oprivview_replay/meter.py time_left)
+String timeLeft(num? seconds) {
+  if (seconds == null) return 'working out the time left';
+  if (seconds < 5) return 'almost done';
+  if (seconds < 60) return 'about ${(seconds / 5).round() * 5} s left';
+  final minutes = (seconds / 60).round();
+  if (minutes < 60) return 'about $minutes min left';
+  return 'about ${minutes ~/ 60} h ${minutes % 60} min left';
+}
+
 /// A drive's distance in the comma's own units; km when the comma cannot be reached to ask
 String distanceLabel(double km, bool? metric) =>
     metric == false ? '${(km / 1.609344).toStringAsFixed(1)} miles' : '${km.toStringAsFixed(1)} km';
@@ -373,7 +392,9 @@ class _StudioPageState extends State<StudioPage> {
           _watchUpload(); // the job may have asked the comma to upload this drive's full files
         }
         final question = j['state'] == 'running' ? j['question'] as String? : null;
-        if (question != null && !_asking && _answered != j['id']) unawaited(_ask(j['id'] as String, question));
+        if (question != null && !_asking && _answered != '${j['id']} $question') {
+          unawaited(_ask(j['id'] as String, question, j['question_kind'] as String? ?? 'metered'));
+        }
       });
     } catch (e) {
       setState(() {
@@ -384,27 +405,36 @@ class _StudioPageState extends State<StudioPage> {
   }
 
   bool _asking = false; // a job's question is open, so the next poll does not open it again
-  String? _answered; // the job whose question was answered; the server may still show it for a moment
+  // the job and question that were answered; the server may still show it for a moment. A job can ask two: whether to
+  // copy over a metered connection, then, if not, whether to fetch a long range from Connect instead
+  String? _answered;
 
   /// a job waiting on the user: whether to copy through comma's server over the comma's metered connection
-  Future<void> _ask(String id, String question) async {
+  /// ([kind] "metered"), or whether to fetch a long range that is not on this computer yet ("many")
+  Future<void> _ask(String id, String question, String kind) async {
     _asking = true;
     try {
+      final many = kind == 'many';
       // the dialog covers the window's own Cancel, so it has one of its own: for a range started by mistake
       final choice = await showDialog<String>(
         context: context,
         barrierDismissible: false,
         builder: (context) => AlertDialog(
-          title: const Text('Copy over a metered connection?'),
+          title: Text(many ? 'Fetch a long range?' : 'Copy over a metered connection?'),
           content: SizedBox(width: 520, child: Text(question)),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context, 'cancel'), child: const Text('Cancel')),
-            TextButton(onPressed: () => Navigator.pop(context, 'not now'), child: const Text('Not now')),
-            FilledButton(onPressed: () => Navigator.pop(context, 'copy'), child: const Text('Copy now')),
-          ],
+          actions: many
+              ? [
+                  TextButton(onPressed: () => Navigator.pop(context, 'cancel'), child: const Text('Cancel')),
+                  FilledButton(onPressed: () => Navigator.pop(context, 'copy'), child: const Text('Fetch')),
+                ]
+              : [
+                  TextButton(onPressed: () => Navigator.pop(context, 'cancel'), child: const Text('Cancel')),
+                  TextButton(onPressed: () => Navigator.pop(context, 'not now'), child: const Text('Not now')),
+                  FilledButton(onPressed: () => Navigator.pop(context, 'copy'), child: const Text('Copy now')),
+                ],
         ),
       );
-      _answered = id;
+      _answered = '$id $question';
       if (choice == null || !mounted || _job?['id'] != id) return;
       if (choice == 'cancel') {
         _poll?.cancel();
@@ -470,10 +500,38 @@ class _StudioPageState extends State<StudioPage> {
   /// counts the job's updates, for the Cancel question, which is outside this page's own rebuilds
   final _jobPolled = ValueNotifier(0);
 
-  /// once a render has made frames, Cancel asks whether to keep them as a shorter clip, throw them away, or carry on (in
-  /// case Cancel was pressed by mistake). The render keeps going while the question is open.
+  /// While files are coming, Cancel asks first, in case it was pressed by mistake; what has arrived stays either way.
+  /// Once a render has made frames, it asks whether to keep them as a shorter clip, throw them away, or carry on. The
+  /// fetch or render keeps going while the question is open.
   Future<void> _cancel() async {
     final id = _job!['id'] as String;
+    if (_job!['fetch'] != null) {
+      final stop = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+                title: const Text('Stop fetching?'),
+                content: SizedBox(
+                    width: 520,
+                    child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      const Text('What has arrived so far stays on this computer, so fetching this range again carries '
+                          'on from there.'),
+                      const SizedBox(height: 12),
+                      // the fetch carries on behind the question, so this keeps up with it
+                      ValueListenableBuilder(
+                          valueListenable: _jobPolled, builder: (_, __, ___) => Text(fetchedSoFar(_job ?? const {}))),
+                    ])),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Keep fetching')),
+                  FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Stop fetching')),
+                ],
+              ));
+      // the fetch may have finished, and the render begun, while the question was open: Cancel then asks anew
+      if (stop != true || !mounted || _job?['id'] != id || _job?['state'] != 'running' || _job?['fetch'] == null) return;
+      _poll?.cancel();
+      final j = await _sidecar!.api.cancel(id);
+      if (mounted) setState(() => _job = j);
+      return;
+    }
     final made = _job!['preview'] != true && ((_job!['progress'] as num?) ?? 0) > 0;
     final choice = !made
         ? 'discard'

@@ -109,8 +109,8 @@ def test_the_copy_through_the_server_counts_what_has_arrived(monkeypatch, tmp_pa
     tick()
 
   monkeypatch.setattr(ssh_source, "fetch", fetch)
-  DeviceSource(through).fetch("r", [0], ("fcamera.hevc",), tmp_path / "cache", progress=said.append)
-  assert said == ["fetching fcamera.hevc from the comma through comma's server: 1 of 4 MB"]
+  DeviceSource(through).fetch("r", [0], ("fcamera.hevc",), tmp_path / "cache", progress=lambda *a: said.append(a))
+  assert said == [(1_000_000, 4_000_000)]
 
 
 def test_a_resumed_copy_counts_from_what_is_here_and_never_goes_backwards(monkeypatch, tmp_path, through):
@@ -129,8 +129,8 @@ def test_a_resumed_copy_counts_from_what_is_here_and_never_goes_backwards(monkey
     tick()
 
   monkeypatch.setattr(ssh_source, "fetch", fetch)
-  DeviceSource(through).fetch("r", [0], ("fcamera.hevc",), tmp_path, progress=said.append)
-  assert [line.rsplit(": ", 1)[1] for line in said] == ["2 of 4 MB", "3 of 4 MB", "4 of 4 MB"]
+  DeviceSource(through).fetch("r", [0], ("fcamera.hevc",), tmp_path, progress=lambda *a: said.append(a))
+  assert said == [(2_000_000, 4_000_000), (3_000_000, 4_000_000), (4_000_000, 4_000_000)]
 
 
 def test_a_copy_stopped_part_way_marks_its_file_and_connect_then_downloads_it_whole(monkeypatch, tmp_path, through):
@@ -150,7 +150,7 @@ def test_a_copy_stopped_part_way_marks_its_file_and_connect_then_downloads_it_wh
 
   monkeypatch.setattr(ssh_source, "fetch", stopped)
   with pytest.raises(Cancelled):
-    DeviceSource(through).fetch("r", [0], ("rlog.zst", "fcamera.hevc"), cache, progress=lambda t: None)
+    DeviceSource(through).fetch("r", [0], ("rlog.zst", "fcamera.hevc"), cache, progress=lambda *a: None)
   log = cache / "r" / "0" / "rlog.zst"
   assert incomplete_marker(log).exists() and not incomplete_marker(cache / "r" / "0" / "fcamera.hevc").exists()
 
@@ -275,7 +275,7 @@ class Remote(Fake):
 
 
 class Connect(Fake):
-  def fetch(self, route, segments, names, cache):
+  def fetch(self, route, segments, names, cache, progress=None):
     self.fetched = getattr(self, "fetched", []) + [names]
 
 
@@ -337,7 +337,7 @@ def test_the_window_answers_the_job_s_question_and_cancel_ends_the_wait(monkeypa
   _resolved(monkeypatch, tmp_path)
   answers = []
 
-  def fake_render(resolved, sources, cache, settings, output, app, progress, preview=False, started=None, ask=None, note=None):
+  def fake_render(resolved, sources, cache, settings, output, app, progress, preview=False, started=None, ask=None, note=None, fetching=None):
     answers.append(ask("Copy now?"))
     answers.append(ask("Again?"))
 

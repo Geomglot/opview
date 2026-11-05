@@ -286,18 +286,21 @@ def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Pat
     output = _chosen_output(req.output) if req.output else default_output(folder, resolved.describe(), req.route)
     job_id = uuid.uuid4().hex[:8]
     state[job_id] = {"id": job_id, "state": "running", "message": "starting", "progress": None, "output": str(output), "error": None, "preview": req.preview, "job_file": None, "snapshot": None, "stopping": False,
-                     "question": None, "note": None, "range": resolved.describe()}
+                     "question": None, "question_kind": None, "note": None, "range": resolved.describe(),
+                     # while files are coming: {what, done, total (bytes), seconds_left (None until it can be told)}
+                     "fetch": None}
 
     def note(text: str) -> None:
       with lock:
         state[job_id]["note"] = text
 
-    def ask(question: str) -> bool:
-      """wait for the window to answer [question] (POST /jobs/{id}/answer); Cancel ends the wait, and the job"""
+    def ask(question: str, kind: str = "metered") -> bool:
+      """wait for the window to answer [question] (POST /jobs/{id}/answer); Cancel ends the wait, and the job. [kind]
+      says which it is, for the window's buttons: "metered" (copy now, or not now) or "many" (fetch, or cancel)"""
       answered = threading.Event()
       with lock:
         answers[job_id] = (answered, {})
-        state[job_id].update(question=question, message="waiting for an answer")
+        state[job_id].update(question=question, question_kind=kind, message="waiting for an answer")
       try:
         while not answered.wait(0.5):
           with lock:
@@ -307,7 +310,7 @@ def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Pat
       finally:
         with lock:
           answers.pop(job_id, None)
-          state[job_id]["question"] = None
+          state[job_id].update(question=None, question_kind=None)
 
     def progress(text: str):
       with lock:
@@ -322,12 +325,19 @@ def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Pat
           if not req.preview and render.snapshot_file(resolved.route_dir).exists():
             state[job_id]["snapshot"] = str(render.snapshot_file(resolved.route_dir))
 
+    def fetching(status: dict | None) -> None:
+      """the bar shows how much of a fetch has come; it is the render's own progress again after"""
+      with lock:
+        state[job_id]["fetch"] = status
+        state[job_id]["progress"] = status["done"] / status["total"] if status and status["total"] else None
+
     def work():
       try:
         if not req.preview:
           output.parent.mkdir(parents=True, exist_ok=True)
         made = jobs.render_resolved(resolved, sources, cache, options, output, renderer, progress, preview=req.preview,
-                                    started=lambda p: renderers.__setitem__(job_id, p), ask=ask, note=note)
+                                    started=lambda p: renderers.__setitem__(job_id, p), ask=ask, note=note,
+                                    fetching=fetching)
         with lock:
           if state[job_id]["state"] != "running":
             pass
@@ -359,7 +369,7 @@ def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Pat
       raise HTTPException(404, "no such job")
     with lock:
       if state[job_id]["state"] == "running":
-        state[job_id].update(state="cancelled", message="stopped", snapshot=None)
+        state[job_id].update(state="cancelled", message="stopped", snapshot=None, fetch=None)
       running = renderers.get(job_id)
     if running is not None:
       running.kill()

@@ -119,6 +119,20 @@ adds all of that device's public drives. To take one off the list, use **Remove 
 
 The wide camera is only available in full detail.
 
+## Fetching the files
+
+Before it can preview or render a range, the app copies that part of the drive to your computer, from the comma or
+comma Connect. It keeps what it has copied, so the same range is quicker the next time.
+
+- If the range needs 10 or more segments (about 10 minutes of drive) that are not on your computer yet, the app asks
+  first, and says how much that is when it can tell. Press **Fetch** to go ahead, or **Cancel**.
+- While it fetches, the line under the progress bar shows how much has arrived and about how long the rest will take.
+  The time left follows how fast the files have come over the last half minute, so it settles after the first few
+  seconds.
+- **Cancel** asks whether to stop. **Keep fetching** carries on, in case Cancel was pressed by mistake. **Stop
+  fetching** stops. Either way, the files that have arrived stay on your computer, so fetching that range again carries
+  on from there.
+
 ## Previewing
 
 Press **Preview** to play the range in the window.
@@ -151,7 +165,8 @@ processor does the drawing.
   - **Discard** stops and saves nothing.
   - **Keep rendering** carries on, in case Cancel was pressed by mistake. The render keeps going while you decide.
 
-  Cancel before the first frames are made, or during a preview, just stops.
+  Cancel while the files are still coming asks whether to stop fetching (see [Fetching the files](#fetching-the-files)).
+  After that, Cancel before the first frames are made, or during a preview, just stops.
 - Otherwise a clip is only saved once it is complete.
 - The app does not replace an earlier clip when it picks the name itself. If you choose or type a file name, it does.
 - When the render is done, use **Play** to open the clip, or **Show in Finder** (**Show in Explorer** on Windows, **Show
@@ -189,4 +204,5 @@ settings. Your settings and stored drives are kept. The **?** menu also shows wh
 - The Automatic wide camera rule has not yet been checked on a real experimental mode drive.
 - The OPRivView app takes a second or two to change cameras while driving. The replay changes at once.
 - Public drives from other forks of openpilot may not decode.
-- The Linux version is new and has not yet been tried on a real Linux PC with a graphics card.
+- The Linux version is new and has not yet been tried on a real Linux PC with a graphics card. In a virtual machine the
+  preview can be jerky: the processor decodes the video, and with 4 cores it only just keeps up. More cores help.

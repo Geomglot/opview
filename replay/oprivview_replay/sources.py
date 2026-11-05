@@ -8,6 +8,7 @@ import re
 from datetime import datetime, timezone
 import ssl
 import subprocess
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -85,20 +86,26 @@ class DeviceSource:
       raise SourceError(f"cannot reach the comma through comma's server: {e}")
     return [n for n in names if any(f"{route}--{s}/{n}" not in sizes for s in segments)]
 
+  def sizes(self, route: str, segments: list[int], names: tuple[str, ...]) -> dict[tuple[int, str], int]:
+    """(segment, name) -> size on the comma, for those it has; empty if it cannot be asked just now"""
+    try:
+      found = ssh_source.remote_sizes(self.host, [f"{route}--{s}/{n}" for s in segments for n in names])
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
+      return {}
+    return {(s, n): found[f"{route}--{s}/{n}"] for s in segments for n in names if f"{route}--{s}/{n}" in found}
+
   def fetch(self, route: str, segments: list[int], names: tuple[str, ...], cache: Path,
-            progress: Callable[[str], None] | None = None) -> None:
-    """[progress] is told, about once a second, how much of a copy through comma's server has arrived"""
-    if not self.through_server:
+            progress: Callable[[int, int], None] | None = None) -> None:
+    """[progress] is told, about once a second, how many bytes of the copy are here out of how many in all. Whatever it
+    raises (the job was cancelled) stops the copy, and what has arrived stays for the next copy to finish."""
+    if not self.through_server and progress is None:
       try:
         ssh_source.fetch(self.host, route, segments, names, cache)
       except subprocess.CalledProcessError as e:
         raise SourceError(f"could not copy {', '.join(names)} from {self.host}: {e}")
       return
-    try:
-      sizes = ssh_source.remote_sizes(self.host, [f"{route}--{s}/{n}" for s in segments for n in names])
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
-      sizes = {}
-    tick = self._counter(route, segments, names, cache, progress, sizes) if progress is not None else None
+    sizes = self.sizes(route, segments, names)
+    tick = self._counter(route, cache, progress, sizes) if progress is not None else None
     try:
       ssh_source.fetch(self.host, route, segments, names, cache, tick)
     except BaseException as e:
@@ -107,17 +114,19 @@ class DeviceSource:
       for s in segments:
         for n in names:
           f = cache / route / str(s) / n
-          if f.exists() and f.stat().st_size != sizes.get(f"{route}--{s}/{n}"):
+          if f.exists() and f.stat().st_size != sizes.get((s, n)):
             incomplete_marker(f).touch()
       if isinstance(e, subprocess.CalledProcessError):
-        raise SourceError(f"could not copy {', '.join(names)} from the comma through comma's server: {e}")
+        where = "the comma through comma's server" if self.through_server else self.host
+        raise SourceError(f"could not copy {', '.join(names)} from {where}: {e}")
       raise
     for s in segments:
       for n in names:
         incomplete_marker(cache / route / str(s) / n).unlink(missing_ok=True)
 
-  def _counter(self, route: str, segments: list[int], names: tuple[str, ...], cache: Path,
-               progress: Callable[[str], None], sizes: dict[str, int]) -> Callable[[], None]:
+  @staticmethod
+  def _counter(route: str, cache: Path, progress: Callable[[int, int], None],
+               sizes: dict[tuple[int, str], int]) -> Callable[[], None]:
     """How much of each file is here, out of its size on the comma. A file can be in three places while it comes: under
     its own name (whole, or kept from a copy stopped part-way), as rsync's hidden .<name>.<random> beside it, or in
     scp's .part folder. The largest of them counts, so a resumed copy starts at what is already here and the count
@@ -128,12 +137,10 @@ class DeviceSource:
       places = [folder / n, folder / ".part" / n, *(folder.glob(f".{n}.*") if folder.exists() else ())]
       return min(size, max((_size(p) for p in places), default=0))
 
-    wanted = [(s, n, size) for s in segments for n in names if (size := sizes.get(f"{route}--{s}/{n}")) is not None]
-    total = sum(size for _, _, size in wanted)
+    total = sum(sizes.values())
 
     def tick() -> None:
-      done = sum(arrived(s, n, size) for s, n, size in wanted)
-      progress(f"fetching {', '.join(names)} from the comma through comma's server: {done / 1e6:.0f} of {total / 1e6:.0f} MB")
+      progress(sum(arrived(s, n, size) for (s, n), size in sizes.items()), total)
     return tick
 
 
@@ -354,25 +361,70 @@ class ConnectSource:
     urls = self._urls(route)
     return [n for n in names if any(s not in urls.get(KINDS[n], {}) for s in segments)]
 
-  def fetch(self, route: str, segments: list[int], names: tuple[str, ...], cache: Path) -> None:
+  def sizes(self, route: str, segments: list[int], names: tuple[str, ...]) -> dict[tuple[int, str], int]:
+    """(segment, name) -> size on Connect, asked of its file store a few at a time; those it does not say are left out"""
+    from concurrent.futures import ThreadPoolExecutor
+    urls = self._urls(route)
+    wanted = [(s, n) for s in segments for n in names if s in urls.get(KINDS[n], {})]
+
+    def size(item: tuple[int, str]) -> int | None:
+      s, n = item
+      try:
+        with urllib.request.urlopen(urllib.request.Request(urls[KINDS[n]][s], method="HEAD"), timeout=20, context=TLS) as r:
+          length = r.headers.get("Content-Length")
+          return int(length) if length and length.isdigit() else None
+      except (urllib.error.URLError, TimeoutError, OSError, ValueError):
+        return None
+
+    with ThreadPoolExecutor(8) as pool:
+      return {item: got for item, got in zip(wanted, pool.map(size, wanted)) if got is not None}
+
+  def fetch(self, route: str, segments: list[int], names: tuple[str, ...], cache: Path,
+            progress: Callable[[int, int], None] | None = None) -> None:
+    """[progress] is told, about once a second, how many bytes have come out of how many in all. Whatever it raises
+    (the job was cancelled) stops the download: the files already whole stay, and the one part-way is dropped."""
     gone = self.missing(route, segments, names)
     if gone:
       raise SourceError(f"comma Connect does not have {', '.join(gone)} for this drive (it was never uploaded)")
     urls = self._urls(route)
-    for seg in segments:
-      for name in names:
-        dest = cache / route / str(seg) / name
-        # a file a copy from the comma left part-way is downloaded again in full
-        if dest.exists() and not incomplete_marker(dest).exists():
-          continue
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        part = dest.with_name(dest.name + ".part")
-        try:
-          with urllib.request.urlopen(urls[KINDS[name]][seg], timeout=60, context=TLS) as r, open(part, "wb") as f:
-            while chunk := r.read(1 << 20):
-              f.write(chunk)
-        except (urllib.error.URLError, TimeoutError, OSError) as e:
-          part.unlink(missing_ok=True)
-          raise SourceError(f"download of {name} for segment {seg} failed: {getattr(e, 'reason', e)}")
-        part.replace(dest)  # over a part-way copy, if there is one
-        incomplete_marker(dest).unlink(missing_ok=True)
+    # a file a copy from the comma left part-way is downloaded again in full
+    wanted = [(s, n) for s in segments for n in names
+              if not ((d := cache / route / str(s) / n).exists() and not incomplete_marker(d).exists())]
+    sizes = self.sizes(route, segments, names) if progress is not None and wanted else {}
+    done, last = 0, 0.0
+
+    def total() -> int:
+      """all of it: a file the store gave no size for counts as the others of its kind do"""
+      def typical(name: str) -> float:
+        like = [sizes[i] for i in wanted if i in sizes and i[1] == name] or [sizes[i] for i in wanted if i in sizes]
+        return sum(like) / len(like) if like else 0
+      return round(sum(sizes[i] if i in sizes else typical(i[1]) for i in wanted))
+
+    def report(force: bool = False) -> None:
+      nonlocal last
+      if progress is not None and (force or time.monotonic() - last >= 1):
+        last = time.monotonic()
+        progress(done, max(done, total()))
+
+    report(force=True)
+    for seg, name in wanted:
+      dest = cache / route / str(seg) / name
+      dest.parent.mkdir(parents=True, exist_ok=True)
+      part = dest.with_name(dest.name + ".part")
+      start = done
+      try:
+        with urllib.request.urlopen(urls[KINDS[name]][seg], timeout=60, context=TLS) as r, open(part, "wb") as f:
+          while chunk := r.read(1 << 20):
+            f.write(chunk)
+            done += len(chunk)
+            report()
+      except (urllib.error.URLError, TimeoutError, OSError) as e:
+        part.unlink(missing_ok=True)
+        raise SourceError(f"download of {name} for segment {seg} failed: {getattr(e, 'reason', e)}")
+      except BaseException:  # cancelled: only whole files are kept
+        part.unlink(missing_ok=True)
+        raise
+      sizes[(seg, name)] = done - start  # its real size, for the total
+      part.replace(dest)  # over a part-way copy, if there is one
+      incomplete_marker(dest).unlink(missing_ok=True)
+    report(force=True)

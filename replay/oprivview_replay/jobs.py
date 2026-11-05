@@ -7,7 +7,8 @@ from typing import Callable
 
 from . import render, ssh_source
 from .logs import index_segment
-from .sources import FULL_FILES as FULL, LOGS_FILES as LOGS, QUICK_FILES as QUICK, ConnectSource, DeviceSource, SourceError
+from .meter import Meter, megabytes
+from .sources import FULL_FILES as FULL, LOGS_FILES as LOGS, QUICK_FILES as QUICK, ConnectSource, DeviceSource, SourceError, incomplete_marker
 from .timeline import FramePos, RangeError, RouteTimeline, resolve_range, zone_for
 
 
@@ -173,6 +174,41 @@ def _may_copy_through_server(r: Resolved, sources: Sources, source: DeviceSource
   return "the comma's metered connection" if network is not None else "a connection that may be metered"
 
 
+MANY_SEGMENTS = 10  # about 10 minutes of drive still to fetch: enough to take a while, so the user is asked first
+
+
+def _may_fetch_many(r: Resolved, source, cache: Path, needed: list[int], earlier: int | None, names: tuple[str, str],
+                    detail: str, settings: dict, ask: Callable[..., bool]) -> None:
+  """Ask before fetching a long stretch of drive that is not on this computer yet, with its size when the source can
+  say it. What is here already does not count: a range fetched before, or partly before a Cancel, is not asked about
+  again for that part. Raises SourceError if the user says not to fetch."""
+  def here(s: int, n: str) -> bool:
+    f = cache / r.route / str(s) / n
+    return f.exists() and not incomplete_marker(f).exists()
+
+  files = [(s, n) for s in needed for n in names] + ([(earlier, names[0])] if earlier is not None else [])
+  to_fetch = [(s, n) for s, n in files if not here(s, n)]
+  segments = sorted({s for s, _ in to_fetch})
+  if len(segments) < MANY_SEGMENTS:
+    return
+  sizes_of = getattr(source, "sizes", None)
+  sizes = {}
+  if sizes_of is not None:
+    try:
+      sizes = sizes_of(r.route, segments, names)
+    except SourceError:
+      pass
+  known = [sizes[i] for i in to_fetch if i in sizes]
+  amount = f", about {megabytes(sum(known) * len(to_fetch) / len(known))} MB," if known else ""
+  wide = " The wide camera video may add as much again." if settings["camera"] != "road" and detail != "quick" else ""
+  where = "comma Connect" if source.name == "connect" else "the comma" if source.name == "device" else source.name
+  if not ask(f"This range needs {len(segments)} segments (about {len(segments)} minutes of drive) that are not on this "
+             f"computer yet{amount} at {detail} detail from {where}.{wide} That can take a while.\n\n"
+             "Fetching shows the time left as it goes, and you can cancel it at any point: what has arrived by then "
+             "stays on this computer, so fetching this range again carries on from there.", "many"):
+    raise SourceError("Not fetched. Choose a shorter range, or quick detail, to fetch less.")
+
+
 def _render_again(said: str) -> str:
   return f"{said} Render again when the drive shows Full detail."
 
@@ -189,12 +225,14 @@ def _fetching(route: str) -> threading.Lock:
 def render_resolved(r: Resolved, sources: Sources, cache: Path, settings: dict, output: Path, app: Path,
                     progress: Callable[[str], None] = print, preview: bool = False,
                     started: Callable[[object], None] | None = None,
-                    ask: Callable[[str], bool] | None = None,
-                    note: Callable[[str], None] | None = None) -> Path | None:
+                    ask: Callable[..., bool] | None = None,
+                    note: Callable[[str], None] | None = None,
+                    fetching: Callable[[dict | None], None] | None = None) -> Path | None:
   """fetch what is needed and render, and return where the clip was saved (see render.run). With [preview] it stops after
   writing the job file, which it returns instead, so the window can play the drive itself rather than encoding it.
-  [ask] puts a yes-or-no question to the user: whether to copy over the comma's metered connection. [note] is told
-  anything worth keeping in view after the job, such as an upload to Connect asked for."""
+  [ask] puts a yes-or-no question to the user: whether to copy over the comma's metered connection, or (with "many"
+  after it) whether to fetch a long stretch of drive. [note] is told anything worth keeping in view after the job, such
+  as an upload to Connect asked for. [fetching] is told how a fetch is going (see meter.Meter.update), and None after."""
   needed = [s for s in r.segments if r.start.segment <= s <= r.end.segment]
   earlier = render.preroll_segment(r.timeline, r.start)
   wanted = needed + ([earlier] if earlier is not None else [])
@@ -224,7 +262,14 @@ def render_resolved(r: Resolved, sources: Sources, cache: Path, settings: dict, 
   except SourceError as e:
     said = upload(full_files + wide_files) if settings["detail"] == "full" else None
     raise SourceError(f"{e} {_render_again(said)}" if said else str(e)) from None
-  declined = (_may_copy_through_server(r, sources, source, needed, earlier, settings, cache, progress, ask)
+  asked = []  # whether the metered question was put to the user
+
+  def ask_metered(question: str) -> bool:
+    asked.append(question)
+    return ask(question)
+
+  declined = (_may_copy_through_server(r, sources, source, needed, earlier, settings, cache, progress,
+                                       ask_metered if ask is not None else None)
               if getattr(source, "through_server", False) else None)
   if declined is not None:
     if settings["detail"] == "full":
@@ -236,23 +281,36 @@ def render_resolved(r: Resolved, sources: Sources, cache: Path, settings: dict, 
   if detail != "full" and settings["detail"] == "auto":
     upload(full_files + wide_files)  # less detail now; the full files for next time
   log_name, video_name = render.LOGS[detail], render.VIDEOS[detail]
+  # a copy the metered question has just given the size of, and the user said yes to, is not asked about twice
+  if ask is not None and not (getattr(source, "through_server", False) and asked):
+    _may_fetch_many(r, source, cache, needed, earlier, (log_name, video_name), detail, settings, ask)
 
-  def fetch(segments: list[int], names: tuple[str, ...]) -> None:
-    if getattr(source, "through_server", False):  # slow: count what has arrived, and let Cancel stop it part-way
-      source.fetch(r.route, segments, names, cache, progress=progress)
-    else:
-      source.fetch(r.route, segments, names, cache)
+  def fetch(segments: list[int], names: tuple[str, ...], what: str) -> None:
+    """with how much has come and how long the rest should take, about once a second; Cancel stops it part-way, and
+    what has arrived stays here for the next time"""
+    meter = Meter(what)
+
+    def arrived(done: int, total: int) -> None:
+      status = meter.update(done, total)
+      if fetching is not None:
+        fetching(status)
+      progress(Meter.describe(status))
+
+    progress(f"fetching {what}")
+    try:
+      source.fetch(r.route, segments, names, cache, progress=arrived)
+    finally:
+      if fetching is not None:
+        fetching(None)
 
   # one copy of a drive at a time, so a preview and a render of it never fetch the same files twice over
   with _fetching(r.route):
-    progress(f"fetching the {detail} files from {source.name}")
-    fetch(needed, (log_name, video_name))
+    fetch(needed, (log_name, video_name), f"the {detail} files from {source.name}")
     if earlier is not None:
-      fetch([earlier], (log_name,))
+      fetch([earlier], (log_name,), "the log before the range")
     wide = render.wide_segments(r.timeline, r.route_dir, r.start, r.end, settings["camera"], detail)
     if wide:
-      progress("fetching wide camera video")
-      fetch(wide, ("ecamera.hevc",))
+      fetch(wide, ("ecamera.hevc",), "wide camera video")
   if getattr(source, "through_server", False):
     # copied straight from the comma: now have it put the same files on Connect, after the copy so the two never compete
     # for the comma's connection
