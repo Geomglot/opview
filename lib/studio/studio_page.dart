@@ -331,22 +331,20 @@ class _StudioPageState extends State<StudioPage> {
         startSegment: seg(_start), endSegment: seg(_end), startTime: time(_start), endTime: time(_end));
   }
 
-  Future<void> _resolve() async {
-    final r = _request();
-    if (r == null) return;
-    setState(() {
-      _resolved = null;
-      _resolveError = null;
-      _checking = true;
-    });
-    try {
-      final j = await _sidecar!.api.resolve(r);
-      setState(() => _resolved = 'Zone ${j['zone']}\nFrom ${j['start']}\nTo     ${j['end']}\n${j['seconds']} seconds');
-    } catch (e) {
-      setState(() => _resolveError = '$e');
-    } finally {
-      setState(() => _checking = false);
+  /// Check range is a job too: for a drive whose logs are not here yet it fetches them first, which for a long drive
+  /// takes a while, with the time left and Cancel. Its answer shows under the button, not where clips are.
+  Future<void> _resolve() => _render(check: true);
+
+  /// what Check range found, under the button
+  void _checked(Map<String, dynamic> j) {
+    _checking = false;
+    final range = j['range'] as Map<String, dynamic>?;
+    if (j['state'] == 'done' && range != null) {
+      _resolved = 'Zone ${range['zone']}\nFrom ${range['start']}\nTo     ${range['end']}\n${range['seconds']} seconds';
+    } else if (j['state'] == 'failed') {
+      _resolveError = '${j['error']}';
     }
+    _job = null;
   }
 
   // the computer's own save dialog, which also asks before replacing a file; no plugin needed. On Windows and Linux the
@@ -362,19 +360,25 @@ class _StudioPageState extends State<StudioPage> {
     if (r.exitCode == 0) _output.text = (r.stdout as String).trim();
   }
 
-  Future<void> _render({bool preview = false}) async {
+  /// a preview, a render, or with [check] only Check range. Each finds the range first, in the job, so a long drive's
+  /// logs are fetched with the time left and Cancel.
+  Future<void> _render({bool preview = false, bool check = false}) async {
     final r = _request();
     if (r == null) return;
     setState(() {
-      _job = {'state': 'running', 'message': 'starting', 'preview': preview};
+      _job = {'state': 'running', 'message': 'starting', 'preview': preview, 'check': check};
       _resolveError = null;
-      _previewFile = null;
-      _showSnapshot(null);
-      if (preview) _previewedRange = '${r.toJson()}';
+      _resolved = null;
+      _checking = check;
+      if (!check) {
+        _previewFile = null;
+        _showSnapshot(null);
+        if (preview) _previewedRange = '${r.toJson()}';
+      }
     });
     try {
       final out = _output.text.trim().isEmpty ? null : _output.text.trim();
-      final j = await _sidecar!.api.startJob(r, _options, out, preview: preview);
+      final j = await _sidecar!.api.startJob(r, _options, out, preview: preview, check: check);
       setState(() => _job = j);
       _poll?.cancel();
       _poll = Timer.periodic(const Duration(seconds: 1), (t) async {
@@ -386,10 +390,12 @@ class _StudioPageState extends State<StudioPage> {
           _showSnapshot(snapshot);
           _jobPolled.value++;
           if (j['state'] == 'done' && j['preview'] == true) _previewFile = j['job_file'] as String?;
+          if (j['state'] != 'running' && j['check'] == true) _checked(j);
         });
         if (j['state'] != 'running') {
           t.cancel();
-          _watchUpload(); // the job may have asked the comma to upload this drive's full files
+          if (j['check'] != true) _watchUpload(); // the job may have asked the comma to upload this drive's full files
+          return;
         }
         final question = j['state'] == 'running' ? j['question'] as String? : null;
         if (question != null && !_asking && _answered != '${j['id']} $question') {
@@ -399,6 +405,7 @@ class _StudioPageState extends State<StudioPage> {
     } catch (e) {
       setState(() {
         _job = null;
+        _checking = false;
         _resolveError = '$e';
       });
     }
@@ -439,7 +446,7 @@ class _StudioPageState extends State<StudioPage> {
       if (choice == 'cancel') {
         _poll?.cancel();
         final j = await _sidecar!.api.cancel(id);
-        if (mounted) setState(() => _job = j);
+        if (mounted) setState(() => j['check'] == true ? _checked(j) : _job = j);
         return;
       }
       await _sidecar!.api.answer(id, choice == 'copy');
@@ -513,8 +520,8 @@ class _StudioPageState extends State<StudioPage> {
                 content: SizedBox(
                     width: 520,
                     child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      const Text('What has arrived so far stays on this computer, so fetching this range again carries '
-                          'on from there.'),
+                      const Text('What has arrived so far stays on this computer, so fetching it again carries on '
+                          'from there.'),
                       const SizedBox(height: 12),
                       // the fetch carries on behind the question, so this keeps up with it
                       ValueListenableBuilder(
@@ -529,7 +536,7 @@ class _StudioPageState extends State<StudioPage> {
       if (stop != true || !mounted || _job?['id'] != id || _job?['state'] != 'running' || _job?['fetch'] == null) return;
       _poll?.cancel();
       final j = await _sidecar!.api.cancel(id);
-      if (mounted) setState(() => _job = j);
+      if (mounted) setState(() => j['check'] == true ? _checked(j) : _job = j);
       return;
     }
     final made = _job!['preview'] != true && ((_job!['progress'] as num?) ?? 0) > 0;
@@ -563,8 +570,12 @@ class _StudioPageState extends State<StudioPage> {
     _poll?.cancel();
     final j = await _sidecar!.api.cancel(id);
     setState(() {
-      _job = j;
-      _showSnapshot(null);
+      if (j['check'] == true) {
+        _checked(j);
+      } else {
+        _job = j;
+        _showSnapshot(null);
+      }
     });
   }
 
@@ -698,7 +709,9 @@ class _StudioPageState extends State<StudioPage> {
       Text('Leave a field empty for the start or end of the drive. Times are local to where the drive happened.', style: small),
       const SizedBox(height: 8),
       Row(children: [
-        OutlinedButton(onPressed: route == null || _checking ? null : _resolve, child: Text(_checking ? 'Checking...' : 'Check range')),
+        OutlinedButton(
+            onPressed: route == null || _job?['state'] == 'running' ? null : _resolve,
+            child: Text(_checking ? 'Checking...' : 'Check range')),
         if (_checking) const Padding(padding: EdgeInsets.only(left: 12), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))),
       ]),
       const Divider(height: 32),

@@ -204,7 +204,7 @@ def test_saying_no_fetches_nothing(monkeypatch, tmp_path):
 
 def test_a_short_range_or_one_already_here_is_not_asked_about(monkeypatch, tmp_path):
   never = lambda *a: pytest.fail("asked")  # noqa: E731
-  _run(monkeypatch, tmp_path, list(range(9)), never)
+  _run(monkeypatch, tmp_path, list(range(4)), never)
   for s in range(3, 12):  # here from before, all but three segments
     for n in ("qlog.zst", "qcamera.ts"):
       (tmp_path / "r" / str(s)).mkdir(parents=True, exist_ok=True)
@@ -274,3 +274,111 @@ def test_the_window_sees_the_fetch_and_its_bar_and_the_kind_of_question(monkeypa
   job = c.post(f"/jobs/{job['id']}/cancel").json()
   go.set()
   assert job["state"] == "cancelled" and job["fetch"] is None
+
+
+def test_the_comma_on_this_network_is_asked_about_only_for_longer_ranges(monkeypatch, tmp_path):
+  asked = []
+
+  def ask(q, kind="metered"):
+    asked.append(q)
+    return True
+
+  home = Source()
+  home.name = "device"
+  _run(monkeypatch, tmp_path, list(range(29)), ask, home)
+  assert asked == [], "under 30 from the comma on this network"
+  _run(monkeypatch, tmp_path / "b", list(range(30)), ask, home)
+  assert len(asked) == 1 and "from the comma." in asked[0]
+
+
+def _sources(home, away, source):
+  return SimpleNamespace(ask_segments=lambda: (home, away), listed=lambda: {"r": (source, list(range(40)))},
+                         request_upload=None, local_reachable=True)
+
+
+def test_the_limits_are_the_user_s_and_0_never_asks(monkeypatch, tmp_path):
+  from oprivview_replay import jobs as j
+
+  away = Source()
+  assert j._many_to_fetch(_sources(30, 8, away), away, tmp_path, "r", [(s, "qlog.zst") for s in range(7)]) is None
+  assert j._many_to_fetch(_sources(30, 8, away), away, tmp_path, "r", [(s, "qlog.zst") for s in range(8)])[0] == 8
+  assert j._many_to_fetch(_sources(0, 0, away), away, tmp_path, "r", [(s, "qlog.zst") for s in range(400)]) is None
+
+
+def test_checking_a_range_asks_before_fetching_a_long_drive_s_logs_and_cancel_fetches_nothing(monkeypatch, tmp_path):
+  from oprivview_replay import jobs as j
+  from oprivview_replay.timeline import RangeError
+
+  source = Source()
+  asked = []
+  with pytest.raises(RangeError, match="Not fetched"):
+    j.resolve(_sources(30, 5, source), tmp_path, "r", 0, 3, ask=lambda q, kind="metered": asked.append((q, kind)) or False)
+  assert source.fetched == [] and asked[0][1] == "many" and "40 of them" in asked[0][0]
+
+
+def test_checking_a_range_shows_the_fetch_of_the_drive_s_logs(monkeypatch, tmp_path):
+  from oprivview_replay import jobs as j
+  from oprivview_replay.timeline import RangeError
+
+  told, said = [], []
+  source = Source()
+  monkeypatch.setattr(j, 'index_segment', lambda path: SimpleNamespace(lat=None))
+  with pytest.raises(RangeError, match='no GPS position'):  # all this needs of the logs is that they were fetched
+    j.resolve(_sources(30, 5, source), tmp_path, "r", 0, 3, progress=said.append, ask=lambda *a: True, fetching=told.append)
+  assert source.fetched == [(list(range(40)), ("qlog.zst",))]
+  assert told[-1] is None and any(t and t["total"] == 10 for t in told)
+  assert "fetching the drive's logs from connect" in said
+
+
+def _job(monkeypatch, tmp_path, resolve, body):
+  import time
+
+  from fastapi.testclient import TestClient
+
+  from oprivview_replay import server
+
+  monkeypatch.setattr(jobs, "resolve", resolve)
+  monkeypatch.setattr(jobs, "render_resolved", lambda *a, **k: pytest.fail("rendered"))
+  c = TestClient(server.make_app(host="x", connect=None, output_dir=tmp_path))
+  job = c.post("/jobs", json={"route": "r", **body}).json()
+  for _ in range(100):
+    job = c.get(f"/jobs/{job['id']}").json()
+    if job["state"] != "running":
+      return job
+    time.sleep(0.05)
+  raise AssertionError(job)
+
+
+def test_a_range_that_cannot_be_found_ends_the_job_as_failed(monkeypatch, tmp_path):
+  from oprivview_replay.timeline import RangeError
+
+  def resolve(*a, **k):
+    raise RangeError("segment 99 is not in this drive")
+
+  job = _job(monkeypatch, tmp_path, resolve, {})
+  assert job["state"] == "failed" and job["error"] == "segment 99 is not in this drive"
+
+
+def test_a_check_job_ends_with_the_range_and_renders_nothing(monkeypatch, tmp_path):
+  class R:
+    route_dir = tmp_path
+
+    def describe(self):
+      return {"zone": "UTC", "start": "a", "end": "b", "seconds": 60.0, "start_segment": 0, "end_segment": 0}
+
+  job = _job(monkeypatch, tmp_path, lambda *a, **k: R(), {"check": True})
+  assert job["state"] == "done" and job["check"] is True and job["range"]["seconds"] == 60.0
+
+
+def test_the_limits_are_saved_settings(tmp_path):
+  from fastapi.testclient import TestClient
+
+  from oprivview_replay import server
+  from oprivview_replay.settings import Settings
+
+  c = TestClient(server.make_app(host="x", connect=None, settings=Settings(tmp_path / "s.json")))
+  got = c.get("/settings").json()
+  assert (got["ask_segments_home"], got["ask_segments_away"]) == (30, 5)
+  assert c.put("/settings", json={"ask_segments_away": 12}).json()["ask_segments_away"] == 12
+  assert Settings(tmp_path / "s.json")["ask_segments_away"] == 12
+  assert c.put("/settings", json={"ask_segments_home": -1}).status_code == 422

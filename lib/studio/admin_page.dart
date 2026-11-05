@@ -24,6 +24,8 @@ class _AdminPageState extends State<AdminPage> {
   final _host = TextEditingController();
   final _token = TextEditingController();
   final _folder = TextEditingController();
+  final _askHome = TextEditingController(), _askAway = TextEditingController();
+  String? _askError;
   String? _hostResult;
   bool _hostOk = false, _checking = false, _finding = false, _tokenBusy = false;
   List<dynamic>? _found;
@@ -39,6 +41,19 @@ class _AdminPageState extends State<AdminPage> {
     setState(() => _s = s);
     _host.text = s['host'] as String;
     _folder.text = s['output_dir'] as String;
+    _askHome.text = '${s['ask_segments_home'] ?? 30}';
+    _askAway.text = '${s['ask_segments_away'] ?? 5}';
+  }
+
+  /// both limits at once, as whole numbers of segments; 0 is never ask
+  Future<void> _saveAsk() async {
+    final home = int.tryParse(_askHome.text.trim()), away = int.tryParse(_askAway.text.trim());
+    if (home == null || away == null || home < 0 || away < 0) {
+      setState(() => _askError = 'Enter a whole number of segments, or 0 to never ask.');
+      return;
+    }
+    setState(() => _askError = null);
+    await _change({'ask_segments_home': home, 'ask_segments_away': away});
   }
 
   Future<void> _load() async {
@@ -291,6 +306,31 @@ class _AdminPageState extends State<AdminPage> {
         ),
       ]);
 
+  Widget _askRow(String label, TextEditingController c) => Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(children: [
+        Expanded(child: Text(label)),
+        SizedBox(
+            width: 90,
+            child: TextField(
+                controller: c,
+                keyboardType: TextInputType.number,
+                textAlign: TextAlign.end,
+                onSubmitted: (_) => _saveAsk(),
+                decoration: const InputDecoration(isDense: true, suffixText: 'segments'))),
+      ]));
+
+  Widget _askSection() => _section('Long fetches', [
+        _note('Before copying a drive, the app asks first if this many segments (about a minute of drive each) or more are '
+            'not on this computer yet. 0 never asks. Fetching shows the time left either way, and can be cancelled.'),
+        _askRow('From comma Connect, or through comma\'s server', _askAway),
+        _askRow('From the comma on this network', _askHome),
+        Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Align(alignment: Alignment.centerRight, child: TextButton(onPressed: _saveAsk, child: const Text('Save')))),
+        if (_askError != null) _note(_askError!, color: Colors.redAccent),
+      ]);
+
   Widget _updatesSection(Map<String, dynamic> s) => _section('Updates', [
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
@@ -322,6 +362,7 @@ class _AdminPageState extends State<AdminPage> {
                         _awaySection(s),
                         _outputSection(),
                         _storageSection(s),
+                        _askSection(),
                         _updatesSection(s),
                       ])))),
     );

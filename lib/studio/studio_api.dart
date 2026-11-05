@@ -107,11 +107,11 @@ class StudioApi {
     return (routes: [for (final r in j['routes']) RouteInfo(r)], error: j['error'] as String?, metric: j['metric'] as bool?);
   }
 
-  Future<Map<String, dynamic>> resolve(RangeRequest r) async => await _call('POST', '/resolve', r.toJson());
-
-  /// [preview] prepares the drive for the window to play instead of encoding an MP4
-  Future<Map<String, dynamic>> startJob(RangeRequest r, Map<String, Object?> options, String? output, {bool preview = false}) async =>
-      await _call('POST', '/jobs', {...r.toJson(), 'options': options, 'output': output, 'preview': preview});
+  /// [preview] prepares the drive for the window to play instead of encoding an MP4; [check] only finds the range, and
+  /// the job ends with it in 'range'
+  Future<Map<String, dynamic>> startJob(RangeRequest r, Map<String, Object?> options, String? output,
+          {bool preview = false, bool check = false}) async =>
+      await _call('POST', '/jobs', {...r.toJson(), 'options': options, 'output': output, 'preview': preview, 'check': check});
 
   Future<Map<String, dynamic>> job(String id) async => await _call('GET', '/jobs/$id');
 

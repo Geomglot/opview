@@ -92,7 +92,9 @@ adds all of that device's public drives. To take one off the list, use **Remove 
    A segment start begins at the start of that segment, and a segment end finishes at its end. For a cut part-way through
    a minute, use Time. Times are local to where the drive happened. Where the app cannot tell the place, it uses your
    computer's time zone and says so.
-3. Press **Check range** to confirm what you have selected.
+3. Press **Check range** to confirm what you have selected. The first time you check a drive, the app copies a small
+   log of every segment of it, to find its times and places. For a long drive that can take a while: it shows the time
+   left, and **Cancel** stops it (see [Fetching the files](#fetching-the-files)).
 
 ## Options
 
@@ -121,11 +123,15 @@ The wide camera is only available in full detail.
 
 ## Fetching the files
 
-Before it can preview or render a range, the app copies that part of the drive to your computer, from the comma or
-comma Connect. It keeps what it has copied, so the same range is quicker the next time.
+Before it can check, preview or render a range, the app copies what it needs to your computer, from the comma or
+comma Connect: first a small log of every segment of the drive, then the video and logs of the range. It keeps what it
+has copied, so the same drive is quicker the next time.
 
-- If the range needs 10 or more segments (about 10 minutes of drive) that are not on your computer yet, the app asks
-  first, and says how much that is when it can tell. Press **Fetch** to go ahead, or **Cancel**.
+- If either copy needs many segments that are not on your computer yet, the app asks first, and says how much that is
+  when it can tell. Press **Fetch** to go ahead, or **Cancel**, for example if you left **End** empty by mistake and the
+  range is the whole drive.
+- How many is "many" is set in App settings, under **Long fetches**: 5 segments or more from comma Connect or through
+  comma's server, and 30 or more from the comma on your network, which copies much faster. 0 means never ask.
 - While it fetches, the line under the progress bar shows how much has arrived and about how long the rest will take.
   The time left follows how fast the files have come over the last half minute, so it settles after the first few
   seconds.

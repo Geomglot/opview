@@ -323,4 +323,76 @@ void main() {
     await tester.runAsync(() => server.close(force: true));
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets('Check range is a job: it shows the fetch of the drive\'s logs with Cancel, then the range under the button', (tester) async {
+    HttpOverrides.global = null;
+    late HttpServer server;
+    var polls = 0;
+    var fail = false;
+    final started = <Map<String, dynamic>>[];
+    await tester.runAsync(() async {
+      server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      server.listen((req) async {
+        Object body;
+        if (req.uri.path == '/params') {
+          body = _params;
+        } else if (req.uri.path == '/routes') {
+          body = {'online': false, 'metric': true, 'routes': [
+            {'route': '0000005a--f16da7af40', 'segments': [0, 1], 'first': 0, 'last': 1, 'on_device': false, 'on_connect': true, 'detail': 'quick'},
+          ]};
+        } else if (req.uri.path.startsWith('/jobs')) {
+          if (req.method == 'POST' && req.uri.path == '/jobs') {
+            started.add(jsonDecode(await utf8.decoder.bind(req).join()) as Map<String, dynamic>);
+            polls = 0;
+          } else {
+            polls++;
+          }
+          final running = polls < 3;
+          body = {'id': 'c', 'check': true, 'preview': false, 'output': null, 'error': fail ? 'segment 9 is not in this drive' : null,
+              'state': running ? 'running' : fail ? 'failed' : 'done',
+              'message': running ? "fetching the drive's logs from connect: 40 of 180 MB, about 2 min left" : 'checked',
+              'progress': running ? 0.2 : 1.0, 'snapshot': null, 'question': null,
+              'fetch': running ? {'what': 'x', 'done': 40000000, 'total': 180000000, 'seconds_left': 120} : null,
+              'range': running || fail ? null : {'zone': 'America/Toronto', 'start': '10:00:00', 'end': '10:02:00', 'seconds': 120.0}};
+        } else {
+          body = {'ok': true};
+        }
+        req.response.headers.contentType = ContentType.json;
+        req.response.write(jsonEncode(body));
+        await req.response.close();
+      });
+    });
+    tester.view.physicalSize = const Size(1320, 820);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    Future<void> settle(bool Function() done) async {
+      for (var i = 0; i < 40 && !done(); i++) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+        await tester.pump(const Duration(milliseconds: 300));
+      }
+    }
+
+    final api = StudioApi(Uri.parse('http://127.0.0.1:${server.port}'));
+    await tester.pumpWidget(MaterialApp(home: StudioPage(start: () async => Sidecar(null, api))));
+    await settle(() => find.text('0000005a--f16da7af40').evaluate().isNotEmpty);
+    await tester.tap(find.text('0000005a--f16da7af40'));
+    await tester.pump();
+    await tester.tap(find.text('Check range'));
+    await settle(() => find.textContaining('about 2 min left').evaluate().isNotEmpty);
+    expect(started.single['check'], isTrue);
+    expect(find.text('Checking...'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'Cancel'), findsOneWidget, reason: 'a long drive can be backed out of');
+    await settle(() => find.textContaining('120.0 seconds').evaluate().isNotEmpty);
+    expect(find.textContaining('From 10:00:00'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'Cancel'), findsNothing);
+
+    fail = true;
+    await tester.tap(find.text('Check range'));
+    await settle(() => find.text('segment 9 is not in this drive').evaluate().isNotEmpty);
+    expect(find.text('segment 9 is not in this drive'), findsOneWidget);
+    expect(find.textContaining('Failed:'), findsNothing, reason: 'the answer is under Check range, not where clips are');
+    await tester.runAsync(() => server.close(force: true));
+    await tester.pumpWidget(const SizedBox());
+  });
 }

@@ -123,4 +123,25 @@ void main() {
     await tester.pumpAndSettle();
     expect(api.cleared, isTrue);
   });
+
+  testWidgets('the long fetch limits show their defaults and are saved together', (tester) async {
+    final api = await open(tester);
+    expect(find.text('Long fetches'), findsOneWidget);
+    final away = find.widgetWithText(TextField, '5'), home = find.widgetWithText(TextField, '30');
+    expect(away, findsOneWidget);
+    expect(home, findsOneWidget);
+    await tester.enterText(away, '8');
+    await tester.enterText(home, 'lots');
+    await tester.ensureVisible(find.text('Long fetches'));
+    final save = find.descendant(of: find.ancestor(of: find.text('Long fetches'), matching: find.byType(Column)).first,
+        matching: find.widgetWithText(TextButton, 'Save'));
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Enter a whole number'), findsOneWidget);
+    expect(api.saved.containsKey('ask_segments_away'), isFalse);
+    await tester.enterText(find.widgetWithText(TextField, 'lots'), '0');
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+    expect((api.saved['ask_segments_home'], api.saved['ask_segments_away']), (0, 8));
+  });
 }

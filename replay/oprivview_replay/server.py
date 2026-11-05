@@ -14,7 +14,7 @@ from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from . import admin, jobs, params, places, render, ssh_source
 from .settings import Settings
@@ -41,6 +41,7 @@ class RenderRequest(Range):
   options: dict = {}
   output: str | None = None
   preview: bool = False  # prepare the drive for the window to play, without encoding an MP4
+  check: bool = False  # only check the range: fetch the drive's logs, and say where the range starts and ends
 
 
 class SettingsChange(BaseModel):
@@ -50,6 +51,8 @@ class SettingsChange(BaseModel):
   test_versions: bool | None = None
   via_server: bool | None = None
   keep_on_connect: bool | None = None
+  ask_segments_home: int | None = Field(None, ge=0, le=10000)
+  ask_segments_away: int | None = Field(None, ge=0, le=10000)
 
 
 class Address(BaseModel):
@@ -155,7 +158,8 @@ def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Pat
     return f"Asked the comma to upload the full files to comma Connect, on an unmetered connection.{gone}"
 
   sources = jobs.Sources(DeviceSource(host or settings["host"]), connect, through_server=through_server,
-                         request_upload=request_upload)
+                         request_upload=request_upload,
+                         ask_segments=lambda: (settings["ask_segments_home"], settings["ask_segments_away"]))
   public_sources: dict[str, ConnectSource] = {}
   state: dict[str, dict] = {}
   renderers: dict[str, object] = {}  # job -> its running renderer process
@@ -277,16 +281,17 @@ def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Pat
 
   @app.post("/jobs")
   def start_job(req: RenderRequest):
+    """Start a job, and return it at once. It finds the range first, which for a drive whose logs are not here yet means
+    fetching them, so that is in the job too, with its progress and Cancel; a range that cannot be found ends the job
+    as failed. With [check] that is all it does, and the job ends done with the range."""
     try:
       options = params.settings_from_dict(req.options)
     except ValueError as e:
       raise HTTPException(422, str(e))
-    resolved = _resolve(req)
-    folder = Path(settings["output_dir"]).expanduser() if settings["output_dir"] else output_dir
-    output = _chosen_output(req.output) if req.output else default_output(folder, resolved.describe(), req.route)
     job_id = uuid.uuid4().hex[:8]
-    state[job_id] = {"id": job_id, "state": "running", "message": "starting", "progress": None, "output": str(output), "error": None, "preview": req.preview, "job_file": None, "snapshot": None, "stopping": False,
-                     "question": None, "question_kind": None, "note": None, "range": resolved.describe(),
+    state[job_id] = {"id": job_id, "state": "running", "message": "starting", "progress": None, "output": None, "error": None,
+                     "preview": req.preview, "check": req.check, "job_file": None, "snapshot": None, "stopping": False,
+                     "question": None, "question_kind": None, "note": None, "range": None,
                      # while files are coming: {what, done, total (bytes), seconds_left (None until it can be told)}
                      "fetch": None}
 
@@ -322,7 +327,7 @@ def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Pat
           parts = text.split()
           state[job_id]["progress"] = int(parts[1]) / int(parts[3])
           # the picture the renderer has reached, once it has written one, for the window to show while it waits
-          if not req.preview and render.snapshot_file(resolved.route_dir).exists():
+          if not req.preview and resolved is not None and render.snapshot_file(resolved.route_dir).exists():
             state[job_id]["snapshot"] = str(render.snapshot_file(resolved.route_dir))
 
     def fetching(status: dict | None) -> None:
@@ -331,8 +336,23 @@ def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Pat
         state[job_id]["fetch"] = status
         state[job_id]["progress"] = status["done"] / status["total"] if status and status["total"] else None
 
+    resolved = None
+
     def work():
+      nonlocal resolved
       try:
+        resolved = jobs.resolve(sources, cache, req.route, req.start_segment, req.end_segment, req.start_time, req.end_time,
+                                progress=progress, ask=ask, fetching=fetching)
+        folder = Path(settings["output_dir"]).expanduser() if settings["output_dir"] else output_dir
+        output = _chosen_output(req.output) if req.output else default_output(folder, resolved.describe(), req.route)
+        with lock:
+          state[job_id].update(range=resolved.describe(), output=str(output))
+        if req.check:
+          progress("checked")
+          with lock:
+            if state[job_id]["state"] == "running":
+              state[job_id].update(state="done", message="checked", progress=1.0)
+          return
         if not req.preview:
           output.parent.mkdir(parents=True, exist_ok=True)
         made = jobs.render_resolved(resolved, sources, cache, options, output, renderer, progress, preview=req.preview,
@@ -420,7 +440,8 @@ def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Pat
             "output_dir": settings["output_dir"] or str(output_dir), "token": admin.token_status(connect) if connect else None,
             "key": admin.key_info(), "cache_bytes": admin.cache_size(cache), "cache_path": str(cache),
             "test_versions": settings["test_versions"], "via_server": settings["via_server"],
-            "keep_on_connect": settings["keep_on_connect"]}
+            "keep_on_connect": settings["keep_on_connect"], "ask_segments_home": settings["ask_segments_home"],
+            "ask_segments_away": settings["ask_segments_away"]}
 
   @app.put("/settings")
   def put_settings(c: SettingsChange):

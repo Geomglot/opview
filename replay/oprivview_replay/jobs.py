@@ -12,6 +12,10 @@ from .sources import FULL_FILES as FULL, LOGS_FILES as LOGS, QUICK_FILES as QUIC
 from .timeline import FramePos, RangeError, RouteTimeline, resolve_range, zone_for
 
 
+ASK_SEGMENTS_HOME = 30  # the comma on this network copies quickly, so it takes a long range to be worth asking about
+ASK_SEGMENTS_AWAY = 5  # comma Connect, or the comma through comma's server
+
+
 @dataclass
 class Sources:
   device: DeviceSource
@@ -23,6 +27,9 @@ class Sources:
   local_reachable: bool | None = None
   # asks the comma to upload (segment, name) files of a route to Connect, and says what it did; None when it does not
   request_upload: Callable[[str, list[tuple[int, str]]], str | None] | None = None
+  # how many segments still to fetch make the user be asked first: (from the comma on this network, from anywhere else),
+  # as the user set them in App settings; 0 for never
+  ask_segments: Callable[[], tuple[int, int]] = lambda: (ASK_SEGMENTS_HOME, ASK_SEGMENTS_AWAY)
 
   def listed(self) -> dict[str, tuple[object, list[int]]]:
     """route -> (source, segments). The comma wins over Connect for a route both have, since it has the full files."""
@@ -64,8 +71,14 @@ class Resolved:
 
 
 def resolve(sources: Sources, cache: Path, route: str, start_segment: int | None = None, end_segment: int | None = None,
-            start_time: str | None = None, end_time: str | None = None) -> Resolved:
-  """raises RangeError for anything the user can fix: unknown route, no GPS, a time outside the drive"""
+            start_time: str | None = None, end_time: str | None = None, progress: Callable[[str], None] | None = None,
+            ask: Callable[..., bool] | None = None, fetching: Callable[[dict | None], None] | None = None) -> Resolved:
+  """Raises RangeError for anything the user can fix: unknown route, no GPS, a time outside the drive. The times and
+  positions come from the small log of every segment of the drive, which is fetched first if it is not here: for a long
+  drive that takes a while, so it goes as a fetch in a job does (see render_resolved), with [ask], [progress] and
+  [fetching]."""
+  progress = progress or (lambda text: None)
+  progress("finding the drive")
   try:
     found = sources.listed().get(route)
   except SourceError as e:
@@ -74,7 +87,13 @@ def resolve(sources: Sources, cache: Path, route: str, start_segment: int | None
     raise RangeError(f"{route} is on neither the comma nor comma Connect")
   source, segments = found
   try:
-    source.fetch(route, segments, ("qlog.zst",), cache)
+    if ask is not None:
+      many = _many_to_fetch(sources, source, cache, route, [(s, "qlog.zst") for s in segments])
+      if many is not None and not ask(
+          f"To check the range, the app reads the small log of every segment of the drive, and {many[0]} of them "
+          f"are not on this computer yet{many[1]} from {_where(source)}. That can take a while.\n\n{_CAN_CANCEL}", "many"):
+        raise SourceError("Not fetched.")
+    _fetch(source, route, segments, ("qlog.zst",), cache, f"the drive's logs from {source.name}", progress, fetching)
   except SourceError as e:
     raise RangeError(str(e))
   route_dir = cache / route
@@ -174,39 +193,71 @@ def _may_copy_through_server(r: Resolved, sources: Sources, source: DeviceSource
   return "the comma's metered connection" if network is not None else "a connection that may be metered"
 
 
-MANY_SEGMENTS = 10  # about 10 minutes of drive still to fetch: enough to take a while, so the user is asked first
+_CAN_CANCEL = ("Fetching shows the time left as it goes, and you can cancel it at any point: what has arrived by then "
+               "stays on this computer, so fetching again carries on from there.")
 
 
-def _may_fetch_many(r: Resolved, source, cache: Path, needed: list[int], earlier: int | None, names: tuple[str, str],
-                    detail: str, settings: dict, ask: Callable[..., bool]) -> None:
-  """Ask before fetching a long stretch of drive that is not on this computer yet, with its size when the source can
-  say it. What is here already does not count: a range fetched before, or partly before a Cancel, is not asked about
-  again for that part. Raises SourceError if the user says not to fetch."""
-  def here(s: int, n: str) -> bool:
-    f = cache / r.route / str(s) / n
-    return f.exists() and not incomplete_marker(f).exists()
+def _here(cache: Path, route: str, s: int, n: str) -> bool:
+  f = cache / route / str(s) / n
+  return f.exists() and not incomplete_marker(f).exists()
 
-  files = [(s, n) for s in needed for n in names] + ([(earlier, names[0])] if earlier is not None else [])
-  to_fetch = [(s, n) for s, n in files if not here(s, n)]
+
+def _where(source) -> str:
+  return "comma Connect" if source.name == "connect" else "the comma" if source.name == "device" else source.name
+
+
+def _many_to_fetch(sources: Sources, source, cache: Path, route: str, files: list[tuple[int, str]]) -> tuple[int, str] | None:
+  """(how many segments, and ", about N MB," when the source can say) of [files] still to fetch, when that is as many as
+  the user said to be asked about for this source; None when it is fewer. What is here already does not count: a range
+  fetched before, or partly before a Cancel, is not asked about again for that part."""
+  home, away = getattr(sources, "ask_segments", lambda: (ASK_SEGMENTS_HOME, ASK_SEGMENTS_AWAY))()
+  limit = home if source.name == "device" else away
+  to_fetch = [(s, n) for s, n in files if not _here(cache, route, s, n)]
   segments = sorted({s for s, _ in to_fetch})
-  if len(segments) < MANY_SEGMENTS:
-    return
-  sizes_of = getattr(source, "sizes", None)
+  if limit <= 0 or len(segments) < limit:
+    return None
   sizes = {}
-  if sizes_of is not None:
+  if (sizes_of := getattr(source, "sizes", None)) is not None:
     try:
-      sizes = sizes_of(r.route, segments, names)
+      sizes = sizes_of(route, segments, tuple(sorted({n for _, n in to_fetch})))
     except SourceError:
       pass
   known = [sizes[i] for i in to_fetch if i in sizes]
-  amount = f", about {megabytes(sum(known) * len(to_fetch) / len(known))} MB," if known else ""
+  return len(segments), f", about {megabytes(sum(known) * len(to_fetch) / len(known))} MB," if known else ""
+
+
+def _may_fetch_many(r: Resolved, sources: Sources, source, cache: Path, needed: list[int], earlier: int | None,
+                    names: tuple[str, str], detail: str, settings: dict, ask: Callable[..., bool]) -> None:
+  """Ask before fetching a long stretch of drive that is not on this computer yet. Raises SourceError if the user says
+  not to fetch."""
+  files = [(s, n) for s in needed for n in names] + ([(earlier, names[0])] if earlier is not None else [])
+  many = _many_to_fetch(sources, source, cache, r.route, files)
+  if many is None:
+    return
   wide = " The wide camera video may add as much again." if settings["camera"] != "road" and detail != "quick" else ""
-  where = "comma Connect" if source.name == "connect" else "the comma" if source.name == "device" else source.name
-  if not ask(f"This range needs {len(segments)} segments (about {len(segments)} minutes of drive) that are not on this "
-             f"computer yet{amount} at {detail} detail from {where}.{wide} That can take a while.\n\n"
-             "Fetching shows the time left as it goes, and you can cancel it at any point: what has arrived by then "
-             "stays on this computer, so fetching this range again carries on from there.", "many"):
+  if not ask(f"This range needs {many[0]} segments (about {many[0]} minutes of drive) that are not on this computer "
+             f"yet{many[1]} at {detail} detail from {_where(source)}.{wide} That can take a while.\n\n{_CAN_CANCEL}", "many"):
     raise SourceError("Not fetched. Choose a shorter range, or quick detail, to fetch less.")
+
+
+def _fetch(source, route: str, segments: list[int], names: tuple[str, ...], cache: Path, what: str,
+           progress: Callable[[str], None], fetching: Callable[[dict | None], None] | None) -> None:
+  """with how much has come and how long the rest should take, about once a second; Cancel stops it part-way, and what
+  has arrived stays here for the next time"""
+  meter = Meter(what)
+
+  def arrived(done: int, total: int) -> None:
+    status = meter.update(done, total)
+    if fetching is not None:
+      fetching(status)
+    progress(Meter.describe(status))
+
+  progress(f"fetching {what}")
+  try:
+    source.fetch(route, segments, names, cache, progress=arrived)
+  finally:
+    if fetching is not None:
+      fetching(None)
 
 
 def _render_again(said: str) -> str:
@@ -283,25 +334,10 @@ def render_resolved(r: Resolved, sources: Sources, cache: Path, settings: dict, 
   log_name, video_name = render.LOGS[detail], render.VIDEOS[detail]
   # a copy the metered question has just given the size of, and the user said yes to, is not asked about twice
   if ask is not None and not (getattr(source, "through_server", False) and asked):
-    _may_fetch_many(r, source, cache, needed, earlier, (log_name, video_name), detail, settings, ask)
+    _may_fetch_many(r, sources, source, cache, needed, earlier, (log_name, video_name), detail, settings, ask)
 
   def fetch(segments: list[int], names: tuple[str, ...], what: str) -> None:
-    """with how much has come and how long the rest should take, about once a second; Cancel stops it part-way, and
-    what has arrived stays here for the next time"""
-    meter = Meter(what)
-
-    def arrived(done: int, total: int) -> None:
-      status = meter.update(done, total)
-      if fetching is not None:
-        fetching(status)
-      progress(Meter.describe(status))
-
-    progress(f"fetching {what}")
-    try:
-      source.fetch(r.route, segments, names, cache, progress=arrived)
-    finally:
-      if fetching is not None:
-        fetching(None)
+    _fetch(source, r.route, segments, names, cache, what, progress, fetching)
 
   # one copy of a drive at a time, so a preview and a render of it never fetch the same files twice over
   with _fetching(r.route):
