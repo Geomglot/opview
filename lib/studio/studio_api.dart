@@ -39,6 +39,14 @@ class RouteInfo {
   final String? place;
   /// set on someone else's public drive: what to give [StudioApi.removeDrive] to take it off the list
   final String? addedAs;
+
+  /// for the list's filters: the day it started in its own time, the towns at each end, whether the sun was up at the
+  /// start, and the most detail this computer already has for all of it ('full', 'logs', 'quick'); each null when not
+  /// known
+  final DateTime? localDate;
+  final String? startPlace, endPlace;
+  final bool? daylight;
+  final String? stored;
   RouteInfo(Map<String, dynamic> j)
       : route = j['route'],
         first = j['first'],
@@ -49,7 +57,12 @@ class RouteInfo {
         km = (j['km'] as num?)?.toDouble(),
         detail = j['detail'] as String? ?? 'full',
         place = j['place'] as String?,
-        addedAs = j['entry'] as String?;
+        addedAs = j['entry'] as String?,
+        localDate = DateTime.tryParse(j['local_date'] as String? ?? ''),
+        startPlace = j['start_place'] as String?,
+        endPlace = j['end_place'] as String?,
+        daylight = j['daylight'] as bool?,
+        stored = j['stored'] as String?;
 }
 
 class RangeRequest {

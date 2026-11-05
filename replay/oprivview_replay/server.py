@@ -16,10 +16,10 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-from . import admin, jobs, params, places, render, ssh_source
+from . import admin, jobs, params, places, render, ssh_source, sun
 from .settings import Settings
 from .uploads import UploadRequests
-from .sources import ConnectSource, DeviceSource, SourceError, parse_drive_ref
+from .sources import FULL_FILES, LOGS_FILES, QUICK_FILES, ConnectSource, DeviceSource, SourceError, incomplete_marker, parse_drive_ref
 from .cli import DEFAULT_APP, DEFAULT_CACHE
 from .logs import index_segment
 from .timeline import RangeError
@@ -182,8 +182,10 @@ def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Pat
     device_up = False
     away = None
     try:
-      for route, segs in sources.device.routes().items():
-        rows[route] = {"route": route, "segments": segs, "on_device": True, "on_connect": False}
+      for route, info in sources.device.listing().items():
+        # the comma's own start time is from its file times; Connect's, below, replaces it where Connect has the drive
+        rows[route] = {"route": route, "segments": info["segments"], "on_device": True, "on_connect": False,
+                       "start_ms": info["start_ms"]}
       device_up = True
     except SourceError as e:
       away = str(e)
@@ -210,7 +212,14 @@ def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Pat
     for row in rows.values():
       segs = row["segments"]
       row["first"], row["last"] = segs[0], segs[-1]
-      row["local_start"] = _local_start(row)
+      position = _position(row)
+      row["local_start"] = _local_start(row, position)
+      # for the list's filters: the day in the drive's own time, whether the sun was up when it started, and what of it
+      # is already on this computer
+      row["local_date"] = row["local_start"][:10] if row["local_start"] else None
+      row["daylight"] = (sun.daylight(*position, row["start_ms"])
+                         if position is not None and row.get("start_ms") is not None else None)
+      row["stored"] = _stored(row["route"], segs)
       # what a replay can show: everything if the comma has it, otherwise only what Connect keeps
       row["detail"] = "full" if row["on_device"] else row.get("detail", "small")
     # drives added by hand first, where they can be found, and then the user's own, newest first
@@ -219,7 +228,23 @@ def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Pat
 
   def _connect_details(row: dict, info: dict) -> None:
     row.update(on_connect=True, start_ms=info["start_ms"], end_ms=info["end_ms"], km=info["km"], lat=info["lat"], lon=info["lon"],
-               place=places.journey(info["start"], info["end"]))
+               place=places.journey(info["start"], info["end"]),
+               start_place=places.nearest_town(*info["start"]), end_place=places.nearest_town(*info["end"]))
+
+  def _stored(route: str, segments: list[int]) -> str | None:
+    """the most detail this computer already has for every segment of the drive ('full', 'logs' or 'quick'), so it plays
+    without fetching anything; None if any segment is missing them"""
+    def whole(names: tuple[str, ...]) -> bool:
+      for s in segments:
+        for n in names:
+          f = cache / route / str(s) / n
+          if not f.exists() or incomplete_marker(f).exists():
+            return False
+      return True
+    for level, names in (("full", FULL_FILES), ("logs", LOGS_FILES), ("quick", QUICK_FILES)):
+      if whole(names):
+        return level
+    return None
 
   def _public_source(dongle: str) -> ConnectSource:
     return public_sources.setdefault(dongle, ConnectSource(dongle=dongle, public=True))
@@ -244,13 +269,12 @@ def make_app(host: str | None = None, cache: Path = DEFAULT_CACHE, renderer: Pat
         problems.append(f"{entry}: {e}")
     return problems
 
-  def _local_start(row: dict) -> str | None:
+  def _local_start(row: dict, place: tuple[float, float] | None) -> str | None:
     if row.get("start_ms") is None:
       return None
     from datetime import datetime
     from .timeline import zone_for
     when = datetime.fromtimestamp(row["start_ms"] / 1000)
-    place = _position(row)
     if place is None:  # where the drive was is not known
       if sys.platform == "win32":  # Windows names zones in full ("SA Pacific Standard Time") and has no abbreviations
         local = when.astimezone()

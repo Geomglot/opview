@@ -87,6 +87,28 @@ copy on comma Connect** in App settings.
 Paste a comma Connect link, `device/route`, or a device id into the box above the drive list, and press **Add**. A device id
 adds all of that device's public drives. To take one off the list, use **Remove from the list**.
 
+### Finding a drive
+
+Press **Filters**, under the box for adding a drive, to narrow the list. Each filter you leave empty lets every drive
+through. The button shows how many filters are set, and the count of drives shown is beside it. Filters keep working
+while the panel is hidden. **Clear all** removes every filter.
+
+| Filter | Shows drives |
+| --- | --- |
+| **Date** | Started on a day in the range, in the drive's own time. Pick one day, or a first and last day |
+| **Starts in**, **Ends in** | Starting or ending in a town whose name contains what you type, such as `toron` |
+| **Length** | With this many segments (minutes), from the first number to the second. Leave one end empty for no limit |
+| **Distance** | This long, in km or miles as your comma is set |
+| **Available from** | On the comma, on comma Connect, or already on this computer, so they play without fetching anything. Tick more than one for drives in any of them |
+| **Detail** | With the full camera video, or with only the small video |
+| **Time of day** | Started between sunrise and sunset (**Day**) or after dark (**Night**) where the drive was |
+| **Drives** | Yours, or public drives you added by hand |
+
+The towns, distance and time of day come from comma Connect, which has nearly every drive, as the comma uploads its small
+logs. A drive only on the comma has its date from the comma's files, accurate to about a minute, and its time of day once
+the app has read its logs (after **Check range** or a preview), but no towns or distance. A filter leaves out drives it
+cannot tell about: with a town set, for example, a drive with no known town is not shown.
+
 ## Choosing what to play
 
 1. Pick a drive from the list on the left.

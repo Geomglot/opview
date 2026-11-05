@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:opview/studio/admin_page.dart';
 import 'package:opview/studio/desktop.dart';
+import 'package:opview/studio/drive_filter.dart';
 import 'package:opview/studio/preview_player.dart';
 import 'package:opview/studio/replay_updater.dart';
 import 'package:opview/studio/sidecar.dart';
@@ -82,6 +83,21 @@ String timeLeft(num? seconds) {
 String distanceLabel(double km, bool? metric) =>
     metric == false ? '${(km / 1.609344).toStringAsFixed(1)} miles' : '${km.toStringAsFixed(1)} km';
 
+const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/// "5 Nov 2026"
+String dayLabel(DateTime d) => '${d.day} ${_months[d.month - 1]} ${d.year}';
+
+/// the date part of the drive filter, as its button says it
+String dateRangeLabel(DateTime? from, DateTime? to) {
+  if (from == null && to == null) return 'Any date';
+  if (from != null && to != null) {
+    if (from.year == to.year && from.month == to.month && from.day == to.day) return dayLabel(from);
+    return '${dayLabel(from)} to ${dayLabel(to)}';
+  }
+  return from != null ? 'From ${dayLabel(from)}' : 'Until ${dayLabel(to!)}';
+}
+
 /// One end of the range: a segment number (the default) or a local time of day
 class RangeEnd {
   bool byTime = false;
@@ -120,6 +136,12 @@ class _StudioPageState extends State<StudioPage> {
   String? _routesError;
   bool? _metric;
   RouteInfo? _route;
+  // which drives the list shows, and whether the panel for choosing that is open
+  DriveFilter _filter = DriveFilter.none;
+  bool _filtering = false;
+  final _startsIn = TextEditingController(), _endsIn = TextEditingController();
+  final _minSegments = TextEditingController(), _maxSegments = TextEditingController();
+  final _minDistance = TextEditingController(), _maxDistance = TextEditingController();
   final _start = RangeEnd(), _end = RangeEnd();
   final _output = TextEditingController();
   final Map<String, Object?> _options = {};
@@ -312,8 +334,116 @@ class _StudioPageState extends State<StudioPage> {
     refused.dispose();
   }
 
+  bool _shows(RouteInfo r) => _filter.matches(r, metric: _metric);
+
+  void _clearFilter() => setState(() {
+        _filter = DriveFilter.none;
+        for (final c in [_startsIn, _endsIn, _minSegments, _maxSegments, _minDistance, _maxDistance]) {
+          c.clear();
+        }
+      });
+
+  /// the typed parts of the filter, each as it now reads; something that is not a number leaves that end open
+  void _filterTyped() => setState(() {
+        int? whole(TextEditingController c) => int.tryParse(c.text.trim());
+        double? number(TextEditingController c) => double.tryParse(c.text.trim());
+        _filter = _filter.copyWith(
+          startsIn: _startsIn.text,
+          endsIn: _endsIn.text,
+          minSegments: whole(_minSegments),
+          maxSegments: whole(_maxSegments),
+          minDistance: number(_minDistance),
+          maxDistance: number(_maxDistance),
+        );
+      });
+
+  Future<void> _pickDates() async {
+    final now = DateTime.now();
+    final from = _filter.from, to = _filter.to;
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2018),
+      lastDate: DateTime(now.year, now.month, now.day),
+      initialDateRange: from != null && to != null ? DateTimeRange(start: from, end: to) : null,
+      helpText: 'Drives on these days',
+      saveText: 'Show',
+    );
+    if (picked != null) setState(() => _filter = _filter.copyWith(from: picked.start, to: picked.end));
+  }
+
+  Widget _filterPanel() {
+    final small = Theme.of(context).textTheme.bodySmall;
+    Widget label(String text) => Padding(padding: const EdgeInsets.only(top: 12, bottom: 4), child: Text(text, style: small));
+    Widget field(TextEditingController c, String hint, {double? width, bool number = false}) {
+      final f = TextField(
+          controller: c,
+          onChanged: (_) => _filterTyped(),
+          keyboardType: number ? const TextInputType.numberWithOptions(decimal: true) : null,
+          style: small,
+          decoration: InputDecoration(hintText: hint, isDense: true));
+      return width == null ? f : SizedBox(width: width, child: f);
+    }
+
+    Widget between(TextEditingController low, TextEditingController high, String unit) => Row(children: [
+          field(low, 'any', width: 48, number: true),
+          Padding(padding: const EdgeInsets.symmetric(horizontal: 6), child: Text('to', style: small)),
+          field(high, 'any', width: 48, number: true),
+          Flexible(child: Padding(padding: const EdgeInsets.only(left: 6), child: Text(unit, style: small))),
+        ]);
+    Widget chips<T>(Map<T, String> choices, Set<T> chosen, DriveFilter Function(Set<T>) apply) => Wrap(spacing: 6, runSpacing: 4, children: [
+          for (final c in choices.entries)
+            FilterChip(
+              label: Text(c.value, style: small),
+              visualDensity: VisualDensity.compact,
+              selected: chosen.contains(c.key),
+              onSelected: (on) => setState(() => _filter = apply(on ? {...chosen, c.key} : ({...chosen}..remove(c.key)))),
+            ),
+        ]);
+
+    return Container(
+        key: const Key('drive-filters'),
+        margin: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+        padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+        decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(8)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Expanded(child: Text('Date', style: small)),
+            TextButton(onPressed: _filter.isEmpty ? null : _clearFilter, child: const Text('Clear all')),
+          ]),
+          Row(children: [
+            Expanded(child: OutlinedButton(onPressed: _pickDates, child: Text(dateRangeLabel(_filter.from, _filter.to)))),
+            if (_filter.from != null || _filter.to != null)
+              IconButton(
+                  tooltip: 'Any date',
+                  icon: const Icon(Icons.close, size: 18),
+                  onPressed: () => setState(() => _filter = _filter.copyWith(from: null, to: null))),
+          ]),
+          label('Starts in'),
+          field(_startsIn, 'any town'),
+          label('Ends in'),
+          field(_endsIn, 'any town'),
+          label('Length'),
+          between(_minSegments, _maxSegments, 'segments'),
+          label('Distance'),
+          between(_minDistance, _maxDistance, _metric == false ? 'miles' : 'km'),
+          label('Available from'),
+          chips({DriveSource.comma: 'The comma', DriveSource.connect: 'comma Connect', DriveSource.computer: 'This computer'},
+              _filter.sources, (v) => _filter.copyWith(sources: v)),
+          label('Detail'),
+          chips({DriveDetail.full: 'Full camera', DriveDetail.small: 'Small video only'}, _filter.details,
+              (v) => _filter.copyWith(details: v)),
+          label('Time of day'),
+          chips({DriveTime.day: 'Day', DriveTime.night: 'Night'}, _filter.times, (v) => _filter.copyWith(times: v)),
+          label('Drives'),
+          chips({DriveOwner.mine: 'Mine', DriveOwner.added: 'Added by hand'}, _filter.owners, (v) => _filter.copyWith(owners: v)),
+        ]));
+  }
+
   @override
   void dispose() {
+    for (final c in [_startsIn, _endsIn, _minSegments, _maxSegments, _minDistance, _maxDistance]) {
+      c.dispose();
+    }
     _poll?.cancel();
     _updater.dispose();
     _jobPolled.dispose();
@@ -651,6 +781,20 @@ class _StudioPageState extends State<StudioPage> {
                 ],
               ),
             ])),
+        Padding(
+            padding: const EdgeInsets.fromLTRB(4, 0, 12, 0),
+            child: Row(children: [
+              Tooltip(
+                  message: _filtering ? 'Hide the filters' : 'Filter the drives',
+                  child: TextButton.icon(
+                      onPressed: () => setState(() => _filtering = !_filtering),
+                      icon: Badge(
+                          isLabelVisible: !_filter.isEmpty, label: Text('${_filter.count}'), child: const Icon(Icons.filter_list)),
+                      label: Text(_filtering ? 'Hide filters' : 'Filters'))),
+              Expanded(
+                  child: Text(_filter.isEmpty ? '' : '${_routes.where(_shows).length} of ${_routes.length} shown',
+                      textAlign: TextAlign.end, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall)),
+            ])),
         if (_routesError != null)
           Padding(
               padding: const EdgeInsets.all(12),
@@ -660,7 +804,15 @@ class _StudioPageState extends State<StudioPage> {
               ])),
         Expanded(
             child: ListView(children: [
-          for (final r in _routes)
+          if (_filtering) _filterPanel(),
+          if (!_filter.isEmpty && _routes.isNotEmpty && !_routes.any(_shows))
+            Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(children: [
+                  const Text('No drives match the filters.'),
+                  TextButton(onPressed: _clearFilter, child: const Text('Clear the filters')),
+                ])),
+          for (final r in _routes.where(_shows))
             ListTile(
               dense: true,
               selected: r == _route,

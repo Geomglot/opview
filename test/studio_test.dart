@@ -395,4 +395,69 @@ void main() {
     await tester.runAsync(() => server.close(force: true));
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets('the filter button opens the filters, which narrow the list and say how many are shown', (tester) async {
+    HttpOverrides.global = null;
+    late HttpServer server;
+    await tester.runAsync(() async {
+      server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      server.listen((req) async {
+        final Object body = req.uri.path == '/params'
+            ? _params
+            : req.uri.path == '/routes'
+                ? {'online': true, 'metric': true, 'routes': [
+                    {'route': '0000005a--f16da7af40', 'segments': [0, 1], 'first': 0, 'last': 1, 'on_device': true, 'on_connect': true,
+                        'detail': 'full', 'local_start': '2026-10-31 18:30 EDT', 'local_date': '2026-10-31', 'daylight': false,
+                        'start_place': 'Toronto', 'end_place': 'Oakville', 'km': 3.6},
+                    {'route': '00000001--aaaaaaaaaa', 'segments': [0], 'first': 0, 'last': 0, 'on_device': false, 'on_connect': true,
+                        'detail': 'quick', 'local_start': '2026-10-30 12:00 EDT', 'local_date': '2026-10-30', 'daylight': true,
+                        'start_place': 'Guelph', 'end_place': 'Guelph', 'km': 1.0, 'stored': 'quick'},
+                  ]}
+                : {'ok': true};
+        req.response.headers.contentType = ContentType.json;
+        req.response.write(jsonEncode(body));
+        await req.response.close();
+      });
+    });
+    tester.view.physicalSize = const Size(1320, 820);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final api = StudioApi(Uri.parse('http://127.0.0.1:${server.port}'));
+    await tester.pumpWidget(MaterialApp(home: StudioPage(start: () async => Sidecar(null, api))));
+    for (var i = 0; i < 20 && find.text('2026-10-31 18:30 EDT').evaluate().isEmpty; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pump();
+    }
+    expect(find.byKey(const Key('drive-filters')), findsNothing);
+    await tester.tap(find.byTooltip('Filter the drives'));
+    await tester.pump();
+    expect(find.textContaining('shown'), findsNothing, reason: 'nothing filtered yet');
+
+    await tester.tap(find.widgetWithText(FilterChip, 'Night'));
+    await tester.pump();
+    expect(find.text('1 of 2 shown'), findsOneWidget);
+    // hidden, the filters still apply, and the button's badge says how many parts are set
+    await tester.tap(find.byTooltip('Hide the filters'));
+    await tester.pump();
+    expect(find.text('2026-10-30 12:00 EDT'), findsNothing);
+    expect(find.text('2026-10-31 18:30 EDT'), findsOneWidget);
+    expect(find.text('1'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Filter the drives'));
+    await tester.pump();
+    await tester.enterText(find.widgetWithText(TextField, 'any town').first, 'guel');
+    await tester.pump();
+    expect(find.text('0 of 2 shown'), findsOneWidget);
+    await tester.tap(find.byTooltip('Hide the filters'));
+    await tester.pump();
+    expect(find.text('No drives match the filters.'), findsOneWidget);
+    expect(find.text('2'), findsOneWidget);
+    await tester.tap(find.text('Clear the filters'));
+    await tester.pump();
+    expect(find.text('2026-10-30 12:00 EDT'), findsOneWidget);
+    expect(find.text('2026-10-31 18:30 EDT'), findsOneWidget);
+    await tester.runAsync(() => server.close(force: true));
+    await tester.pumpWidget(const SizedBox());
+  });
 }

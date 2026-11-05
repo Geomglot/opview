@@ -89,7 +89,48 @@ def parse_listing(listing: str) -> dict[str, list[int]]:
 
 
 def list_routes(host: Host) -> dict[str, list[int]]:
-  return parse_listing(run(host, f"ls -1 {REMOTE_ROOT}"))
+  return {route: info["segments"] for route, info in list_routes_with_times(host).items()}
+
+
+# a segment's folder is last changed as the segment ends, about this long after it started
+_SEGMENT_MS = 60_000
+# before the comma has the time from GPS or the internet its clock can be years out; a date before this is not believed
+_CLOCK_SET_MS = 1_577_836_800_000  # 2020-01-01
+
+
+def parse_listing_times(listing: str) -> dict[str, dict]:
+  """route -> {segments, start_ms}, from lines of "<seconds> <folder>" (or just "<folder>" where the time is not known):
+  the start is the first segment's folder's time, less a segment"""
+  routes: dict[str, dict] = {}
+  for line in listing.splitlines():
+    parts = line.split()
+    if not parts:
+      continue
+    written, name = (int(parts[0]), parts[-1]) if len(parts) == 2 and parts[0].isdigit() else (None, parts[-1])
+    m = _SEGMENT.match(name)
+    if not m:
+      continue
+    info = routes.setdefault(m["route"], {"segments": set(), "first": None})
+    seg = int(m["seg"])
+    info["segments"].add(seg)
+    if written is not None and (info["first"] is None or seg < info["first"][0]):
+      info["first"] = (seg, written)
+  out = {}
+  for route, info in sorted(routes.items()):
+    start = None
+    if info["first"] is not None:
+      seg, written = info["first"]
+      start = written * 1000 - (seg + 1) * _SEGMENT_MS
+      if start < _CLOCK_SET_MS:
+        start = None
+    out[route] = {"segments": sorted(info["segments"]), "start_ms": start}
+  return out
+
+
+def list_routes_with_times(host: Host) -> dict[str, dict]:
+  """route -> {segments, start_ms}; start_ms is None where the comma's file times do not say"""
+  # one command; a comma without GNU stat still lists the folders, without their times
+  return parse_listing_times(run(host, f"cd {REMOTE_ROOT} && {{ stat -c '%Y %n' -- * 2>/dev/null || ls -1; }}"))
 
 
 def is_metric(host: Host) -> bool:

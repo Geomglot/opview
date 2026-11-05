@@ -62,8 +62,12 @@ class DeviceSource:
     self.name = "the comma through comma's server" if self.through_server else "device"
 
   def routes(self) -> dict[str, list[int]]:
+    return {route: info["segments"] for route, info in self.listing().items()}
+
+  def listing(self) -> dict[str, dict]:
+    """route -> {segments, start_ms}; the start is from the comma's file times, and None where they do not say"""
     try:
-      return ssh_source.list_routes(self.host)
+      return ssh_source.list_routes_with_times(self.host)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as e:
       raise SourceError(f"cannot reach {self.host}: {e}")
 

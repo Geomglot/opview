@@ -5,7 +5,7 @@ import pytest
 
 from oprivview_replay.logs import SegmentIndex
 from oprivview_replay.params import PARAMS
-from oprivview_replay.ssh_source import parse_listing
+from oprivview_replay.ssh_source import parse_listing, parse_listing_times
 from oprivview_replay.timeline import FramePos, RangeError, RouteTimeline, resolve_range
 
 TORONTO = ZoneInfo("America/Toronto")
@@ -119,3 +119,13 @@ def test_listing_groups_segments_in_number_order():
 def test_view_is_a_choice_of_the_three_layouts():
   view = next(p for p in PARAMS if p.name == "view")
   assert view.choices == ("classic", "enhanced", "detailed") and view.default == "classic"
+
+
+def test_the_comma_listing_gives_each_drive_a_start_from_its_file_times():
+  got = parse_listing_times("1793000060 0000005a--f16da7af40--0\n1793000120 0000005a--f16da7af40--1\n"
+                            "1793000600 00000059--5e374df67a--4\n1000000 00000058--aaaaaaaaaa--0\n"
+                            "00000057--bbbbbbbbbb--0\nboot\n")
+  assert got["0000005a--f16da7af40"] == {"segments": [0, 1], "start_ms": 1793000000000}
+  assert got["00000059--5e374df67a"]["start_ms"] == 1793000600000 - 5 * 60000, "the first segment here is 4"
+  assert got["00000058--aaaaaaaaaa"]["start_ms"] is None, "a clock not yet set is not believed"
+  assert got["00000057--bbbbbbbbbb"] == {"segments": [0], "start_ms": None}, "ls without stat: no time"

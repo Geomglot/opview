@@ -356,3 +356,21 @@ def test_a_drive_with_no_position_shows_the_mac_time_and_never_gmt(tmp_path):
 
 def test_a_drive_with_a_position_shows_its_own_zone(tmp_path):
   assert _routes_with_connect(tmp_path, 43.7, -79.4)["local_start"].endswith(("EST", "EDT"))
+
+
+def test_a_drive_carries_what_the_list_filters_on(tmp_path):
+  # 1793000000000 is 2026-10-26 09:33 UTC: 05:33 in Toronto, before sunrise
+  row = _routes_with_connect(tmp_path, 43.7, -79.4)
+  assert row["local_date"] == "2026-10-26"
+  assert row["daylight"] is False
+  assert row["start_place"] and row["start_place"] == row["end_place"]
+  assert row["stored"] is None, "nothing fetched yet"
+
+
+def test_a_drive_with_every_segment_here_is_stored(tmp_path):
+  for name in ("qlog.zst", "qcamera.ts"):
+    (tmp_path / "r" / "0").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "r" / "0" / name).write_bytes(b"x")
+  assert _routes_with_connect(tmp_path, 43.7, -79.4)["stored"] == "quick"
+  (tmp_path / "r" / "0" / "qcamera.ts.incomplete").write_bytes(b"")
+  assert _routes_with_connect(tmp_path, 43.7, -79.4)["stored"] is None, "a copy left part-way is not stored"
