@@ -157,7 +157,7 @@ def test_a_prepared_job_says_where_each_segment_starts(tmp_path, monkeypatch):
     return [], 1500, None
   monkeypatch.setattr(render, "write_clip", write_clip)
   monkeypatch.setattr(render, "_tool", lambda name: name)
-  monkeypatch.setattr(render, "encoder", lambda ffmpeg: "e")
+  monkeypatch.setattr(render, "encoding", lambda ffmpeg: render.Encoding(ffmpeg, "e"))
   start = SimpleNamespace(frame=300)
   job = render.prepare(None, tmp_path, start, start, {"camera": "road", "video_width": 1280}, tmp_path / "out.mp4", progress=lambda text: None)
   assert json.loads(job.read_text())["segment_starts"] == [[4, 0, 300], [5, 900, 0]]

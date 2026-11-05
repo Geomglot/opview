@@ -11,6 +11,8 @@ class ReplayJob {
   final String output;
   final String ffmpeg;
   final String encoder;
+  /// Linux's VA-API encoder only: the graphics device it encodes on, such as /dev/dri/renderD128
+  final String? encoderDevice;
   final List<String> videoInputs;
   /// 'hevc' for the raw camera files, 'mpegts' for the small qcamera files
   final String videoFormat;
@@ -54,6 +56,7 @@ class ReplayJob {
         output = j['output'] as String,
         ffmpeg = j['ffmpeg'] as String,
         encoder = j['encoder'] as String,
+        encoderDevice = j['encoder_device'] as String?,
         videoInputs = (j['video_inputs'] as List).cast<String>(),
         videoFormat = j['video_format'] as String? ?? 'hevc',
         wideInputs = (j['wide_inputs'] as List?)?.cast<String>(),
@@ -79,6 +82,18 @@ class ReplayJob {
     final (segment, first, skip) = segmentStarts.lastWhere((s) => s.$2 <= frame, orElse: () => segmentStarts.first);
     final seconds = (skip + frame - first) ~/ fps;
     return 'segment $segment, ${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
+  }
+
+  /// what ffmpeg is told to turn the renderer's RGBA frames, read from its standard input, into the MP4. VA-API takes its
+  /// frames on the graphics card, so they are converted and uploaded there and it picks the pixel format itself.
+  List<String> encodeArgs() {
+    final device = encoderDevice;
+    return [
+      '-v', 'error', '-y', if (device != null) ...['-vaapi_device', device],
+      '-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', '${width}x$height', '-r', '$fps', '-i', '-',
+      if (device != null) ...['-vf', 'format=nv12,hwupload'],
+      '-c:v', encoder, '-b:v', bitrate, if (device == null) ...['-pix_fmt', 'yuv420p'], output,
+    ];
   }
 
   /// this job with some of its fields replaced, as the server gives them for a jump

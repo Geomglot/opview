@@ -1,10 +1,12 @@
 """Turn a resolved range into a render: the clip file the renderer reads, and the job describing the output."""
 import bisect
+import glob
 import json
 import os
 import shutil
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
@@ -53,26 +55,72 @@ NO_ENCODER = ("This computer has no H.264 video encoder that ffmpeg can use: no 
               "the Media Feature Pack from Settings > Apps > Optional features, then try again.")
 _encoders: dict[str, str] = {}
 
+# Linux: NVIDIA's encoder, then Intel's or AMD's through VA-API on each graphics device, with the app's own ffmpeg. Linux
+# has no encoder of its own as Macs and Windows do, so a computer with none of those (a virtual machine, say) encodes in
+# software with its own full ffmpeg's x264, if it has one; the app's ffmpeg is LGPL, so it has no x264.
+LINUX_NO_ENCODER = ("This computer has no H.264 video encoder the app can use: no NVIDIA graphics encoder answered, and "
+                    "no Intel or AMD one through VA-API. Install your Linux's own ffmpeg, which can encode without one (on "
+                    "Ubuntu, Debian or Mint: sudo apt install ffmpeg; on Fedora: sudo dnf install ffmpeg), then try again.")
+
+
+@dataclass(frozen=True)
+class Encoding:
+  """how the renderer encodes: with which ffmpeg, which encoder, and for VA-API which graphics device"""
+  ffmpeg: str
+  encoder: str
+  device: str | None = None
+
+
+_linux_encodings: dict[str, Encoding] = {}
+
+
+def _encodes(ffmpeg: str, name: str, device: str | None = None) -> bool:
+  """whether [ffmpeg] can really encode with [name] here: an encoder can be built into ffmpeg yet have no hardware
+  behind it. Two blank frames in through a pipe and out through one, using only what the app's own small ffmpeg holds."""
+  frames = bytes(256 * 144 * 3 // 2 * 2)  # 256x144 yuv420p
+  vaapi_device = ["-vaapi_device", device] if device else []
+  upload = ["-vf", "format=nv12,hwupload"] if device else []
+  try:
+    subprocess.run([ffmpeg, "-v", "error", *vaapi_device, "-f", "rawvideo", "-pix_fmt", "yuv420p", "-s", "256x144", "-r", "20",
+                    "-i", "-", *upload, "-c:v", name, "-f", "rawvideo", "-"], input=frames, check=True, capture_output=True, timeout=30)
+  except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
+    return False
+  return True
+
 
 def encoder(ffmpeg: str) -> str:
   """the H.264 encoder the renderer is told to use. On a Mac always VideoToolbox. On Windows, the first that can
-  really encode a frame here: an encoder can be built into ffmpeg yet have no hardware behind it. Checked once."""
+  really encode a frame here. Checked once."""
   if sys.platform != "win32":
     return "h264_videotoolbox"
   if ffmpeg not in _encoders:
-    # two blank frames in through a pipe and out through one, using only what the app's own small ffmpeg holds
-    frames = bytes(256 * 144 * 3 // 2 * 2)  # 256x144 yuv420p
-    for name in WINDOWS_ENCODERS:
-      try:
-        subprocess.run([ffmpeg, "-v", "error", "-f", "rawvideo", "-pix_fmt", "yuv420p", "-s", "256x144", "-r", "20", "-i", "-",
-                        "-c:v", name, "-f", "rawvideo", "-"], input=frames, check=True, capture_output=True, timeout=30)
-      except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
-        continue
-      _encoders[ffmpeg] = name
-      break
-    else:
+    name = next((name for name in WINDOWS_ENCODERS if _encodes(ffmpeg, name)), None)
+    if name is None:
       raise RuntimeError(NO_ENCODER)
+    _encoders[ffmpeg] = name
   return _encoders[ffmpeg]
+
+
+def encoding(ffmpeg: str) -> Encoding:
+  """how the renderer encodes, given the ffmpeg _tool found. On a Mac and Windows that ffmpeg with encoder(); on Linux
+  the first of LINUX's choices that really encodes here, which may be the computer's own ffmpeg. Checked once."""
+  if not sys.platform.startswith("linux"):
+    return Encoding(ffmpeg, encoder(ffmpeg))
+  if ffmpeg not in _linux_encodings:
+    _linux_encodings[ffmpeg] = _linux_encoding(ffmpeg)
+  return _linux_encodings[ffmpeg]
+
+
+def _linux_encoding(ffmpeg: str) -> Encoding:
+  if _encodes(ffmpeg, "h264_nvenc"):
+    return Encoding(ffmpeg, "h264_nvenc")
+  for device in sorted(glob.glob("/dev/dri/renderD*")):  # one for each graphics card; a laptop can have two
+    if _encodes(ffmpeg, "h264_vaapi", device):
+      return Encoding(ffmpeg, "h264_vaapi", device)
+  own = shutil.which("ffmpeg")
+  if own is not None and Path(own) != Path(ffmpeg) and _encodes(own, "libx264"):
+    return Encoding(own, "libx264")
+  raise RuntimeError(LINUX_NO_ENCODER)
 
 
 def _is_idr(src, pos: int) -> bool:
@@ -240,8 +288,9 @@ def prepare(tl: RouteTimeline, route_dir: Path, start: FramePos, end: FramePos, 
     inputs[0], skip = _cut(inputs[0], start.frame)
   if wide_inputs:
     wide_inputs[0], wide_skip = _cut(wide_inputs[0], start.frame)
-  ffmpeg = _tool("ffmpeg")
-  job = {**settings, "clip": str(clip), "output": str(output.resolve()), "ffmpeg": ffmpeg, "encoder": encoder(ffmpeg),
+  how = encoding(_tool("ffmpeg"))
+  device = {"encoder_device": how.device} if how.device else {}  # VA-API only, so jobs elsewhere are as they were
+  job = {**settings, "clip": str(clip), "output": str(output.resolve()), "ffmpeg": how.ffmpeg, "encoder": how.encoder, **device,
          "video_format": "hevc" if VIDEOS[detail].endswith(".hevc") else "mpegts", "video_inputs": inputs, "wide_inputs": wide_inputs,
          "skip_frames": skip, "wide_skip_frames": wide_skip, "frame_count": count, "video_height": video_height, "fps": FPS,
          # where each segment starts in the clip and how far into it the clip starts, so the preview can say where it is

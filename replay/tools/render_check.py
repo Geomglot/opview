@@ -4,9 +4,11 @@ It needs no drive and no comma: the camera picture is ffmpeg's test pattern and 
 overlays draw as they do before any data arrives. What it proves is that the app draws and hands its frames to ffmpeg
 without a window, which is how the server runs it.
 
-  python tools/render_check.py --app <the built app> [--ffmpeg <ffmpeg>] [--encoder <name>] [--frames 40]
+  python tools/render_check.py --app <the built app> [--ffmpeg <ffmpeg>] [--encoder <name> | --bundled <folder>] [--frames 40]
 
-The ffmpeg given makes the test video too, so it must have an HEVC encoder (a full ffmpeg, not the app's small one).
+The ffmpeg given makes the test video, so it must have an HEVC encoder (a full ffmpeg, not the app's small one). It also
+renders, with --encoder, unless --bundled names the folder of the app's own ffmpeg: then the encoder is chosen as the
+server chooses it, which can fall back to the computer's own ffmpeg.
 """
 import argparse
 import json
@@ -18,6 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from oprivview_replay.params import PARAMS  # noqa: E402
+from oprivview_replay import render  # noqa: E402
 from oprivview_replay.render import CAMERA_ASPECT  # noqa: E402
 from oprivview_replay.timeline import FPS  # noqa: E402
 
@@ -27,6 +30,7 @@ def main() -> int:
   ap.add_argument("--app", required=True)
   ap.add_argument("--ffmpeg", default="ffmpeg")
   ap.add_argument("--encoder", default="libx264")
+  ap.add_argument("--bundled")
   ap.add_argument("--frames", type=int, default=40)
   ap.add_argument("--timeout", type=int, default=300)
   args = ap.parse_args()
@@ -41,7 +45,13 @@ def main() -> int:
 
   settings = {p.name: list(p.default) if p.many else p.default for p in PARAMS}
   output = work / "check.mp4"
-  job = {**settings, "clip": str(clip), "output": str(output), "ffmpeg": args.ffmpeg, "encoder": args.encoder,
+  how = render.Encoding(args.ffmpeg, args.encoder)
+  if args.bundled:
+    os.environ["OPRIVVIEW_FFMPEG_DIR"] = args.bundled
+    how = render.encoding(render._tool("ffmpeg"))
+  print(f"encoding with {how}", flush=True)
+  device = {"encoder_device": how.device} if how.device else {}
+  job = {**settings, "clip": str(clip), "output": str(output), "ffmpeg": how.ffmpeg, "encoder": how.encoder, **device,
          "video_format": "hevc", "video_inputs": [str(video)], "wide_inputs": None, "skip_frames": 0, "wide_skip_frames": 0,
          "frame_count": args.frames, "video_height": round(settings["video_width"] * CAMERA_ASPECT / 2) * 2, "fps": FPS,
          "segment_starts": [[0, 0, 0]]}

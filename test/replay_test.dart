@@ -46,6 +46,21 @@ void main() {
       expect(ReplayJob.fromJson(job({})).segmentAt(0), isNull); // a job file from before segments were listed
     });
 
+    test('ffmpeg encodes as it always has on a Mac and Windows', () {
+      expect(ReplayJob.fromJson(job({})).encodeArgs(), [
+        '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', '8x4', '-r', '20', '-i', '-',
+        '-c:v', 'e', '-b:v', '8M', '-pix_fmt', 'yuv420p', 'o',
+      ]);
+    });
+
+    test("Linux's VA-API encoder gets its device and its frames uploaded to the graphics card", () {
+      final args = ReplayJob.fromJson(job({'encoder': 'h264_vaapi', 'encoder_device': '/dev/dri/renderD128'})).encodeArgs();
+      expect(args, [
+        '-v', 'error', '-y', '-vaapi_device', '/dev/dri/renderD128', '-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', '8x4',
+        '-r', '20', '-i', '-', '-vf', 'format=nv12,hwupload', '-c:v', 'h264_vaapi', '-b:v', '8M', 'o',
+      ]);
+    });
+
     test('wide camera files are optional', () {
       expect(ReplayJob.fromJson(job({})).wideInputs, isNull);
       expect(ReplayJob.fromJson(job({'wide_inputs': ['w']})).wideInputs, ['w']);

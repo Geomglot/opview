@@ -1,7 +1,8 @@
 name: Replay for Linux
 
 # Builds OPRivView Replay for Linux (x86_64) on the oldest Ubuntu GitHub offers, so the result runs on that and on later
-# distributions, and checks it renders a clip without a window. ffmpeg, the server and the AppImage come in later steps.
+# distributions, with its own small ffmpeg, and checks it renders a clip without a window. The server and the AppImage
+# come in later steps.
 # On a push the build is kept as a workflow artifact.
 on:
   push:
@@ -21,7 +22,34 @@ jobs:
       - name: Build tools and GTK
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev libva2 libva-drm2
+
+      # ffmpeg takes a while to build and only changes with its build script, so it is kept between runs
+      - name: ffmpeg from the cache
+        id: ffmpeg-cache
+        uses: actions/cache@v5
+        with:
+          path: replay/build/ffmpeg-linux
+          key: ffmpeg-linux-${{ hashFiles('replay/packaging/build_ffmpeg_linux.sh') }}
+
+      - name: ffmpeg (minimal LGPL build)
+        if: steps.ffmpeg-cache.outputs.cache-hit != 'true'
+        working-directory: replay
+        run: |
+          sudo apt-get install -y build-essential nasm libva-dev
+          bash packaging/build_ffmpeg_linux.sh build/ffmpeg-linux
+
+      # it needs only what every desktop Linux has, and holds the graphics card encoders
+      - name: The app's ffmpeg
+        working-directory: replay/build/ffmpeg-linux
+        run: |
+          ls -l
+          ldd ffmpeg | tee ldd.txt
+          if grep -q 'not found' ldd.txt; then echo "::error::ffmpeg needs a library this computer lacks"; exit 1; fi
+          extra=$(grep -oE '^\s*lib[^ ]+' ldd.txt | tr -d '\t ' | grep -vE '^(libc|libm|libva|libva-drm|libdrm|libpthread|libdl|librt|libz|ld-linux-x86-64)\.so' || true)
+          if [ -n "$extra" ]; then echo "::error::ffmpeg needs more than the C library and libva: $extra"; exit 1; fi
+          ./ffmpeg -hide_banner -encoders | grep -E 'h264_(nvenc|vaapi)'
+          [ "$(./ffmpeg -hide_banner -encoders | grep -cE 'h264_(nvenc|vaapi)')" = 2 ]
 
       - uses: subosito/flutter-action@v2
         with:
@@ -42,8 +70,10 @@ jobs:
           if grep -q 'not found' ldd.txt; then echo "::error::the app needs a library this computer lacks"; exit 1; fi
 
       # the server runs the app with no window to render a clip; this does the same on a virtual screen with the
-      # software OpenGL most Linux virtual machines have. The full ffmpeg from Ubuntu makes the test video and encodes
-      # (libx264); it serves this check only and is never put in the app
+      # software OpenGL most Linux virtual machines have. The encoder is chosen as the server chooses it: GitHub's
+      # machines have no graphics card, so the app's ffmpeg has no encoder there and the computer's own full ffmpeg
+      # (Ubuntu's, with x264) encodes instead, as on a tester's virtual machine. It also makes the test video; it serves
+      # this check only and is never put in the app
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
@@ -59,7 +89,7 @@ jobs:
         working-directory: replay
         run: |
           xvfb-run -a -s "-screen 0 1920x1080x24" \
-            python tools/render_check.py --app ../build/linux/x64/release/bundle/oprivview-replay --ffmpeg /usr/bin/ffmpeg --frames 60
+            python tools/render_check.py --app ../build/linux/x64/release/bundle/oprivview-replay --ffmpeg /usr/bin/ffmpeg               --bundled build/ffmpeg-linux --frames 30
 
       - uses: actions/upload-artifact@v7
         with:

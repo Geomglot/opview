@@ -88,10 +88,7 @@ class _ReplayRenderState extends State<ReplayRender> {
   Future<void> _run() async {
     final job = widget.job;
     final feed = await ReplayFeed.open(job, _uiState, _adapter);
-    final encoder = _encoder = await Process.start(job.ffmpeg, [
-      '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', '${job.width}x${job.height}',
-      '-r', '${job.fps}', '-i', '-', '-c:v', job.encoder, '-b:v', job.bitrate, '-pix_fmt', 'yuv420p', job.output,
-    ]);
+    final encoder = _encoder = await Process.start(job.ffmpeg, job.encodeArgs());
     encoder.stderr.listen(stderr.add);
 
     var done = 0;
