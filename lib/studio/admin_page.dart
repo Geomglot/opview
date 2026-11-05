@@ -311,13 +311,14 @@ class _AdminPageState extends State<AdminPage> {
       child: Row(children: [
         Expanded(child: Text(label)),
         SizedBox(
-            width: 90,
+            width: 64,
             child: TextField(
                 controller: c,
                 keyboardType: TextInputType.number,
                 textAlign: TextAlign.end,
                 onSubmitted: (_) => _saveAsk(),
-                decoration: const InputDecoration(isDense: true, suffixText: 'segments'))),
+                decoration: const InputDecoration(isDense: true))),
+        const Padding(padding: EdgeInsets.only(left: 8), child: Text('segments')),
       ]));
 
   Widget _askSection() => _section('Long fetches', [

@@ -102,6 +102,28 @@ void main() {
       });
     });
 
+    test('and the form\'s changes reach the preview, the other way', () {
+      final s = AppSettings();
+      var told = 0;
+      s.addListener(() => told++);
+      final options = {
+        'view': 'detailed',
+        'bottom_bar': 'off',
+        'collapsed_panels': ['lead'],
+        'clock': 'h24',
+        'speed_limit': 'always',
+        'road_name': 'hide',
+        'resolution': '1080p', // not shown on the screen: left alone
+      };
+      expect(applyOptions(s, options), isTrue);
+      expect(told, 1);
+      expect(optionsFrom(s), {...options}..remove('resolution'));
+      expect(applyOptions(s, options), isFalse, reason: 'nothing new, so the screen is not redrawn');
+      expect(told, 1);
+      applyOptions(s, {'bottom_bar': null});
+      expect(s.bottomBarFor(OnroadLayout.detailed), BottomBar.torque, reason: 'App default is the view\'s own bar');
+    });
+
     test('leave the app default as the app default', () {
       expect(optionsFrom(AppSettings())['bottom_bar'], isNull);
     });

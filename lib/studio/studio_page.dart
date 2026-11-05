@@ -601,6 +601,7 @@ class _StudioPageState extends State<StudioPage> {
   Widget _previewPlayer() => PreviewPlayer(
         key: _preview,
         jobFile: _previewFile!,
+        options: _options,
         onOptionsChanged: (o) => setState(() => _options.addAll(o)),
         seek: _sidecar!.api.seek,
         fullScreen: _fullScreen,

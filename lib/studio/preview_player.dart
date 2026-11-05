@@ -44,8 +44,49 @@ Map<String, Object?> optionsFrom(AppSettings s) {
   };
 }
 
+/// the option form's choices put onto the screen's settings, the other way from [optionsFrom]; options the screen does
+/// not show, or values it does not know, are left as they are. True when anything changed.
+bool applyOptions(AppSettings s, Map<String, Object?> options) {
+  T? byName<T extends Enum>(List<T> values, Object? name) {
+    for (final v in values) {
+      if (v.name == name) return v;
+    }
+    return null;
+  }
+
+  final before = optionsFrom(s).toString();
+  final view = byName(OnroadLayout.values, options['view']);
+  if (view != null) s.layout = view;
+  if (options.containsKey('bottom_bar')) {
+    final bar = options['bottom_bar'];
+    // "App default" is the view's own bar
+    final chosen = bar == null ? defaultBottomBars[s.layout]! : byName(BottomBar.values, bar);
+    if (chosen != null) s.bottomBars[s.layout] = chosen;
+  }
+  final panels = options['collapsed_panels'];
+  if (panels is List) {
+    s.collapsedPanels
+      ..clear()
+      ..addAll(panels.cast<String>());
+  }
+  final clock = byName(ClockMode.values, options['clock']);
+  if (clock != null) s.clockMode = clock;
+  final limit = byName(SpeedLimitDisplay.values, options['speed_limit']);
+  if (limit != null) s.speedLimitDisplay = limit;
+  final road = options['road_name'];
+  if (road == 'show' || road == 'hide') s.showRoadName = road == 'show';
+  if (optionsFrom(s).toString() == before) return false;
+  // the settings are set directly, as for a render, so as not to touch saved preferences; the screen is told here
+  // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
+  s.notifyListeners();
+  return true;
+}
+
 class PreviewPlayer extends StatefulWidget {
   final String jobFile;
+
+  /// the window's option form; a change made there shows on the preview as it plays
+  final Map<String, Object?>? options;
 
   /// told of each change made on the preview itself: a swipe, a tap, or the app's settings screen
   final void Function(Map<String, Object?> options)? onOptionsChanged;
@@ -57,7 +98,13 @@ class PreviewPlayer extends StatefulWidget {
   final bool fullScreen;
   final VoidCallback? onToggleFullScreen;
   const PreviewPlayer(
-      {super.key, required this.jobFile, this.onOptionsChanged, this.seek, this.fullScreen = false, this.onToggleFullScreen});
+      {super.key,
+      required this.jobFile,
+      this.options,
+      this.onOptionsChanged,
+      this.seek,
+      this.fullScreen = false,
+      this.onToggleFullScreen});
   @override
   State<PreviewPlayer> createState() => _PreviewPlayerState();
 }
@@ -105,7 +152,24 @@ class _PreviewPlayerState extends State<PreviewPlayer> {
 
   DateTime _now() => _time;
 
-  void _settingsChanged() => widget.onOptionsChanged?.call(optionsFrom(_settings));
+  bool _applying = false; // the form's own change coming back; it need not be told of it
+
+  void _settingsChanged() {
+    if (!_applying) widget.onOptionsChanged?.call(optionsFrom(_settings));
+  }
+
+  @override
+  void didUpdateWidget(PreviewPlayer old) {
+    super.didUpdateWidget(old);
+    final options = widget.options;
+    if (options == null) return;
+    _applying = true;
+    try {
+      applyOptions(_settings, options);
+    } finally {
+      _applying = false;
+    }
+  }
 
   void _dropSpare() {
     _spare?.picture.dispose();
