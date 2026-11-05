@@ -4,8 +4,9 @@ OPRivView Replay redraws a drive as it looked on the OPRivView screen: the camer
 and panels on top. You can watch it in the app and save any part of it as an MP4. It draws from the drive's logs, using the
 same screen layouts as the OPRivView app, so you can also choose a different view from the one you had in the car.
 
-The app runs on Macs and on Windows PCs and works the same way on both. Where they differ, this guide says so. To install
-it, see the install guide for the [Mac](INSTALL.md) or for [Windows](INSTALL-WINDOWS.md). This is an early test version.
+The app runs on Macs, Windows PCs and Linux PCs and works the same way on all of them. Where they differ, this guide
+says so. To install it, see the install guide for the [Mac](INSTALL.md), [Windows](INSTALL-WINDOWS.md) or
+[Linux](INSTALL-LINUX.md). This is an early test version.
 
 The **?** button above the drive list opens this guide and the install guide.
 
@@ -31,7 +32,9 @@ The gear above the drive list opens **App settings**, where you set up the first
 2. Press **Test and use**.
 3. If this computer has no SSH key, press **Create a key**. On Windows the key goes in `C:\Users\<you>\.ssh`, and the app
    uses Windows' own SSH. If Windows reports that it cannot find the file specified, add **OpenSSH Client** as the
-   [Windows install guide](INSTALL-WINDOWS.md#reaching-your-comma) describes.
+   [Windows install guide](INSTALL-WINDOWS.md#reaching-your-comma) describes. On Linux it goes in `~/.ssh`, and the app
+   uses your computer's own SSH; the [Linux install guide](INSTALL-LINUX.md#reaching-your-comma) says what to install if
+   it is missing.
 4. If the comma does not let your computer in, copy the key and add it at github.com under Settings, SSH and GPG keys. **Open GitHub
    SSH keys** takes you there. Then on the comma open Settings, Developer, turn on Enable SSH, and enter your GitHub username
    under SSH Keys. Press **Test and use** again.
@@ -134,11 +137,13 @@ Press **Preview** to play the range in the window.
 
 Press **Render MP4**. Progress stays in the window, and you can carry on using your computer. Rendering takes longer than
 the drive itself: about 2 minutes for each minute of drive on the Mac it was tested on. Windows has not been timed on a real
-PC yet; in a virtual machine with no graphics card it took about 3.5 minutes per minute of drive.
+PC yet; in a virtual machine with no graphics card it took about 3.5 minutes per minute of drive. Linux has not been
+timed on a real PC yet either; with no graphics card, as in most virtual machines, it is much slower, because the
+processor does the drawing.
 
 - While it renders, the preview area shows the frame it has reached, updated about once a second, and the line under the
   progress bar says which segment and how far into it.
-- Clips go to your Movies folder on a Mac, or your Videos folder on Windows, unless you pick a different folder in App
+- Clips go to your Movies folder on a Mac, or your Videos folder on Windows and Linux, unless you pick a different folder in App
   settings, or an **Output file** with **Choose...**.
 - **Cancel** asks what to do with the part made so far, and shows how much that is:
   - **Save what's done** finishes the clip where the render has got to, and saves it with "(partial)" added to its
@@ -149,7 +154,8 @@ PC yet; in a virtual machine with no graphics card it took about 3.5 minutes per
   Cancel before the first frames are made, or during a preview, just stops.
 - Otherwise a clip is only saved once it is complete.
 - The app does not replace an earlier clip when it picks the name itself. If you choose or type a file name, it does.
-- When the render is done, use **Play** to open the clip, or **Show in Finder** (**Show in Explorer** on Windows).
+- When the render is done, use **Play** to open the clip, or **Show in Finder** (**Show in Explorer** on Windows, **Show
+  in file manager** on Linux).
 
 ## Stored drives
 
@@ -167,6 +173,9 @@ while a render or preview is running.
 - On a Mac, Update downloads the new version, closes the app, puts the new version in place of the old one and opens
   it again. If the app cannot change the folder it is in, it shows the downloaded disk image in the Finder instead, to
   drag the new app over the old one. The [install guide](INSTALL.md#updating) has more.
+- On Linux, Update downloads the new AppImage, puts it in place of the one you opened (keeping its name, so shortcuts
+  still work), and opens it. If the app cannot change the folder the AppImage is in, it shows the download instead. The
+  [Linux install guide](INSTALL-LINUX.md#updating) has more.
 
 Test versions are offered as well as final ones unless you turn off **Include test versions** under Updates in App
 settings. Your settings and stored drives are kept. The **?** menu also shows which version you have.
@@ -180,3 +189,4 @@ settings. Your settings and stored drives are kept. The **?** menu also shows wh
 - The Automatic wide camera rule has not yet been checked on a real experimental mode drive.
 - The OPRivView app takes a second or two to change cameras while driving. The replay changes at once.
 - Public drives from other forks of openpilot may not decode.
+- The Linux version is new and has not yet been tried on a real Linux PC with a graphics card.

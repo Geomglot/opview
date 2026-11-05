@@ -3,9 +3,10 @@
 Renders a drive as an MP4 of the OPRivView screen. The real onroad layouts draw the drive, fed the same messages
 the comma sent the app live, so the result looks as it did in the car.
 
-There is a Mac app and a Windows app, built from the same code. To use one, see the install guide for the
-[Mac](docs/INSTALL.md) or [Windows](docs/INSTALL-WINDOWS.md), and the [user guide](docs/USER_GUIDE.md). The rest of this
-page is for working on the code. Building for Windows is described [below](#building-for-windows).
+There is a Mac app, a Windows app and a Linux app, built from the same code. To use one, see the install guide for the
+[Mac](docs/INSTALL.md), [Windows](docs/INSTALL-WINDOWS.md) or [Linux](docs/INSTALL-LINUX.md), and the
+[user guide](docs/USER_GUIDE.md). The rest of this page is for working on the code. Building for Windows and for Linux is
+described [below](#building-for-windows).
 
 OPRivView Replay is an independent project. It is not made or endorsed by comma.ai. It uses your own comma Connect sign-in,
 and for reaching the comma away from home, your own comma prime subscription.
@@ -112,16 +113,52 @@ Limits of the Windows release:
 - It is not code signed, so SmartScreen stops the installer the first time ("More info", then "Run anyway").
 - It has so far been tested only in a virtual machine with no graphics card.
 
+## Building for Linux
+
+GitHub builds the Linux AppImage on every push to `rivian-support` that touches the replay
+(`.github/workflows/replay-linux.yml`), on Ubuntu 22.04 so it runs there and on later distributions, and keeps it as a
+workflow artifact. It then checks the AppImage itself: its server reaches comma Connect, the app inside renders a clip
+without a window (`tools/render_check.py`, on a virtual screen with software OpenGL), and the AppImage opens and stops its
+server when closed. To build it on Ubuntu 22.04 or later instead, with Flutter's Linux tools
+(`clang cmake ninja-build pkg-config libgtk-3-dev`), the replay `.venv` set up as above, and ffmpeg built first:
+
+```sh
+packaging/build_ffmpeg_linux.sh build/ffmpeg-linux   # needs build-essential nasm pkg-config libva-dev
+packaging/build_linux.sh
+```
+
+It leaves `build/AppDir` and `dist/OPRivView-Replay-<version>-Linux-x86_64.AppImage`. The app's folder is
+`usr/lib/oprivview-replay` inside it, with the server and ffmpeg beside the program as on Windows; `AppRun` starts it.
+appimagetool (downloaded the first time) makes it with the static AppImage runtime, which needs no libfuse2.
+
+ffmpeg for Linux is built from the same official source by `packaging/build_ffmpeg_linux.sh`, with the same short list of
+parts. Encoding goes through NVIDIA's NVENC or, for Intel and AMD, VA-API on each `/dev/dri/renderD*` device in turn
+(the renderer uploads its frames to the graphics card for it). Linux has no encoder of its own, so where neither works
+the server uses the computer's own full ffmpeg and its x264, if there is one, and otherwise says how to install it
+(`render.encoding`). The app's ffmpeg is LGPL and needs only the C library and libva.
+
+On Linux the app keeps its settings in `~/.config/OPRivViewReplay/settings.json`, stored drives in
+`~/.cache/OPRivViewReplay`, and the preview's stall log in `~/.local/state/OPRivViewReplay/logs` (each following the XDG
+variables). It saves clips in the desktop's Videos folder (`xdg-user-dir VIDEOS`), copies from the comma with `rsync` or,
+if it is not installed, `scp`, and lists network addresses with `ip`. Its window code (`linux/runner/my_application.cc`)
+draws without showing a window when the server starts it to render, and opens GTK's own save and folder pickers. The
+Linux behaviour is pinned by `tests/test_linux.py`.
+
+Limits of the Linux release:
+- 64-bit PCs (x86_64) only.
+- It has so far been tested only on GitHub's build machines, with no graphics card.
+
 ## Versions and releases
 
 `replay/VERSION` holds the version being worked towards, such as `0.1.2`. It is the replay app's own version, separate
-from the Android app's in `pubspec.yaml`. Local builds (`make dmg`, `build_windows.ps1`) call themselves `<VERSION>-dev`.
+from the Android app's in `pubspec.yaml`. Local builds (`make dmg`, `build_windows.ps1`, `build_linux.sh`) call
+themselves `<VERSION>-dev`.
 The app shows its version in the **?** menu, and a release build opens the guides of its own tag.
 
 A release is made by pushing a tag, `replay-v<VERSION>` or, for a test version, `replay-v<VERSION>-test.<n>`.
-`.github/workflows/replay-release.yml` then checks the tag matches `replay/VERSION`, builds all three files with the
-release's version (`replay-windows.yml` and `replay-mac.yml`, for Apple silicon on `macos-latest` and for Intel on
-`macos-15-intel`), and puts them with `SHA256SUMS` in a **draft** release, pre-release for a test version, with notes
+`.github/workflows/replay-release.yml` then checks the tag matches `replay/VERSION`, builds all four files with the
+release's version (`replay-windows.yml`, `replay-linux.yml` and `replay-mac.yml`, for Apple silicon on `macos-latest`
+and for Intel on `macos-15-intel`), and puts them with `SHA256SUMS` in a **draft** release, pre-release for a test version, with notes
 listing the commits since the previous replay tag. Nothing is public until the draft is published by hand.
 
 - GitHub's Mac runners are sometimes too busy to start a job. `replay-release-retry.yml` then re-runs the failed jobs, up
@@ -132,9 +169,11 @@ listing the commits since the previous replay tag. Nothing is public until the d
 
 The app's updater (`lib/studio/replay_updater.dart`) reads the 20 newest releases, keeps `replay-v*` tags whose version
 parses (`0.1.2`, `0.1.2-test.3`; tests come before the final version), skips test versions when **Include test versions**
-is off (`test_versions` in the settings), and picks the file named for this computer (`-Windows.exe`, or `-macOS-ARM.dmg`
-/ `-macOS-Intel.dmg` by `sysctl hw.optional.arm64`). The download is checked against GitHub's SHA-256 of the file, or
-`SHA256SUMS`. Windows runs the installer with `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /RELAUNCH` and quits. The Mac
+is off (`test_versions` in the settings), and picks the file named for this computer (`-Windows.exe`,
+`-Linux-x86_64.AppImage`, or `-macOS-ARM.dmg` / `-macOS-Intel.dmg` by `sysctl hw.optional.arm64`). The download is checked against GitHub's SHA-256 of the file, or
+`SHA256SUMS`. Windows runs the installer with `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /RELAUNCH` and quits. Linux
+copies the new AppImage beside the running one (named in `$APPIMAGE`), makes it runnable, renames it over the old one
+(keeping the old name, so shortcuts still work), opens it and quits. The Mac
 mounts the disk image, copies the app beside the installed one as a hidden `.<name>-update.app`, checks the server's and
 ffmpeg's arch and the signature, and starts a detached script (`macSwapScript`) that waits for everything running from
 the old bundle to stop, swaps the two, opens the new one and deletes the old only once the new one is running (otherwise

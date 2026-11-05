@@ -30,13 +30,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      # what building needs, and for the checks: a virtual screen with software OpenGL, FUSE to open an AppImage, and
+      # what building needs, and for the checks: a virtual screen with software OpenGL and
       # Ubuntu's full ffmpeg for the tests' sample videos (it serves the checks only and is never put in the app)
       - name: Build tools, GTK and what the checks use
         run: |
           sudo apt-get update
           sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev \
-            libva2 libva-drm2 xvfb xauth libgl1-mesa-dri libegl1 fuse ffmpeg
+            libva2 libva-drm2 xvfb xauth libgl1-mesa-dri libegl1 ffmpeg
 
       # ffmpeg takes a while to build and only changes with its build script, so it is kept between runs
       - name: ffmpeg from the cache
@@ -139,7 +139,8 @@ jobs:
           xvfb-run -a -s "-screen 0 1920x1080x24" \
             .venv/bin/python tools/render_check.py --app "$app/oprivview-replay" --ffmpeg /usr/bin/ffmpeg --bundled "$app/ffmpeg" --frames 30
 
-      # opened as a tester opens it: the AppImage itself, which mounts with FUSE, shows the window and starts its server;
+      # opened as a tester opens it: the AppImage itself, which mounts with the fuse3 GitHub's Ubuntu has (as current
+      # desktops have; libfuse2 is not installed), shows the window and starts its server;
       # closing it must stop the server too
       - name: The AppImage opens and stays open
         working-directory: replay

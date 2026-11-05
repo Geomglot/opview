@@ -1,7 +1,7 @@
 name: Replay release
 
 # Pushing a tag replay-v<version> or replay-v<version>-test.<n>, where <version> is replay/VERSION, builds OPRivView
-# Replay for Windows, Apple silicon Macs and Intel Macs, with the same checks as on every push, and puts the three files
+# Replay for Windows, Apple silicon Macs, Intel Macs and Linux, with the same checks as on every push, and puts the four files
 # and SHA256SUMS in a DRAFT release. Nothing is public until the owner reviews the draft and presses Publish.
 # GitHub's Mac runners sometimes never start a job; replay-release-retry.yml then re-runs the failed jobs, and this
 # workflow is written so a re-run adds to the same draft (--clobber) rather than making another.
@@ -49,6 +49,13 @@ jobs:
       version: ${{ needs.version.outputs.version }}
       build_number: ${{ github.run_number }}
 
+  linux:
+    needs: version
+    uses: ./.github/workflows/replay-linux.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+      build_number: ${{ github.run_number }}
+
   mac-arm:
     needs: version
     uses: ./.github/workflows/replay-mac.yml
@@ -69,7 +76,7 @@ jobs:
 
   # runs even when a build failed, so the draft holds whatever was built; a re-run of the failed build runs this again
   draft:
-    needs: [version, windows, mac-arm, mac-intel]
+    needs: [version, windows, mac-arm, mac-intel, linux]
     if: always() && needs.version.result == 'success'
     runs-on: ubuntu-latest
     permissions:
@@ -94,7 +101,8 @@ jobs:
         run: |
           shopt -s nullglob
           cd files
-          want=("OPRivView-Replay-$VERSION-Windows.exe" "OPRivView-Replay-$VERSION-macOS-ARM.dmg" "OPRivView-Replay-$VERSION-macOS-Intel.dmg")
+          want=("OPRivView-Replay-$VERSION-Windows.exe" "OPRivView-Replay-$VERSION-macOS-ARM.dmg" "OPRivView-Replay-$VERSION-macOS-Intel.dmg"
+                "OPRivView-Replay-$VERSION-Linux-x86_64.AppImage")
           have=(); missing=()
           for f in "${want[@]}"; do if [ -f "$f" ]; then have+=("$f"); else missing+=("$f"); fi; done
           ls -l
@@ -120,15 +128,16 @@ jobs:
               echo "| \`OPRivView-Replay-$VERSION-macOS-ARM.dmg\` | Apple silicon Macs (M1 and later), macOS 14 or later |"
               echo "| \`OPRivView-Replay-$VERSION-macOS-Intel.dmg\` | Intel Macs, macOS 14 or later |"
               echo "| \`OPRivView-Replay-$VERSION-Windows.exe\` | 64-bit Windows 10 or 11 |"
+              echo "| \`OPRivView-Replay-$VERSION-Linux-x86_64.AppImage\` | 64-bit Linux on a PC: Ubuntu 22.04 or later, Debian 12, Fedora 36 or later, Mint 21 or later |"
               echo
-              echo "The app is not signed by Apple or Microsoft, so the first time you open it, macOS or Windows SmartScreen asks you to allow it. The install guides have the steps: [Mac]($docs/INSTALL.md), [Windows]($docs/INSTALL-WINDOWS.md). How to use it: [user guide]($docs/USER_GUIDE.md)."
+              echo "The app is not signed by Apple or Microsoft, so the first time you open it, macOS or Windows SmartScreen asks you to allow it. On Linux, the AppImage is made runnable once. The install guides have the steps: [Mac]($docs/INSTALL.md), [Windows]($docs/INSTALL-WINDOWS.md), [Linux]($docs/INSTALL-LINUX.md). How to use it: [user guide]($docs/USER_GUIDE.md)."
               echo
               echo "Checksums are in \`SHA256SUMS\`."
               echo
               echo "## What's new"
               echo
               if [ -n "$previous" ]; then
-                git -C .. log --no-merges --format='- %s' "$previous..$TAG" -- replay lib/studio lib/replay lib/main_replay.dart macos windows
+                git -C .. log --no-merges --format='- %s' "$previous..$TAG" -- replay lib/studio lib/replay lib/main_replay.dart macos windows linux
                 echo
                 echo "Since [$previous](https://github.com/Geomglot/opview/releases/tag/$previous)."
               else
