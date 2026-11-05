@@ -60,6 +60,17 @@ void main() {
           'OPRivView-Replay-0.1.2-macOS-Intel.dmg');
     });
 
+    test('a Linux computer is offered only a release with an AppImage', () {
+      final withLinux = [
+        release('replay-v0.1.3-test.1', ['OPRivView-Replay-0.1.3-test.1-Windows.exe'], prerelease: true),
+        release('replay-v0.1.2-test.3', ['OPRivView-Replay-0.1.2-test.3-Linux-x86_64.AppImage'], prerelease: true),
+        ...list,
+      ];
+      expect(newestReplayRelease(withLinux, suffix: '-Linux-x86_64.AppImage', includeTests: true)!.fileName,
+          'OPRivView-Replay-0.1.2-test.3-Linux-x86_64.AppImage');
+      expect(newestReplayRelease(withLinux, suffix: '-Linux-x86_64.AppImage', includeTests: false), isNull);
+    });
+
     test('test versions only when asked for', () {
       expect(newestReplayRelease(list, suffix: '-macOS-ARM.dmg', includeTests: false), isNull);
       expect(newestReplayRelease(list, suffix: '-Windows.exe', includeTests: false)!.version.toString(), '0.1.2');
@@ -168,6 +179,18 @@ void main() {
           contains('temporary place'));
       expect(macInstallRefusal('/Applications/OPRivView Replay.app', writable: false), contains('cannot change'));
       expect(macInstallRefusal('/usr/local/bin', writable: true), isNotNull);
+    });
+  });
+
+  group('Linux install', () {
+    test('an AppImage in a folder the user can change replaces itself', () {
+      expect(linuxInstallRefusal('/home/me/Applications/OPRivView-Replay-0.1.2-Linux-x86_64.AppImage', writable: true), isNull);
+    });
+
+    test('not run from an AppImage, or in a folder the user cannot change, it does not', () {
+      expect(linuxInstallRefusal(null, writable: true), contains('not running from its AppImage'));
+      expect(linuxInstallRefusal('', writable: true), contains('not running from its AppImage'));
+      expect(linuxInstallRefusal('/opt/OPRivView-Replay.AppImage', writable: false), contains('cannot change'));
     });
   });
 }

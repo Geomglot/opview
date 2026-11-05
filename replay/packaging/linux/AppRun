@@ -1,0 +1,4 @@
+#!/bin/sh
+# The AppImage runs this. The app is in usr/lib/oprivview-replay, with its libraries, server and ffmpeg beside it.
+here=$(dirname "$(readlink -f "$0")")
+exec "$here/usr/lib/oprivview-replay/oprivview-replay" "$@"

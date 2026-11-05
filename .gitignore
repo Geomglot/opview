@@ -61,6 +61,7 @@ replay/.venv/
 __pycache__/
 replay/dist/
 replay/build/
+replay/squashfs-root/
 
 # handoff notes between sessions; they stay on this machine
 RESUME*.md

@@ -1,9 +1,10 @@
-// In-app updates for OPRivView Replay on the Mac and Windows: find the newest replay release on GitHub that has a file
+// In-app updates for OPRivView Replay on the Mac, Windows and Linux: find the newest replay release on GitHub that has a file
 // for this computer, offer it, download it, check it against GitHub's SHA-256, and install it.
 // Separate from the Android app's updater (lib/services/updater.dart): replay releases are tagged replay-v<version>,
-// have a .dmg or .exe rather than an APK, and order their test versions before the final one.
+// have a .dmg, .exe or .AppImage rather than an APK, and order their test versions before the final one.
 // Windows: the installer (replay/packaging/windows-installer.iss) runs silently, closes this app and reopens it.
 // Mac: the new app is copied out of the disk image and checked, and a script swaps it in once this app has quit.
+// Linux: the new AppImage takes the place of the one running, and is opened.
 
 import 'dart:async';
 import 'dart:convert';
@@ -54,6 +55,7 @@ class ReplayVersion implements Comparable<ReplayVersion> {
 /// the end of the release file's name for this computer: what replay-release.yml uploads
 Future<String> assetSuffixForThisComputer() async {
   if (Platform.isWindows) return '-Windows.exe';
+  if (Platform.isLinux) return '-Linux-x86_64.AppImage';
   // right even when this app runs under Rosetta, unlike asking which chip the app itself is built for
   final r = await Process.run('/usr/sbin/sysctl', ['-n', 'hw.optional.arm64']);
   return (r.stdout as String).trim() == '1' ? '-macOS-ARM.dmg' : '-macOS-Intel.dmg';
@@ -273,12 +275,14 @@ void Function() quitForUpdate = () => exit(0);
 /// Windows: the installer, silently, which closes this app (and its server), replaces it, and opens the new version.
 /// Mac: the new app is copied out of the disk image beside this one and checked, then a small script swaps the two once
 /// this app has quit and opens the new one. Where that cannot work, the disk image is shown in the Finder instead.
+/// Linux: the new AppImage replaces the running one under the same name, so shortcuts to it keep working, and is opened.
 Future<String> installForThisComputer(File file) async {
   if (Platform.isWindows) {
     await Process.start(file.path, ['/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/RELAUNCH'], mode: ProcessStartMode.detached);
     quitForUpdate();
     return 'Installing'; // not reached once the app has quit
   }
+  if (Platform.isLinux) return _installLinux(file);
   final app = File(Platform.resolvedExecutable).parent.parent.parent.path; // .../OPRivView Replay.app
   final writable = (await Process.run('/bin/test', ['-w', File(app).parent.path])).exitCode == 0;
   final refusal = macInstallRefusal(app, writable: writable);
@@ -307,6 +311,39 @@ String? macInstallRefusal(String app, {required bool writable}) {
   }
   if (!writable) return 'This Mac account cannot change the folder the app is in';
   return null;
+}
+
+/// the AppImage this app is running from (the AppImage itself says, in APPIMAGE) or why it cannot replace itself
+String? linuxInstallRefusal(String? appImage, {required bool writable}) {
+  if (appImage == null || appImage.isEmpty) return 'This copy of the app is not running from its AppImage';
+  if (!writable) return 'This account cannot change the folder the AppImage is in';
+  return null;
+}
+
+/// a running program's file can be replaced on Linux: the program keeps the old one open until it quits. The new file
+/// is copied beside the old one first (the download may be on another disk, where a rename cannot reach) and made
+/// runnable, then renamed over it in one step, so the AppImage is never half there.
+Future<String> _installLinux(File file) async {
+  final current = Platform.environment['APPIMAGE'];
+  final writable = current != null && (await Process.run('test', ['-w', File(current).parent.path])).exitCode == 0;
+  final refusal = linuxInstallRefusal(current, writable: writable);
+  if (refusal != null) {
+    await showInFileManager(file.path);
+    return '$refusal, so it cannot update itself. The new version is downloaded: put ${file.uri.pathSegments.last} in its '
+        'place, quit this app, and open the new one.';
+  }
+  final target = File(current!);
+  final staged = File('${target.parent.path}/.${file.uri.pathSegments.last}.new');
+  await file.copy(staged.path);
+  final chmod = await Process.run('chmod', ['755', staged.path]);
+  if (chmod.exitCode != 0) {
+    await staged.delete();
+    return 'Could not make the new version runnable: ${'${chmod.stderr}'.trim()}';
+  }
+  await staged.rename(target.path);
+  await Process.start(target.path, const [], mode: ProcessStartMode.detached);
+  quitForUpdate();
+  return 'Installing'; // not reached once the app has quit
 }
 
 Future<String> _byHand(File dmg, String why) async {

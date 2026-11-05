@@ -44,6 +44,14 @@ if sys.platform == "win32":  # the same, with where things are in the Windows fo
           .replace("Contents/Frameworks/App.framework/Resources/flutter_assets/NOTICES.Z", r"data\flutter_assets\NOTICES.Z")
           .replace("Python packages and Python itself\n  Below.", "Python packages and Python itself\n  Below. "
                    "Windows has no time zone database of its own, so the server carries the tzdata package's."))
+elif sys.platform.startswith("linux"):  # the same, with where things are in the AppImage
+  HEAD = (HEAD.replace("replay/packaging/build_ffmpeg.sh", "replay/packaging/build_ffmpeg_linux.sh")
+          .replace("""Contents/Resources/ffmpeg with your own build; run "codesign --force --deep -s -" on the app afterwards.""",
+                   "usr/lib/oprivview-replay/ffmpeg with your own build: unpack the AppImage (run it with\n"
+                   "  --appimage-extract), replace them, and run AppRun in the unpacked folder. Its NVENC support uses NVIDIA's\n"
+                   "  nv-codec-headers (MIT licence, https://github.com/FFmpeg/nv-codec-headers).")
+          .replace("Contents/Frameworks/App.framework/Resources/flutter_assets/NOTICES.Z",
+                   "usr/lib/oprivview-replay/data/flutter_assets/NOTICES.Z inside the AppImage"))
 
 
 def section(title: str, body: str) -> str:

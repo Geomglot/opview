@@ -1,9 +1,11 @@
 name: Replay for Linux
 
-# Builds OPRivView Replay for Linux (x86_64) on the oldest Ubuntu GitHub offers, so the result runs on that and on later
-# distributions, with its own small ffmpeg, and checks it renders a clip without a window. The server and the AppImage
-# come in later steps.
-# On a push the build is kept as a workflow artifact.
+# Builds OPRivView Replay for Linux (x86_64) as one AppImage, with no dependence on any one computer: ffmpeg from source,
+# the server (PyInstaller) and the app (Flutter), put together by replay/packaging/build_linux.sh. It builds on the oldest
+# Ubuntu GitHub offers, so the result runs on that and on later distributions. It then checks the AppImage as a tester
+# would use it: its server starts and reaches comma Connect, it renders a clip without a window, and it opens.
+# On a push the AppImage is a "-dev" build kept as a workflow artifact; replay-release.yml calls this with the release's
+# version and makes a draft release from the artifact.
 on:
   push:
     branches: [rivian-support]
@@ -12,6 +14,15 @@ on:
     branches: [rivian-support]
     paths: ['replay/**', 'linux/**', 'lib/**', 'pubspec.*', '.github/workflows/replay-linux.yml']
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      version:
+        description: the full version, e.g. 0.1.2-test.3; empty for a -dev build
+        type: string
+        default: ''
+      build_number:
+        type: string
+        default: '1'
 
 jobs:
   linux:
@@ -19,10 +30,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Build tools and GTK
+      # what building needs, and for the checks: a virtual screen with software OpenGL, FUSE to open an AppImage, and
+      # Ubuntu's full ffmpeg for the tests' sample videos (it serves the checks only and is never put in the app)
+      - name: Build tools, GTK and what the checks use
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev libva2 libva-drm2
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev \
+            libva2 libva-drm2 xvfb xauth libgl1-mesa-dri libegl1 fuse ffmpeg
 
       # ffmpeg takes a while to build and only changes with its build script, so it is kept between runs
       - name: ffmpeg from the cache
@@ -43,13 +57,27 @@ jobs:
       - name: The app's ffmpeg
         working-directory: replay/build/ffmpeg-linux
         run: |
-          ls -l
           ldd ffmpeg | tee ldd.txt
           if grep -q 'not found' ldd.txt; then echo "::error::ffmpeg needs a library this computer lacks"; exit 1; fi
           extra=$(grep -oE '^\s*lib[^ ]+' ldd.txt | tr -d '\t ' | grep -vE '^(libc|libm|libva|libva-drm|libdrm|libpthread|libdl|librt|libz|ld-linux-x86-64)\.so' || true)
           if [ -n "$extra" ]; then echo "::error::ffmpeg needs more than the C library and libva: $extra"; exit 1; fi
-          ./ffmpeg -hide_banner -encoders | grep -E 'h264_(nvenc|vaapi)'
           [ "$(./ffmpeg -hide_banner -encoders | grep -cE 'h264_(nvenc|vaapi)')" = 2 ]
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: replay/requirements.txt
+
+      - name: Python environment for the server
+        working-directory: replay
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install -r requirements.txt
+
+      - name: Server tests
+        working-directory: replay
+        run: .venv/bin/python -m pytest -q
 
       - uses: subosito/flutter-action@v2
         with:
@@ -58,41 +86,76 @@ jobs:
 
       - run: flutter pub get
 
-      - name: Build the app
-        run: flutter build linux --release -t lib/main_replay.dart
+      - name: Build the AppImage
+        working-directory: replay
+        run: bash packaging/build_linux.sh "${{ inputs.version }}" "${{ inputs.build_number || github.run_number }}"
 
-      - name: The app is where the packaging will look for it
+      # the AppImage's own contents, as the app finds them when it runs
+      - name: Unpack the AppImage
+        working-directory: replay
         run: |
-          bundle=build/linux/x64/release/bundle
-          ls -l "$bundle" "$bundle/lib"
-          test -x "$bundle/oprivview-replay"
-          ldd "$bundle/oprivview-replay" | tee ldd.txt
+          appimage=$(ls dist/OPRivView-Replay-*-Linux-x86_64.AppImage)
+          ls -l "$appimage"
+          "$PWD/$appimage" --appimage-extract >/dev/null
+          app=squashfs-root/usr/lib/oprivview-replay
+          for f in oprivview-replay oprivview-replay-server/oprivview-replay-server ffmpeg/ffmpeg ffmpeg/ffprobe; do
+            test -x "$app/$f" || { echo "::error::the AppImage has no runnable $f"; exit 1; }
+          done
+          ldd "$app/oprivview-replay" | tee ldd.txt
           if grep -q 'not found' ldd.txt; then echo "::error::the app needs a library this computer lacks"; exit 1; fi
+
+      # a dummy token must reach comma Connect and be refused there: anything else means the server's trust store is wrong
+      - name: The server inside starts and reaches comma Connect over TLS
+        working-directory: replay
+        run: |
+          app=squashfs-root/usr/lib/oprivview-replay
+          mkdir -p "$HOME/.comma"
+          if [ -e "$HOME/.comma/jwt" ]; then echo "::error::a comma token is already here; not touching it"; exit 1; fi
+          echo not-a-real-token > "$HOME/.comma/jwt"
+          "$app/oprivview-replay-server/oprivview-replay-server" --port 8799 --host 127.0.0.1 --app "$app/oprivview-replay" &
+          pid=$!
+          for i in $(seq 60); do
+            if curl -sf http://127.0.0.1:8799/health >/dev/null; then break; fi
+            sleep 1
+          done
+          routes=$(curl -sf http://127.0.0.1:8799/routes) || { echo "the server did not answer /routes"; kill $pid || true; exit 1; }
+          kill $pid || true
+          rm -f "$HOME/.comma/jwt"
+          echo "$routes"
+          case "$routes" in
+            *"cannot reach comma Connect"*) echo "the bundled server does not trust comma Connect's certificate"; exit 1 ;;
+            *"comma Connect answered 401"*) echo "Connect was reached over TLS and refused the dummy token, as expected" ;;
+            *) echo "unexpected /routes answer"; exit 1 ;;
+          esac
 
       # the server runs the app with no window to render a clip; this does the same on a virtual screen with the
       # software OpenGL most Linux virtual machines have. The encoder is chosen as the server chooses it: GitHub's
       # machines have no graphics card, so the app's ffmpeg has no encoder there and the computer's own full ffmpeg
-      # (Ubuntu's, with x264) encodes instead, as on a tester's virtual machine. It also makes the test video; it serves
-      # this check only and is never put in the app
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-          cache: pip
-          cache-dependency-path: replay/requirements.txt
-
-      - name: Virtual screen, software OpenGL and a full ffmpeg
-        run: |
-          sudo apt-get install -y xvfb xauth libgl1-mesa-dri libegl1 ffmpeg
-          pip install -r replay/requirements.txt
-
-      - name: The app renders a clip without a window
+      # (Ubuntu's, with x264) encodes instead, as on a tester's virtual machine
+      - name: The app inside renders a clip without a window
         working-directory: replay
         run: |
+          app=squashfs-root/usr/lib/oprivview-replay
           xvfb-run -a -s "-screen 0 1920x1080x24" \
-            python tools/render_check.py --app ../build/linux/x64/release/bundle/oprivview-replay --ffmpeg /usr/bin/ffmpeg               --bundled build/ffmpeg-linux --frames 30
+            .venv/bin/python tools/render_check.py --app "$app/oprivview-replay" --ffmpeg /usr/bin/ffmpeg --bundled "$app/ffmpeg" --frames 30
+
+      # opened as a tester opens it: the AppImage itself, which mounts with FUSE, shows the window and starts its server;
+      # closing it must stop the server too
+      - name: The AppImage opens and stays open
+        working-directory: replay
+        run: |
+          appimage=$(ls dist/OPRivView-Replay-*-Linux-x86_64.AppImage)
+          set +e
+          timeout 30 xvfb-run -a -s "-screen 0 1920x1080x24" "$PWD/$appimage" > open.log 2>&1
+          code=$?
+          set -e
+          cat open.log
+          if [ $code -ne 124 ]; then echo "::error::the AppImage closed by itself (exit $code) instead of staying open"; exit 1; fi
+          sleep 5
+          if pgrep -fa oprivview-replay; then echo "::error::the app or its server was left running after the window closed"; exit 1; fi
 
       - uses: actions/upload-artifact@v7
         with:
-          name: oprivview-replay-linux-bundle
-          path: build/linux/x64/release/bundle
-          retention-days: 7
+          name: OPRivView-Replay-Linux
+          path: replay/dist/OPRivView-Replay-*-Linux-x86_64.AppImage
+          if-no-files-found: error

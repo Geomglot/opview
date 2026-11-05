@@ -350,7 +350,8 @@ def test_a_drive_with_no_position_shows_the_mac_time_and_never_gmt(tmp_path):
   if sys.platform == "win32":  # Windows has no zone abbreviations, only long names, so it gives the offset from UTC
     assert re.fullmatch(r"\d{4}-\d\d-\d\d \d\d:\d\d UTC[+-]\d\d:\d\d \(this computer's time\)", row["local_start"])
     return
-  assert row["local_start"].endswith("(Mac time)") and "GMT" not in row["local_start"].replace("(Mac time)", "")
+  own = "(Mac time)" if sys.platform == "darwin" else "(this computer's time)"  # Linux's wording is Windows'
+  assert row["local_start"].endswith(own) and "GMT" not in row["local_start"].replace(own, "")
 
 
 def test_a_drive_with_a_position_shows_its_own_zone(tmp_path):
