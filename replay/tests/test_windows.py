@@ -179,7 +179,8 @@ def test_the_server_watches_the_app_it_is_told_about_rather_than_a_launcher(monk
   watched = []
   monkeypatch.setattr(server, "_windows_parent_watch", lambda pid: watched.append(pid) or (lambda: None))
   monkeypatch.setattr(server.threading, "Thread", lambda target, daemon: SimpleNamespace(start=lambda: None))
-  monkeypatch.setattr(server, "Settings", lambda: None)
+  monkeypatch.setattr(server, "Settings", lambda *a: None)
+  monkeypatch.setattr(server.folders, "move_old", lambda: [])  # not the folders of whoever runs the tests
   monkeypatch.setattr(server, "make_app", lambda *a, **k: "app")
   monkeypatch.setattr(server.uvicorn, "run", lambda *a, **k: None)
   monkeypatch.setattr(sys, "argv", ["server", "--exit-with-parent", "--parent-pid", "4242", "--no-connect"])

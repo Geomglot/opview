@@ -5,24 +5,29 @@
   python -m oprivview_replay.cli 0000005a--f16da7af40 --from 09:23:33 --to 09:25:10 --dry-run
 """
 import argparse
-import os
 import sys
 from pathlib import Path
 
 from . import jobs, params
-from .folders import NAME
+from . import folders
 from .sources import ConnectSource, DeviceSource, SourceError
 from .timeline import RangeError
 
 _REPO = Path(__file__).resolve().parents[2]
+
+
+def default_cache() -> Path:
+  """where stored drives are kept: the app's folder in the system's place for caches (on Windows, its Cache folder)"""
+  app = folders.folder(folders.bases()[1])
+  return app / "Cache" if sys.platform == "win32" else app
+
+
+DEFAULT_CACHE = default_cache()
 if sys.platform == "win32":
-  DEFAULT_CACHE = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData/Local") / NAME / "Cache"
   DEFAULT_APP = _REPO / "build/windows/x64/runner/Release/OPRivViewReplay.exe"
 elif sys.platform.startswith("linux"):
-  DEFAULT_CACHE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / NAME
   DEFAULT_APP = _REPO / "build/linux/x64/release/bundle/oprivview-replay"
 else:
-  DEFAULT_CACHE = Path.home() / "Library/Caches" / NAME
   DEFAULT_APP = _REPO / "build/macos/Build/Products/Release/GeoRivView Replay.app/Contents/MacOS/GeoRivView Replay"
 
 

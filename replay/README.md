@@ -225,7 +225,8 @@ saved in, and how much the stored drives take up, with a button to clear them. O
 `~/Library/Application Support/GeoRivViewReplay/settings.json` (for Windows, see [above](#building-for-windows)). The token stays in `~/.comma/jwt`, readable only by this user.
 Stored drives are in `~/Library/Caches/GeoRivViewReplay`. Stalls of 200 ms or more are noted in
 `~/Library/Logs/GeoRivViewReplay/preview.log`. On every system, folders from before the rename (named `OPRivViewReplay`) take the new name when the
-server first starts, with everything in them (`oprivview_replay/folders.py`).
+server starts, with everything in them; one that cannot be moved yet (a file in it held open, on Windows) stays
+in use and is moved at a later start (`oprivview_replay/folders.py`).
 
 ## Other people's public drives
 

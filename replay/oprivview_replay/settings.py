@@ -1,17 +1,17 @@
 """What the user chose in the app's settings; kept in one small file."""
 import json
 import os
-import sys
 from pathlib import Path
 
-from .folders import NAME
+from . import folders
 
-if sys.platform == "win32":
-  DEFAULT_FILE = Path(os.environ.get("APPDATA") or Path.home() / "AppData/Roaming") / NAME / "settings.json"
-elif sys.platform.startswith("linux"):
-  DEFAULT_FILE = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / NAME / "settings.json"
-else:
-  DEFAULT_FILE = Path.home() / "Library/Application Support" / NAME / "settings.json"
+
+def default_file() -> Path:
+  """the settings file, in the app's folder in the system's place for settings (its first in [folders.bases])"""
+  return folders.folder(folders.bases()[0]) / "settings.json"
+
+
+DEFAULT_FILE = default_file()
 DEFAULTS: dict = {
   "host": "comma",  # how to reach the comma over SSH: a name from ~/.ssh/config or an address
   "dongle": None,  # which device on the comma account; None means the first one the account owns

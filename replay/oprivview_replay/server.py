@@ -17,10 +17,10 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from . import admin, folders, jobs, params, places, render, ssh_source, sun
-from .settings import Settings
+from .settings import Settings, default_file as settings_file
 from .uploads import UploadRequests
 from .sources import FULL_FILES, LOGS_FILES, QUICK_FILES, ConnectSource, DeviceSource, SourceError, incomplete_marker, parse_drive_ref
-from .cli import DEFAULT_APP, DEFAULT_CACHE
+from .cli import DEFAULT_APP, DEFAULT_CACHE, default_cache
 from .logs import index_segment
 from .timeline import RangeError
 
@@ -593,7 +593,7 @@ def main() -> None:
   p = argparse.ArgumentParser()
   p.add_argument("--port", type=int, default=8765)
   p.add_argument("--host", help="SSH host of the comma; without this, the one chosen in the app's settings")
-  p.add_argument("--cache", type=Path, default=DEFAULT_CACHE)
+  p.add_argument("--cache", type=Path, help="where stored drives are kept; without this, the app's own folder")
   p.add_argument("--app", type=Path, default=DEFAULT_APP, help="the built renderer")
   p.add_argument("--no-connect", action="store_true", help="do not use comma Connect")
   p.add_argument("--exit-with-parent", action="store_true", help="stop when the program that started this server ends")
@@ -603,7 +603,7 @@ def main() -> None:
   a = p.parse_args()
   # the app was OPRivView Replay until November 2026: its folders take the new name before anything reads them
   for left in folders.move_old():
-    print(f"kept the folder of the app's old name, which could not be renamed: {left}", file=sys.stderr)
+    print(f"kept using the folder of the app's old name, which could not be moved yet: {left}", file=sys.stderr)
   if a.exit_with_parent:
     parent = os.getppid()
     if sys.platform == "win32":
@@ -615,7 +615,7 @@ def main() -> None:
         os._exit(0)
 
     threading.Thread(target=watch, daemon=True).start()
-  uvicorn.run(make_app(a.host, a.cache, a.app, connect=None if a.no_connect else ConnectSource(), settings=Settings()), host="127.0.0.1", port=a.port, log_level="warning")
+  uvicorn.run(make_app(a.host, a.cache or default_cache(), a.app, connect=None if a.no_connect else ConnectSource(), settings=Settings(settings_file())), host="127.0.0.1", port=a.port, log_level="warning")
 
 
 if __name__ == "__main__":
