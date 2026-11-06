@@ -166,7 +166,8 @@ def test_server_stops_when_the_app_that_started_it_goes_away(mac, monkeypatch):
   monkeypatch.setattr(server.os, "_exit", leave)
   monkeypatch.setattr(server.time, "sleep", lambda seconds: None)
   monkeypatch.setattr(server.threading, "Thread", FakeThread)
-  monkeypatch.setattr(server, "Settings", lambda: None)
+  monkeypatch.setattr(server, "Settings", lambda *a: None)
+  monkeypatch.setattr(server.folders, "move_old", lambda: [])  # not the folders of whoever runs the tests
   monkeypatch.setattr(server, "make_app", lambda *a, **k: "app")
   monkeypatch.setattr(server.uvicorn, "run", lambda *a, **k: None)
   monkeypatch.setattr(sys, "argv", ["server", "--exit-with-parent", "--no-connect"])
