@@ -189,14 +189,14 @@ class _PreviewPlayerState extends State<PreviewPlayer> {
   static String? get _stallLog {
     if (Platform.isWindows) {
       final local = Platform.environment['LOCALAPPDATA'];
-      return local == null ? null : '$local\\OPRivViewReplay\\Logs\\preview.log';
+      return local == null ? null : '$local\\GeoRivViewReplay\\Logs\\preview.log';
     }
     final home = Platform.environment['HOME'];
     if (Platform.isLinux) {
       final state = Platform.environment['XDG_STATE_HOME'] ?? (home == null ? null : '$home/.local/state');
-      return state == null ? null : '$state/OPRivViewReplay/logs/preview.log';
+      return state == null ? null : '$state/GeoRivViewReplay/logs/preview.log';
     }
-    return home == null ? null : '$home/Library/Logs/OPRivViewReplay/preview.log';
+    return home == null ? null : '$home/Library/Logs/GeoRivViewReplay/preview.log';
   }
 
   void _noteStall(String what) {

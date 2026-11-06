@@ -449,6 +449,24 @@ void main() {
     await tester.enterText(find.widgetWithText(TextField, 'any town').first, 'guel');
     await tester.pump();
     expect(find.text('0 of 2 shown'), findsOneWidget);
+    // a typed town is emptied with its cross, without editing it
+    await tester.tap(find.byTooltip('Any town'));
+    await tester.pump();
+    expect(find.text('1 of 2 shown'), findsOneWidget);
+    expect(find.text('guel'), findsNothing);
+    // or a whole town is chosen from those the drives have
+    await tester.tap(find.byKey(const Key('end-towns')));
+    await tester.pumpAndSettle();
+    expect(find.text('Oakville'), findsWidgets);
+    await tester.tap(find.text('Guelph').last);
+    await tester.pumpAndSettle();
+    expect(find.text('0 of 2 shown'), findsOneWidget);
+    // each end of the dates is picked on a calendar that turns to other months
+    await tester.tap(find.byKey(const Key('date-from')));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Previous month'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Hide the filters'));
     await tester.pump();
     expect(find.text('No drives match the filters.'), findsOneWidget);

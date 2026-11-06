@@ -115,8 +115,8 @@ def linux_modules(tmp_path):
 @pytest.mark.skipif(sys.platform == "win32", reason="Linux folders cannot be imitated on real Windows")
 def test_folders_are_the_linux_ones(linux_modules, tmp_path):
   linux_modules(str(tmp_path / "Vidéos"))
-  assert cli.DEFAULT_CACHE == tmp_path / "cache/OPRivViewReplay"
-  assert settings.DEFAULT_FILE == tmp_path / "config/OPRivViewReplay/settings.json"
+  assert cli.DEFAULT_CACHE == tmp_path / "cache/GeoRivViewReplay"
+  assert settings.DEFAULT_FILE == tmp_path / "config/GeoRivViewReplay/settings.json"
   assert server.DEFAULT_OUTPUT_DIR == tmp_path / "Vidéos"  # the desktop's own name for it
   assert str(cli.DEFAULT_APP).endswith("build/linux/x64/release/bundle/oprivview-replay")
 

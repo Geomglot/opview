@@ -4,7 +4,7 @@
 ;   /DSourceDir=...             the finished program folder (dist\GeoRivView Replay)
 ; It installs for the current user only, so it needs no administrator. Installing a newer version over an older one
 ; replaces it in place; the app's updater runs it with /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /RELAUNCH.
-; Settings (%APPDATA%\OPRivViewReplay) and stored drives (%LOCALAPPDATA%\OPRivViewReplay) are not in the install folder,
+; Settings (%APPDATA%\GeoRivViewReplay) and stored drives (%LOCALAPPDATA%\GeoRivViewReplay) are not in the install folder,
 ; so updates keep them; uninstalling offers to delete them.
 
 #ifndef AppVersion
@@ -87,6 +87,9 @@ begin
     if MsgBox('Also delete GeoRivView Replay''s settings and the drives it stored?' + #13#10 + #13#10 +
               'Clips you saved are not touched either way.', mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
     begin
+      DelTree(ExpandConstant('{userappdata}\GeoRivViewReplay'), True, True, True);
+      DelTree(ExpandConstant('{localappdata}\GeoRivViewReplay'), True, True, True);
+      // from before the app's rename, should the app not have moved them yet
       DelTree(ExpandConstant('{userappdata}\OPRivViewReplay'), True, True, True);
       DelTree(ExpandConstant('{localappdata}\OPRivViewReplay'), True, True, True);
     end;

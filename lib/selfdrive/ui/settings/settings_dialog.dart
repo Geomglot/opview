@@ -188,7 +188,7 @@ class _SettingsBody extends StatelessWidget {
                   _choices<bool>(const [true, false], settings.pictureInPicture, (v) => v ? 'On' : 'Off',
                       settings.setPictureInPicture),
                   _note('A small floating view on Home, if the head unit supports it'),
-                  _label('OPRIVVIEW UPDATES'),
+                  _label('GEORIVVIEW UPDATES'),
                   _updatesRow(),
                 ],
               ),

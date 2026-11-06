@@ -103,8 +103,8 @@ and other graphics hardware where there is some. It is LGPL, and
 needs no DLLs beside it. ffmpeg.org cannot always be reached from GitHub's build machines, so the script falls back to a
 copy of the same source in the `ffmpeg-8.1-source` release; the checksum in the script decides either way.
 
-On Windows the app keeps its settings in `%APPDATA%\OPRivViewReplay\settings.json`, stored drives in
-`%LOCALAPPDATA%\OPRivViewReplay\Cache`, and the preview's stall log in `%LOCALAPPDATA%\OPRivViewReplay\Logs`. It reaches
+On Windows the app keeps its settings in `%APPDATA%\GeoRivViewReplay\settings.json`, stored drives in
+`%LOCALAPPDATA%\GeoRivViewReplay\Cache`, and the preview's stall log in `%LOCALAPPDATA%\GeoRivViewReplay\Logs`. It reaches
 the comma with Windows' own `ssh`, and saves clips in Videos. Mac behaviour that must not change with the Windows code is
 pinned by `tests/test_mac_pins.py`.
 
@@ -137,8 +137,8 @@ parts. Encoding goes through NVIDIA's NVENC or, for Intel and AMD, VA-API on eac
 the server uses the computer's own full ffmpeg and its x264, if there is one, and otherwise says how to install it
 (`render.encoding`). The app's ffmpeg is LGPL and needs only the C library and libva.
 
-On Linux the app keeps its settings in `~/.config/OPRivViewReplay/settings.json`, stored drives in
-`~/.cache/OPRivViewReplay`, and the preview's stall log in `~/.local/state/OPRivViewReplay/logs` (each following the XDG
+On Linux the app keeps its settings in `~/.config/GeoRivViewReplay/settings.json`, stored drives in
+`~/.cache/GeoRivViewReplay`, and the preview's stall log in `~/.local/state/GeoRivViewReplay/logs` (each following the XDG
 variables). It saves clips in the desktop's Videos folder (`xdg-user-dir VIDEOS`), copies from the comma with `rsync` or,
 if it is not installed, `scp`, and lists network addresses with `ip`. Its window code (`linux/runner/my_application.cc`)
 draws without showing a window when the server starts it to render, and opens GTK's own save and folder pickers. The
@@ -222,9 +222,10 @@ flutter test test/replay_test.dart
 The gear above the drive list opens the app's settings: which device on the comma account to use, the comma's address on the
 local network (with a search of the networks this computer is on), SSH setup, the comma Connect token, the folder clips are
 saved in, and how much the stored drives take up, with a button to clear them. On the Mac, choices are kept in
-`~/Library/Application Support/OPRivViewReplay/settings.json` (for Windows, see [above](#building-for-windows)). The token stays in `~/.comma/jwt`, readable only by this user.
-Stored drives are in `~/Library/Caches/OPRivViewReplay`. Stalls of 200 ms or more are noted in
-`~/Library/Logs/OPRivViewReplay/preview.log`.
+`~/Library/Application Support/GeoRivViewReplay/settings.json` (for Windows, see [above](#building-for-windows)). The token stays in `~/.comma/jwt`, readable only by this user.
+Stored drives are in `~/Library/Caches/GeoRivViewReplay`. Stalls of 200 ms or more are noted in
+`~/Library/Logs/GeoRivViewReplay/preview.log`. On every system, folders from before the rename (named `OPRivViewReplay`) take the new name when the
+server first starts, with everything in them (`oprivview_replay/folders.py`).
 
 ## Other people's public drives
 

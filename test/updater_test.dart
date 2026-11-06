@@ -251,8 +251,8 @@ void main() {
     testWidgets('two columns: brightness on the left, updates on the right', (tester) async {
       await open(tester, _updater('0.1.1-mici.4', () => http.Response('{}', 200)));
       expect(find.text('BRIGHTNESS'), findsOneWidget);
-      expect(find.text('OPRIVVIEW UPDATES'), findsOneWidget);
-      expect(tester.getCenter(find.text('BRIGHTNESS')).dx, lessThan(tester.getCenter(find.text('OPRIVVIEW UPDATES')).dx));
+      expect(find.text('GEORIVVIEW UPDATES'), findsOneWidget);
+      expect(tester.getCenter(find.text('BRIGHTNESS')).dx, lessThan(tester.getCenter(find.text('GEORIVVIEW UPDATES')).dx));
       expect(find.byKey(const ValueKey('updateCheck')), findsOneWidget);
       expect(tester.takeException(), isNull);
     });

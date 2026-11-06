@@ -44,7 +44,7 @@ def mac_modules(tmp_path):
 
 def test_cache_folder(mac_modules):
   # Mac value pinned before the Windows port; must not change on darwin.
-  assert cli.DEFAULT_CACHE == mac_modules / "Library/Caches/OPRivViewReplay"
+  assert cli.DEFAULT_CACHE == mac_modules / "Library/Caches/GeoRivViewReplay"
 
 
 def test_built_renderer_path(mac_modules):
@@ -54,7 +54,7 @@ def test_built_renderer_path(mac_modules):
 
 def test_settings_file(mac_modules):
   # Mac value pinned before the Windows port; must not change on darwin.
-  assert settings.DEFAULT_FILE == mac_modules / "Library/Application Support/OPRivViewReplay/settings.json"
+  assert settings.DEFAULT_FILE == mac_modules / "Library/Application Support/GeoRivViewReplay/settings.json"
 
 
 def test_default_output_folder(mac_modules):

@@ -97,9 +97,7 @@ void main() {
     expect(f.copyWith(from: null, to: null).count, 2);
   });
 
-  test('the date button says the range in words', () {
-    expect(dateRangeLabel(null, null), 'Any date');
-    expect(dateRangeLabel(DateTime(2026, 11, 5), DateTime(2026, 11, 5)), '5 Nov 2026');
-    expect(dateRangeLabel(DateTime(2026, 11, 1), DateTime(2026, 11, 5)), '1 Nov 2026 to 5 Nov 2026');
+  test('a date button says its day in words', () {
+    expect(dayLabel(DateTime(2026, 11, 5)), '5 Nov 2026');
   });
 }

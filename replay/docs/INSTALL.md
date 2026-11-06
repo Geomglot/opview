@@ -59,9 +59,9 @@ same way as the first time, choosing to replace the old one.
 
 Drag the app from Applications to the Trash. To remove everything it stored as well, delete these:
 
-- `~/Library/Application Support/OPRivViewReplay` (settings)
-- `~/Library/Caches/OPRivViewReplay` (stored drives, which include your video and GPS positions)
-- `~/Library/Logs/OPRivViewReplay` (logs)
+- `~/Library/Application Support/GeoRivViewReplay` (settings)
+- `~/Library/Caches/GeoRivViewReplay` (stored drives, which include your video and GPS positions)
+- `~/Library/Logs/GeoRivViewReplay` (logs)
 
 Clips you saved stay in your Movies folder, or wherever you chose. Your comma Connect token is in `~/.comma/jwt`. Other
 comma tools use that file too, so delete it only if nothing else needs it.

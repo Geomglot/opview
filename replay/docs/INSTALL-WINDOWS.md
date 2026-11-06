@@ -57,8 +57,8 @@ Open Settings, Apps, find **GeoRivView Replay**, and choose **Uninstall**. It as
 the drives the app stored as well. Those are in these folders, which you can also delete yourself by pasting each one
 into the address bar of File Explorer:
 
-- `%APPDATA%\OPRivViewReplay` (settings)
-- `%LOCALAPPDATA%\OPRivViewReplay` (stored drives, which include your video and GPS positions, and logs)
+- `%APPDATA%\GeoRivViewReplay` (settings)
+- `%LOCALAPPDATA%\GeoRivViewReplay` (stored drives, which include your video and GPS positions, and logs)
 
 Clips you saved stay in your Videos folder, or wherever you chose. Your comma Connect token is in
 `%USERPROFILE%\.comma\jwt`. Other comma tools use that file too, so delete it only if nothing else needs it.

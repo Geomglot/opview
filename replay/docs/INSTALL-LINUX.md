@@ -72,9 +72,9 @@ stored drives are kept, because they are not in the AppImage.
 
 Delete the AppImage. Your settings and the drives the app stored are in these folders, which you can delete too:
 
-- `~/.config/OPRivViewReplay` (settings)
-- `~/.cache/OPRivViewReplay` (stored drives, which include your video and GPS positions)
-- `~/.local/state/OPRivViewReplay` (logs)
+- `~/.config/GeoRivViewReplay` (settings)
+- `~/.cache/GeoRivViewReplay` (stored drives, which include your video and GPS positions)
+- `~/.local/state/GeoRivViewReplay` (logs)
 
 Clips you saved stay in your Videos folder, or wherever you chose. Your comma Connect token is in `~/.comma/jwt`. Other
 comma tools use that file too, so delete it only if nothing else needs it.

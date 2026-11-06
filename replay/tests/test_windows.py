@@ -14,8 +14,8 @@ pytestmark = pytest.mark.skipif(sys.platform != "win32", reason="Windows only")
 
 
 def test_folders_are_the_windows_ones():
-  assert cli.DEFAULT_CACHE.parent == cli.Path(os.environ["LOCALAPPDATA"]) / "OPRivViewReplay"
-  assert settings.DEFAULT_FILE == cli.Path(os.environ["APPDATA"]) / "OPRivViewReplay/settings.json"
+  assert cli.DEFAULT_CACHE.parent == cli.Path(os.environ["LOCALAPPDATA"]) / "GeoRivViewReplay"
+  assert settings.DEFAULT_FILE == cli.Path(os.environ["APPDATA"]) / "GeoRivViewReplay/settings.json"
   assert server.DEFAULT_OUTPUT_DIR == cli.Path.home() / "Videos"
   assert cli.DEFAULT_APP.name == "OPRivViewReplay.exe"
 

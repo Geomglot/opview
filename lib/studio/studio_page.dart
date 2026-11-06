@@ -88,16 +88,6 @@ const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 
 /// "5 Nov 2026"
 String dayLabel(DateTime d) => '${d.day} ${_months[d.month - 1]} ${d.year}';
 
-/// the date part of the drive filter, as its button says it
-String dateRangeLabel(DateTime? from, DateTime? to) {
-  if (from == null && to == null) return 'Any date';
-  if (from != null && to != null) {
-    if (from.year == to.year && from.month == to.month && from.day == to.day) return dayLabel(from);
-    return '${dayLabel(from)} to ${dayLabel(to)}';
-  }
-  return from != null ? 'From ${dayLabel(from)}' : 'Until ${dayLabel(to!)}';
-}
-
 /// One end of the range: a segment number (the default) or a local time of day
 class RangeEnd {
   bool byTime = false;
@@ -357,31 +347,80 @@ class _StudioPageState extends State<StudioPage> {
         );
       });
 
-  Future<void> _pickDates() async {
+  /// one end of the date range, with the date picker that has month arrows and a list of years; the other end moves
+  /// with it when it would otherwise come before the start
+  Future<void> _pickDate({required bool end}) async {
     final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
     final from = _filter.from, to = _filter.to;
-    final picked = await showDateRangePicker(
+    final picked = await showDatePicker(
       context: context,
       firstDate: DateTime(2018),
-      lastDate: DateTime(now.year, now.month, now.day),
-      initialDateRange: from != null && to != null ? DateTimeRange(start: from, end: to) : null,
-      helpText: 'Drives on these days',
-      saveText: 'Show',
+      lastDate: today,
+      initialDate: (end ? to ?? from : from ?? to) ?? today,
+      helpText: end ? 'Drives on or before' : 'Drives on or after',
+      confirmText: 'Show',
     );
-    if (picked != null) setState(() => _filter = _filter.copyWith(from: picked.start, to: picked.end));
+    if (picked == null) return;
+    setState(() => _filter = end
+        ? _filter.copyWith(to: picked, from: from != null && from.isAfter(picked) ? picked : from)
+        : _filter.copyWith(from: picked, to: to != null && to.isBefore(picked) ? picked : to));
   }
+
+  /// the towns the drives in the list start or end in, for choosing one rather than typing it
+  List<String> _towns({required bool end}) =>
+      ({for (final r in _routes) (end ? r.endPlace : r.startPlace) ?? ''}..remove('')).toList()..sort();
 
   Widget _filterPanel() {
     final small = Theme.of(context).textTheme.bodySmall;
     Widget label(String text) => Padding(padding: const EdgeInsets.only(top: 12, bottom: 4), child: Text(text, style: small));
-    Widget field(TextEditingController c, String hint, {double? width, bool number = false}) {
+    void clear(List<TextEditingController> cs) {
+      for (final c in cs) {
+        c.clear();
+      }
+      _filterTyped();
+    }
+
+    // a small cross that empties the fields given, shown while any has something in it
+    Widget clearButton(List<TextEditingController> cs, String tip) => cs.any((c) => c.text.isNotEmpty)
+        ? IconButton(
+            tooltip: tip,
+            visualDensity: VisualDensity.compact,
+            iconSize: 16,
+            icon: const Icon(Icons.close),
+            onPressed: () => clear(cs))
+        : const SizedBox.shrink();
+    Widget field(TextEditingController c, String hint, {double? width, bool number = false, Widget? suffix}) {
       final f = TextField(
           controller: c,
           onChanged: (_) => _filterTyped(),
           keyboardType: number ? const TextInputType.numberWithOptions(decimal: true) : null,
           style: small,
-          decoration: InputDecoration(hintText: hint, isDense: true));
+          decoration: InputDecoration(
+              hintText: hint, isDense: true, suffixIcon: suffix, suffixIconConstraints: const BoxConstraints(minHeight: 24)));
       return width == null ? f : SizedBox(width: width, child: f);
+    }
+
+    // a town typed in part, or chosen whole from the towns the drives have
+    Widget town(TextEditingController c, {required bool end}) {
+      final towns = _towns(end: end);
+      return field(c, 'any town',
+          suffix: Row(mainAxisSize: MainAxisSize.min, children: [
+            clearButton([c], 'Any town'),
+            PopupMenuButton<String>(
+              key: Key(end ? 'end-towns' : 'start-towns'),
+              tooltip: towns.isEmpty ? 'No towns known yet' : 'Choose a town',
+              enabled: towns.isNotEmpty,
+              icon: const Icon(Icons.arrow_drop_down, size: 20),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(maxHeight: 400),
+              onSelected: (t) {
+                c.text = t;
+                _filterTyped();
+              },
+              itemBuilder: (_) => [for (final t in towns) PopupMenuItem(value: t, height: 32, child: Text(t, style: small))],
+            ),
+          ]));
     }
 
     Widget between(TextEditingController low, TextEditingController high, String unit) => Row(children: [
@@ -389,7 +428,17 @@ class _StudioPageState extends State<StudioPage> {
           Padding(padding: const EdgeInsets.symmetric(horizontal: 6), child: Text('to', style: small)),
           field(high, 'any', width: 48, number: true),
           Flexible(child: Padding(padding: const EdgeInsets.only(left: 6), child: Text(unit, style: small))),
+          clearButton([low, high], 'Any $unit'),
         ]);
+    Widget dateButton({required bool end}) {
+      final day = end ? _filter.to : _filter.from;
+      return Expanded(
+          child: OutlinedButton(
+              key: Key(end ? 'date-to' : 'date-from'),
+              onPressed: () => _pickDate(end: end),
+              child: Text(day == null ? (end ? 'Any end' : 'Any start') : dayLabel(day), style: small)));
+    }
+
     Widget chips<T>(Map<T, String> choices, Set<T> chosen, DriveFilter Function(Set<T>) apply) => Wrap(spacing: 6, runSpacing: 4, children: [
           for (final c in choices.entries)
             FilterChip(
@@ -411,7 +460,9 @@ class _StudioPageState extends State<StudioPage> {
             TextButton(onPressed: _filter.isEmpty ? null : _clearFilter, child: const Text('Clear all')),
           ]),
           Row(children: [
-            Expanded(child: OutlinedButton(onPressed: _pickDates, child: Text(dateRangeLabel(_filter.from, _filter.to)))),
+            dateButton(end: false),
+            Padding(padding: const EdgeInsets.symmetric(horizontal: 6), child: Text('to', style: small)),
+            dateButton(end: true),
             if (_filter.from != null || _filter.to != null)
               IconButton(
                   tooltip: 'Any date',
@@ -419,9 +470,9 @@ class _StudioPageState extends State<StudioPage> {
                   onPressed: () => setState(() => _filter = _filter.copyWith(from: null, to: null))),
           ]),
           label('Starts in'),
-          field(_startsIn, 'any town'),
+          town(_startsIn, end: false),
           label('Ends in'),
-          field(_endsIn, 'any town'),
+          town(_endsIn, end: true),
           label('Length'),
           between(_minSegments, _maxSegments, 'segments'),
           label('Distance'),

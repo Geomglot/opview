@@ -16,7 +16,7 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-from . import admin, jobs, params, places, render, ssh_source, sun
+from . import admin, folders, jobs, params, places, render, ssh_source, sun
 from .settings import Settings
 from .uploads import UploadRequests
 from .sources import FULL_FILES, LOGS_FILES, QUICK_FILES, ConnectSource, DeviceSource, SourceError, incomplete_marker, parse_drive_ref
@@ -601,6 +601,9 @@ def main() -> None:
   # parent this server sees is the launcher, which never ends first. The app says who it is instead.
   p.add_argument("--parent-pid", type=int, help="with --exit-with-parent on Windows: the app to watch, if not the direct parent")
   a = p.parse_args()
+  # the app was OPRivView Replay until November 2026: its folders take the new name before anything reads them
+  for left in folders.move_old():
+    print(f"kept the folder of the app's old name, which could not be renamed: {left}", file=sys.stderr)
   if a.exit_with_parent:
     parent = os.getppid()
     if sys.platform == "win32":
