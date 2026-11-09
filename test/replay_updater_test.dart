@@ -93,6 +93,14 @@ void main() {
           "What's new\n\n- Bold and a link and code");
     });
 
+    test('the update dialog shows what is new, not the downloads table and install steps', () {
+      const notes = "Intro.\n\n| Download | For |\n| --- | --- |\n| `a.dmg` | Macs |\n\nInstall steps.\n\n"
+          "## What's new\n\n- **Quicker** checks\n\nSince [test.5](https://x.test).";
+      expect(plainNotes(notes), "What's new\n\n- Quicker checks\n\nSince test.5.");
+      expect(plainNotes('Intro.\n\n| Download | For |\n| --- | --- |\n\n\nMore.'), 'Intro.\n\nMore.',
+          reason: 'no heading: all of it but the table');
+    });
+
     test("a SHA256SUMS line gives a file's checksum", () {
       final sums = '${'a' * 64}  GeoRivView-Replay-0.1.2-Windows.exe\n${'B' * 64}  GeoRivView-Replay-0.1.2-macOS-ARM.dmg\n';
       expect(sha256From(sums, 'GeoRivView-Replay-0.1.2-macOS-ARM.dmg'), 'b' * 64);

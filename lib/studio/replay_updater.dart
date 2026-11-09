@@ -117,16 +117,23 @@ String? sha256From(String sums, String name) {
   return null;
 }
 
-/// release notes as plain text for the update dialog: headings, bold and links written out without their marks
-String plainNotes(String markdown) => const LineSplitter()
-    .convert(markdown)
-    .map((line) => line
-        .replaceFirst(RegExp(r'^#+\s*'), '')
-        .replaceAll('**', '')
-        .replaceAll('`', '')
-        .replaceAllMapped(RegExp(r'\[([^\]]*)\]\([^)]*\)'), (m) => m[1]!))
-    .join('\n')
-    .trim();
+/// Release notes as plain text for the update dialog: from the "What's new" heading on, as the downloads table and the
+/// first-install steps above it are for someone getting the app, not updating it; with no such heading, all of it
+/// without any table, which plain text cannot lay out. Headings, bold and links are written out without their marks.
+String plainNotes(String markdown) {
+  final lines = const LineSplitter().convert(markdown);
+  final news = lines.indexWhere((line) => RegExp(r"^#+\s*What's new", caseSensitive: false).hasMatch(line));
+  return (news < 0 ? lines : lines.sublist(news))
+      .where((line) => !line.trimLeft().startsWith('|'))
+      .map((line) => line
+          .replaceFirst(RegExp(r'^#+\s*'), '')
+          .replaceAll('**', '')
+          .replaceAll('`', '')
+          .replaceAllMapped(RegExp(r'\[([^\]]*)\]\([^)]*\)'), (m) => m[1]!))
+      .join('\n')
+      .replaceAll(RegExp(r'\n{3,}'), '\n\n')
+      .trim();
+}
 
 /// a file's SHA-256 in hex, worked out off the UI thread (a release file is around 100 MB)
 Future<String> fileSha256(String path) => Isolate.run(() async => (await sha256.bind(File(path).openRead()).first).toString());
