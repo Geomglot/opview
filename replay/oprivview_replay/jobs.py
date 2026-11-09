@@ -6,10 +6,10 @@ from pathlib import Path
 from typing import Callable
 
 from . import render, ssh_source
-from .logs import index_segment
+from .logs import SegmentIndex, index_segment
 from .meter import Meter, megabytes
 from .sources import FULL_FILES as FULL, LOGS_FILES as LOGS, QUICK_FILES as QUICK, ConnectSource, DeviceSource, SourceError, incomplete_marker
-from .timeline import FramePos, RangeError, RouteTimeline, resolve_range, zone_for
+from .timeline import FPS, SEGMENT_MS, FramePos, RangeError, RouteTimeline, resolve_range, zone_for
 
 
 ASK_SEGMENTS_HOME = 30  # the comma on this network copies quickly, so it takes a long range to be worth asking about
@@ -89,8 +89,9 @@ def resolve(sources: Sources, cache: Path, route: str, start_segment: int | None
   """Raises RangeError for anything the user can fix: unknown route, no GPS, a time outside the drive. The times and
   positions come from the drive's small logs, which are fetched first if they are not here: for a long drive that takes
   a while, so it goes as a fetch in a job does (see render_resolved), with [ask], [progress] and [fetching].
-  A range given in segments needs only the logs of those segments (see [logs_for]); a time of day can be anywhere in
-  the drive, so it needs them all."""
+  A range given in segments needs only the logs of those segments (see [logs_for]). For a time of day, the drive's last
+  log says when the drive ran, and at about a minute a segment that says roughly which segments the time is in: those
+  are read first, and more around them only if the time turns out not to be in them (see [near_the_times])."""
   progress = progress or (lambda text: None)
   progress("finding the drive")
   try:
@@ -103,27 +104,78 @@ def resolve(sources: Sources, cache: Path, route: str, start_segment: int | None
   for number in (start_segment, end_segment):
     if number is not None and segments and number not in segments:
       raise RangeError(f"segment {number} is not available; this drive has segments {segments[0]} to {segments[-1]}")
+  indexed: dict[int, SegmentIndex] = {}
 
-  def fetch_logs(wanted: list[int]) -> dict:
-    try:
-      if ask is not None:
-        many = _many_to_fetch(sources, source, cache, route, [(s, "qlog.zst") for s in wanted])
-        whole = len(wanted) == len(segments)
-        if many is not None and not ask(
-            f"To check the range, the app reads the small log of {'every segment of the drive' if whole else 'each segment in it'}, "
-            f"and {many[0]} of them are not on this computer yet{many[1]} from {_where(source)}. That can take a while."
-            f"\n\n{_CAN_CANCEL}", "many"):
-          raise SourceError("Not fetched.")
-      _fetch(source, route, wanted, ("qlog.zst",), cache, f"the drive's logs from {source.name}", progress, fetching)
-    except SourceError as e:
-      raise RangeError(str(e))
-    return {s: index_segment(cache / route / str(s) / "qlog.zst") for s in wanted}
+  def fetch_logs(wanted: list[int]) -> dict[int, SegmentIndex]:
+    todo = [s for s in wanted if s not in indexed]
+    if todo:
+      try:
+        if ask is not None:
+          many = _many_to_fetch(sources, source, cache, route, [(s, "qlog.zst") for s in todo])
+          which = "every segment of the drive" if len(wanted) == len(segments) else "each segment in it"
+          if many is not None and not ask(
+              f"To check the range, the app reads the small log of {which}, and {many[0]} of them are not on this "
+              f"computer yet{many[1]} from {_where(source)}. That can take a while.\n\n{_CAN_CANCEL}", "many"):
+            raise SourceError("Not fetched.")
+        _fetch(source, route, todo, ("qlog.zst",), cache, f"the drive's logs from {source.name}", progress, fetching)
+      except SourceError as e:
+        raise RangeError(str(e))
+      indexed.update({s: index_segment(cache / route / str(s) / "qlog.zst") for s in todo})
+    return {s: indexed[s] for s in wanted}
+
+  def near_the_times() -> dict[int, SegmentIndex] | None:
+    """The logs of the segments a range given as times of day is in, and of the drive's first and last segments. The last one's
+    clock (the one trusted; see timeline.settle_clocks) puts every segment a minute apart before it, which says
+    roughly where each time is; the segments there, with some to spare, are read, and if a time is not in them after
+    all, more on that side, each time three times as many. None when the last log cannot say (no clock or no GPS in
+    it), or when it comes to most of the drive anyway: the caller
+    then reads the whole drive, which settles it."""
+    first, last = segments[0], segments[-1]
+    anchor = fetch_logs(sorted({first, last}))[last]  # the first too, so a time outside the drive is said with both ends
+    if not anchor.frames or anchor.wall_offset_ns is None or anchor.lat is None:
+      return None
+    zone = zone_for(anchor.lat, anchor.lon)
+    guess = RouteTimeline({s: SegmentIndex(frames=SEGMENT_MS * FPS // 1000, wall_offset_ns=anchor.wall_offset_ns,
+                                           first_mono=anchor.first_mono - (last - s) * SEGMENT_MS * 10**6)
+                           for s in segments}, zone)
+
+    def near(text: str) -> int:
+      """the segment [text] falls in by the reckoning; one before or after the drive by it, the first or last"""
+      return guess.at_wall_ms(guess.candidates(text)[0]).segment
+
+    low = start_segment if start_segment is not None else near(start_time) if start_time else segments[0]
+    high = end_segment if end_segment is not None else near(end_time) if end_time else last
+    times = [t for t in (start_time, end_time) if t]
+    before, after = 2, 1  # one before the start for the run-up to its first frame, and one each way for the guess
+    while True:
+      window = [s for s in segments if min(low, high) - before <= s <= max(low, high) + after]
+      if len(segments) == 1 or window[-1] >= segments[-2]:
+        window = [s for s in segments if s >= window[0]]  # up to the last: one log more, and no gap before it
+      if len(window) * 2 > len(segments):
+        return None
+      index = fetch_logs(sorted(set(window) | {first, last}))
+      try:
+        tl = RouteTimeline(index, zone)
+      except RangeError:
+        return None
+      held = [s for s in tl.segments if s in window]
+      if not held:
+        return None
+      lowest = tl.wall_ms(held[0], 0) + (SEGMENT_MS if held[0] != segments[0] else 0)
+      highest = tl.wall_ms(held[-1], tl.index[held[-1]].frames - 1)
+      wanted = [ms for t in times for ms in tl.candidates(t)]
+      short_before = any(ms < lowest for ms in wanted) and window[0] != segments[0]
+      short_after = any(ms > highest for ms in wanted) and window[-1] != last
+      if not short_before and not short_after:
+        return index
+      before, after = before * 3 if short_before else before, after * 3 if short_after else after
 
   route_dir = cache / route
-  wanted = logs_for(segments, start_segment, end_segment, start_time, end_time)
-  index = fetch_logs(wanted)
+  index = near_the_times() if (start_time or end_time) and segments else None
+  if index is None:
+    index = fetch_logs(logs_for(segments, start_segment, end_segment, start_time, end_time))
   located = next((i for i in index.values() if i.lat is not None), None)
-  if located is None and len(wanted) < len(segments):  # no GPS in the range: the rest of the drive may have it
+  if located is None and len(index) < len(segments):  # no GPS in the range: the rest of the drive may have it
     index = fetch_logs(segments)
     located = next((i for i in index.values() if i.lat is not None), None)
   if located is None:

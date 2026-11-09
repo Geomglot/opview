@@ -311,9 +311,12 @@ def test_checking_a_range_asks_before_fetching_a_long_drive_s_logs_and_cancel_fe
 
   source = Source()
   asked = []
+  # the drive's last log cannot say when it ran (no clock), so the whole drive is read for the time
+  monkeypatch.setattr(j, "index_segment", lambda path: SimpleNamespace(frames=0, wall_offset_ns=None, lat=None))
   with pytest.raises(RangeError, match="Not fetched"):
     j.resolve(_sources(30, 5, source), tmp_path, "r", None, None, "09:00", ask=lambda q, kind="metered": asked.append((q, kind)) or False)
-  assert source.fetched == [] and asked[0][1] == "many" and "40 of them" in asked[0][0] and "every segment" in asked[0][0]
+  assert source.fetched == [([0, 39], ("qlog.zst",))], "only the first and last logs, too few to ask about"
+  assert asked[0][1] == "many" and "38 of them" in asked[0][0] and "every segment" in asked[0][0]
 
 
 def test_checking_a_range_shows_the_fetch_of_the_drive_s_logs(monkeypatch, tmp_path):
@@ -322,10 +325,10 @@ def test_checking_a_range_shows_the_fetch_of_the_drive_s_logs(monkeypatch, tmp_p
 
   told, said = [], []
   source = Source()
-  monkeypatch.setattr(j, 'index_segment', lambda path: SimpleNamespace(lat=None))
+  monkeypatch.setattr(j, 'index_segment', lambda path: SimpleNamespace(frames=0, wall_offset_ns=None, lat=None))
   with pytest.raises(RangeError, match='no GPS position'):  # all this needs of the logs is that they were fetched
     j.resolve(_sources(30, 5, source), tmp_path, "r", None, None, "09:00", progress=said.append, ask=lambda *a: True, fetching=told.append)
-  assert source.fetched == [(list(range(40)), ("qlog.zst",))]
+  assert source.fetched == [([0, 39], ("qlog.zst",)), (list(range(1, 39)), ("qlog.zst",))]
   assert told[-1] is None and any(t and t["total"] == 10 for t in told)
   assert "fetching the drive's logs from connect" in said
 
@@ -355,12 +358,61 @@ def test_checking_a_range_in_segments_fetches_only_its_logs_and_asks_by_those_al
   # 6 segments are under the 30 to be asked about; with no GPS in the range the rest of the drive is read for it, and
   # that, at 40, is asked about
   assert len(asked) == 1 and "every segment of the drive" in asked[0][0]
-  assert source.fetched == [([1, 2, 3, 4, 5, 39], ("qlog.zst",)), (list(range(40)), ("qlog.zst",))]
+  assert source.fetched == [([1, 2, 3, 4, 5, 39], ("qlog.zst",)), ([0] + list(range(6, 39)), ("qlog.zst",))], "not those read already"
 
   source = Source()
   with pytest.raises(RangeError, match="Not fetched"):
     j.resolve(_sources(30, 5, source), tmp_path / "b", "r", 2, 5, ask=lambda q, kind="metered": asked.append(q) or False)
   assert "6 of them" in asked[-1] and "each segment in it" in asked[-1] and source.fetched == []
+
+
+def _drive_of(monkeypatch, segment_seconds: float, count: int = 80):
+  """a drive in Toronto starting at 14:54:00 on 2026-11-06 whose segments are [segment_seconds] long (60 on a comma)"""
+  from datetime import datetime
+  from zoneinfo import ZoneInfo
+
+  from oprivview_replay import jobs as j
+  from oprivview_replay.logs import SegmentIndex
+
+  base = int(datetime(2026, 11, 6, 14, 54, tzinfo=ZoneInfo("America/Toronto")).timestamp() * 1e9)
+  monkeypatch.setattr(j, "index_segment", lambda path: SegmentIndex(
+      frames=1200, first_mono=int(int(path.parent.name) * segment_seconds * 1e9), wall_offset_ns=base, lat=43.65, lon=-79.38))
+  source = Source()
+  sources = SimpleNamespace(ask_segments=lambda: (30, 5), listed=lambda: {"r": (source, list(range(count)))},
+                            request_upload=None, local_reachable=True)
+  return j, source, sources
+
+
+def test_a_time_range_reads_the_segments_the_times_should_be_in_from_when_the_drive_ran(monkeypatch, tmp_path):
+  j, source, sources = _drive_of(monkeypatch, 60)
+  asked = []
+  r = j.resolve(sources, tmp_path, "r", None, None, "15:00", "15:03", ask=lambda *a: asked.append(a) or True)
+  assert (r.start.segment, r.end.segment) == (6, 9)
+  # the first and last logs for when the drive ran, then the ones the times should be in with one to spare each way and one more
+  # before for the run-up: 8 segments, which would be asked about only at 5 or more away from home
+  assert source.fetched == [([0, 79], ("qlog.zst",)), ([4, 5, 6, 7, 8, 9, 10], ("qlog.zst",))]
+  assert len(asked) == 1 and "each segment in it" in asked[0][0]
+
+
+def test_when_the_times_are_not_where_a_minute_a_segment_puts_them_more_is_read_on_that_side(monkeypatch, tmp_path):
+  # segments of 62 seconds put 15:00 nearly three minutes before where a minute a segment back from the last one says
+  j, source, sources = _drive_of(monkeypatch, 62)
+  r = j.resolve(sources, tmp_path, "r", None, None, "15:00", "15:03")
+  assert (r.start.segment, r.end.segment) == (5, 8)
+  assert len(source.fetched) > 2 and source.fetched[0] == ([0, 79], ("qlog.zst",))
+  assert sum(len(f[0]) for f in source.fetched) < 40, "still well short of the whole drive"
+
+
+def test_a_time_with_a_segment_at_the_other_end_and_one_outside_the_drive(monkeypatch, tmp_path):
+  from oprivview_replay.timeline import RangeError
+
+  j, source, sources = _drive_of(monkeypatch, 60)
+  r = j.resolve(sources, tmp_path, "r", 3, None, None, "15:03")
+  assert (r.start.segment, r.end.segment) == (3, 9)
+  j, source, sources = _drive_of(monkeypatch, 60)
+  with pytest.raises(RangeError, match="outside this drive, which ran 14:54:00"):
+    j.resolve(sources, tmp_path / "b", "r", None, None, "18:00", None)
+  assert sum(len(f[0]) for f in source.fetched) < 10, "said from the drive's end, and its start, without reading it all"
 
 
 def test_a_segment_the_drive_does_not_have_is_said_before_anything_is_fetched(tmp_path):

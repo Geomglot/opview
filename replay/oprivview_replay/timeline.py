@@ -77,7 +77,8 @@ class RouteTimeline:
     frame = (ms - self._starts_ms[k]) * FPS // 1000
     return FramePos(s, min(frame, self.index[s].frames - 1))
 
-  def _candidates(self, text: str) -> list[int]:
+  def candidates(self, text: str) -> list[int]:
+    """each moment [text] can mean on the days of the drive, in ms: two when the clocks went back that hour"""
     m = _TIME.match(text.strip())
     if not m:
       raise RangeError(f"'{text}' is not a time of day; use HH:MM or HH:MM:SS, optionally with a UTC offset like -04:00")
@@ -106,7 +107,7 @@ class RouteTimeline:
   def resolve_time(self, text: str) -> FramePos:
     first, last = self.first(), self.last()
     start, end = self.wall_ms(first.segment, first.frame), self.wall_ms(last.segment, last.frame)
-    inside = [ms for ms in self._candidates(text) if start <= ms <= end + 1000]
+    inside = [ms for ms in self.candidates(text) if start <= ms <= end + 1000]
     if not inside:
       raise RangeError(f"{text} is outside this drive, which ran {self._describe(self.first())} to {self._describe(self.last())}")
     if len(inside) > 1:
