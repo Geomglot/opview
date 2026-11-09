@@ -133,6 +133,9 @@ class _PreviewPlayerState extends State<PreviewPlayer> {
   void initState() {
     super.initState();
     appNow = _now;
+    // the job file has the options as they were when the preview was asked for; any changed in the form while its
+    // files were fetched are the ones to show
+    _takeOptions();
     _settings.addListener(_settingsChanged);
     SchedulerBinding.instance.addTimingsCallback(_timings);
     _play();
@@ -161,6 +164,11 @@ class _PreviewPlayerState extends State<PreviewPlayer> {
   @override
   void didUpdateWidget(PreviewPlayer old) {
     super.didUpdateWidget(old);
+    _takeOptions();
+  }
+
+  /// the form's options put onto the screen, without telling the form of its own change
+  void _takeOptions() {
     final options = widget.options;
     if (options == null) return;
     _applying = true;
