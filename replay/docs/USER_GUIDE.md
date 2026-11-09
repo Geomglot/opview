@@ -117,9 +117,10 @@ cannot tell about: with a town set, for example, a drive with no known town is n
    A segment start begins at the start of that segment, and a segment end finishes at its end. For a cut part-way through
    a minute, use Time. Times are local to where the drive happened. Where the app cannot tell the place, it uses your
    computer's time zone and says so.
-3. Press **Check range** to confirm what you have selected. The first time you check a drive, the app copies a small
-   log of every segment of it, to find its times and places. For a long drive that can take a while: it shows the time
-   left, and **Cancel** stops it (see [Fetching the files](#fetching-the-files)).
+3. Press **Check range** to confirm what you have selected. The app copies a small log of each segment in the range,
+   to find its times and places. A range given as a time of day needs the log of every segment of the drive, since
+   the time could be anywhere in it. For a long drive that can take a while: it shows the time left, and **Cancel**
+   stops it (see [Fetching the files](#fetching-the-files)).
 
 ## Options
 
@@ -149,7 +150,8 @@ The wide camera is only available in full detail.
 ## Fetching the files
 
 Before it can check, preview or render a range, the app copies what it needs to your computer, from the comma or
-comma Connect: first a small log of every segment of the drive, then the video and logs of the range. It keeps what it
+comma Connect: first a small log of each segment in the range (of every segment of the drive, for a range given as
+a time of day), then the video and logs of the range. It keeps what it
 has copied, so the same drive is quicker the next time.
 
 - If either copy needs many segments that are not on your computer yet, the app asks first, and says how much that is

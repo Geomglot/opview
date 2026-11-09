@@ -312,8 +312,8 @@ def test_checking_a_range_asks_before_fetching_a_long_drive_s_logs_and_cancel_fe
   source = Source()
   asked = []
   with pytest.raises(RangeError, match="Not fetched"):
-    j.resolve(_sources(30, 5, source), tmp_path, "r", 0, 3, ask=lambda q, kind="metered": asked.append((q, kind)) or False)
-  assert source.fetched == [] and asked[0][1] == "many" and "40 of them" in asked[0][0]
+    j.resolve(_sources(30, 5, source), tmp_path, "r", None, None, "09:00", ask=lambda q, kind="metered": asked.append((q, kind)) or False)
+  assert source.fetched == [] and asked[0][1] == "many" and "40 of them" in asked[0][0] and "every segment" in asked[0][0]
 
 
 def test_checking_a_range_shows_the_fetch_of_the_drive_s_logs(monkeypatch, tmp_path):
@@ -324,10 +324,53 @@ def test_checking_a_range_shows_the_fetch_of_the_drive_s_logs(monkeypatch, tmp_p
   source = Source()
   monkeypatch.setattr(j, 'index_segment', lambda path: SimpleNamespace(lat=None))
   with pytest.raises(RangeError, match='no GPS position'):  # all this needs of the logs is that they were fetched
-    j.resolve(_sources(30, 5, source), tmp_path, "r", 0, 3, progress=said.append, ask=lambda *a: True, fetching=told.append)
+    j.resolve(_sources(30, 5, source), tmp_path, "r", None, None, "09:00", progress=said.append, ask=lambda *a: True, fetching=told.append)
   assert source.fetched == [(list(range(40)), ("qlog.zst",))]
   assert told[-1] is None and any(t and t["total"] == 10 for t in told)
   assert "fetching the drive's logs from connect" in said
+
+
+def test_a_range_in_segments_needs_only_its_own_logs_with_the_one_before_and_the_drive_s_last():
+  from oprivview_replay.jobs import logs_for
+
+  drive = list(range(80))
+  assert logs_for(drive, 2, 5, None, None) == [1, 2, 3, 4, 5, 79]
+  assert logs_for(drive, 0, 3, None, None) == [0, 1, 2, 3, 79]
+  assert logs_for(drive, 75, None, None, None) == [74, 75, 76, 77, 78, 79]
+  assert logs_for(drive, None, 2, None, None) == [0, 1, 2, 79]
+  assert logs_for(drive, 9, 4, None, None) == [4, 9, 79], "an end before the start is still said to be so"
+  assert logs_for(drive, 2, None, None, "09:30") == drive, "a time of day can be anywhere in the drive"
+  assert logs_for(drive, None, None, None, None) == drive
+
+
+def test_checking_a_range_in_segments_fetches_only_its_logs_and_asks_by_those_alone(monkeypatch, tmp_path):
+  from oprivview_replay import jobs as j
+  from oprivview_replay.timeline import RangeError
+
+  source = Source()
+  asked = []
+  monkeypatch.setattr(j, "index_segment", lambda path: SimpleNamespace(lat=None))
+  with pytest.raises(RangeError, match="no GPS position"):
+    j.resolve(_sources(30, 30, source), tmp_path / "a", "r", 2, 5, ask=lambda *a: asked.append(a) or True)
+  # 6 segments are under the 30 to be asked about; with no GPS in the range the rest of the drive is read for it, and
+  # that, at 40, is asked about
+  assert len(asked) == 1 and "every segment of the drive" in asked[0][0]
+  assert source.fetched == [([1, 2, 3, 4, 5, 39], ("qlog.zst",)), (list(range(40)), ("qlog.zst",))]
+
+  source = Source()
+  with pytest.raises(RangeError, match="Not fetched"):
+    j.resolve(_sources(30, 5, source), tmp_path / "b", "r", 2, 5, ask=lambda q, kind="metered": asked.append(q) or False)
+  assert "6 of them" in asked[-1] and "each segment in it" in asked[-1] and source.fetched == []
+
+
+def test_a_segment_the_drive_does_not_have_is_said_before_anything_is_fetched(tmp_path):
+  from oprivview_replay import jobs as j
+  from oprivview_replay.timeline import RangeError
+
+  source = Source()
+  with pytest.raises(RangeError, match="segment 45 is not available; this drive has segments 0 to 39"):
+    j.resolve(_sources(30, 5, source), tmp_path, "r", 2, 45)
+  assert source.fetched == []
 
 
 def _job(monkeypatch, tmp_path, resolve, body):

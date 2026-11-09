@@ -70,13 +70,27 @@ class Resolved:
             "source": self.source.name}
 
 
+def logs_for(segments: list[int], start_segment: int | None, end_segment: int | None,
+             start_time: str | None, end_time: str | None) -> list[int]:
+  """Which segments' small logs a range needs. Given in segments: those in the range, the one before it (for the run-up
+  to the first frame) and the drive's last (whose clock is the one trusted, should the range's own be wrong; see
+  timeline.settle_clocks). Any time of day, or no range at all, needs the whole drive."""
+  if start_time or end_time or (start_segment is None and end_segment is None) or not segments:
+    return list(segments)
+  low = segments[0] if start_segment is None else start_segment
+  high = segments[-1] if end_segment is None else end_segment
+  keep = {low, high, segments[-1]} | {s for s in segments if low - 1 <= s <= high}
+  return [s for s in segments if s in keep]
+
+
 def resolve(sources: Sources, cache: Path, route: str, start_segment: int | None = None, end_segment: int | None = None,
             start_time: str | None = None, end_time: str | None = None, progress: Callable[[str], None] | None = None,
             ask: Callable[..., bool] | None = None, fetching: Callable[[dict | None], None] | None = None) -> Resolved:
   """Raises RangeError for anything the user can fix: unknown route, no GPS, a time outside the drive. The times and
-  positions come from the small log of every segment of the drive, which is fetched first if it is not here: for a long
-  drive that takes a while, so it goes as a fetch in a job does (see render_resolved), with [ask], [progress] and
-  [fetching]."""
+  positions come from the drive's small logs, which are fetched first if they are not here: for a long drive that takes
+  a while, so it goes as a fetch in a job does (see render_resolved), with [ask], [progress] and [fetching].
+  A range given in segments needs only the logs of those segments (see [logs_for]); a time of day can be anywhere in
+  the drive, so it needs them all."""
   progress = progress or (lambda text: None)
   progress("finding the drive")
   try:
@@ -86,19 +100,32 @@ def resolve(sources: Sources, cache: Path, route: str, start_segment: int | None
   if not found:
     raise RangeError(f"{route} is on neither the comma nor comma Connect")
   source, segments = found
-  try:
-    if ask is not None:
-      many = _many_to_fetch(sources, source, cache, route, [(s, "qlog.zst") for s in segments])
-      if many is not None and not ask(
-          f"To check the range, the app reads the small log of every segment of the drive, and {many[0]} of them "
-          f"are not on this computer yet{many[1]} from {_where(source)}. That can take a while.\n\n{_CAN_CANCEL}", "many"):
-        raise SourceError("Not fetched.")
-    _fetch(source, route, segments, ("qlog.zst",), cache, f"the drive's logs from {source.name}", progress, fetching)
-  except SourceError as e:
-    raise RangeError(str(e))
+  for number in (start_segment, end_segment):
+    if number is not None and segments and number not in segments:
+      raise RangeError(f"segment {number} is not available; this drive has segments {segments[0]} to {segments[-1]}")
+
+  def fetch_logs(wanted: list[int]) -> dict:
+    try:
+      if ask is not None:
+        many = _many_to_fetch(sources, source, cache, route, [(s, "qlog.zst") for s in wanted])
+        whole = len(wanted) == len(segments)
+        if many is not None and not ask(
+            f"To check the range, the app reads the small log of {'every segment of the drive' if whole else 'each segment in it'}, "
+            f"and {many[0]} of them are not on this computer yet{many[1]} from {_where(source)}. That can take a while."
+            f"\n\n{_CAN_CANCEL}", "many"):
+          raise SourceError("Not fetched.")
+      _fetch(source, route, wanted, ("qlog.zst",), cache, f"the drive's logs from {source.name}", progress, fetching)
+    except SourceError as e:
+      raise RangeError(str(e))
+    return {s: index_segment(cache / route / str(s) / "qlog.zst") for s in wanted}
+
   route_dir = cache / route
-  index = {s: index_segment(route_dir / str(s) / "qlog.zst") for s in segments}
+  wanted = logs_for(segments, start_segment, end_segment, start_time, end_time)
+  index = fetch_logs(wanted)
   located = next((i for i in index.values() if i.lat is not None), None)
+  if located is None and len(wanted) < len(segments):  # no GPS in the range: the rest of the drive may have it
+    index = fetch_logs(segments)
+    located = next((i for i in index.values() if i.lat is not None), None)
   if located is None:
     raise RangeError("this drive has no GPS position, so its time zone is unknown")
   timeline = RouteTimeline(index, zone_for(located.lat, located.lon))
