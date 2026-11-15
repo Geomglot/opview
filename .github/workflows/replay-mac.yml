@@ -97,6 +97,8 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          # pinned: 3.50.0 needs Gradle 9.3.1 and the Android build is on 8.14.3
+          flutter-version: 3.47.9
           cache: true
 
       - run: flutter pub get
