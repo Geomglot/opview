@@ -36,7 +36,15 @@ class HudColors {
   static const borderTranslucent = Color(0x4BFFFFFF);
   static const headerGradientStart = Color(0x72000000);
   static const headerGradientEnd = Color(0x00000000);
+  // set speed while "Model Controls Speed" is off (model_speed_button.py MODEL_OFF_COLOR / MODEL_OFF_DIM_COLOR)
+  static const modelOff = Color(0xFF7DC8FF);
+  static const modelOffDim = Color(0x807DC8FF);
 }
+
+/// the set speed number's colour: light blue while "Model Controls Speed" is off (dim while cruise is not set),
+/// as on the device; [normal] otherwise
+Color setSpeedColor(UIState st, Color normal) =>
+    !st.modelSpeedOff ? normal : (st.isCruiseSet ? HudColors.modelOff : HudColors.modelOffDim);
 
 class HudRenderer extends StatelessWidget {
   final UIState uiState;
@@ -130,7 +138,7 @@ class HudRenderer extends StatelessWidget {
             ),
             Text(speedText,
               style: TextStyle(
-                color: speedColor,
+                color: setSpeedColor(uiState, speedColor),
                 fontSize: _fontSetSpeed * scale,
                 fontWeight: FontWeight.bold,
                 height: 1.1,

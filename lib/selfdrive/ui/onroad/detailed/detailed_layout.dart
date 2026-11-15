@@ -56,6 +56,14 @@ const detailedNoValue = '–';
 // -- formatting --
 
 /// "-0.42 m/s²"; never "-0.00"
+/// Acceleration Control's lift on the model's request. It does nothing while "Model Controls Speed" is off.
+(String, String, Color) accelLiftRow(UIState st) {
+  final lift = st.accelerationLift;
+  if (lift == null || !st.longActive) return ('Accel lift', detailedNoValue, _dimColor);
+  if (st.modelSpeedOff) return ('Accel lift', 'model off', _dimColor);
+  return ('Accel lift', formatAccel(lift), lift > 0.005 ? _green : Colors.white);
+}
+
 String formatAccel(double v) {
   final text = v.toStringAsFixed(2);
   return '${text == '-0.00' ? '0.00' : text} m/s²';
@@ -716,6 +724,7 @@ class DetailedLongitudinalPanel extends StatelessWidget {
         ('Personality', formatPersonality(st.personality), Colors.white),
         ('Accel cmd', st.longActive ? formatAccel(st.accelCommand) : detailedNoValue, Colors.white),
         ('Accel actual', formatAccel(st.aEgo), Colors.white),
+        accelLiftRow(st),
         ('Throttle / brake', pedals.isEmpty ? '— / —' : pedals.join(' + '), pedals.isEmpty ? _dimColor : _orange),
       ],
       footer: _trace(

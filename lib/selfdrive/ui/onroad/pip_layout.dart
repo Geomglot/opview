@@ -8,6 +8,7 @@
 import 'package:flutter/material.dart';
 import 'package:opview/common/transformations.dart';
 import 'package:opview/selfdrive/ui/onroad/enhanced/enhanced_layout.dart';
+import 'package:opview/selfdrive/ui/onroad/hud_renderer.dart';
 import 'package:opview/selfdrive/ui/onroad/model_renderer.dart';
 import 'package:opview/selfdrive/ui/onroad/top_row.dart';
 import 'package:opview/selfdrive/ui/ui_state.dart';
@@ -113,7 +114,7 @@ class PipLayout extends StatelessWidget {
                       u: u,
                       label: 'MAX',
                       value: st.isCruiseSet ? '${st.setSpeed.round()}' : '–',
-                      color: st.isCruiseSet ? Colors.white : const Color(0x80FFFFFF),
+                      color: setSpeedColor(st, st.isCruiseSet ? Colors.white : const Color(0x80FFFFFF)),
                     ),
                   if (st.isCruiseAvailable && showLimit) SizedBox(height: 2.5 * u),
                   if (showLimit)

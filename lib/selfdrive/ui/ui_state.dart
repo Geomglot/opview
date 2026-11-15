@@ -202,6 +202,12 @@ class UIState extends ChangeNotifier {
   double speedLimitFinalLast = 0.0;
   String speedLimitSource = 'none';
   String speedLimitAssistState = 'disabled';
+  /// longitudinalPlanSP.modelSpeedOff: "Model Controls Speed" is off and openpilot controls the speed, so the
+  /// planner holds the set speed and leaves the model out. Absent on older branches, which reads as on.
+  bool modelSpeedOff = false;
+  /// longitudinalPlanSP.accelerationControlBoostRequested: Acceleration Control's lift on the model's request, m/s²;
+  /// null where the branch does not send it
+  double? accelerationLift;
 
   /// a speed limit has arrived at some point since connecting
   bool speedLimitSeen = false;
@@ -474,6 +480,8 @@ class UIState extends ChangeNotifier {
     speedLimitFinalLast = (resolver['speedLimitFinalLast'] as num?)?.toDouble() ?? 0.0;
     speedLimitSource = resolver['source'] as String? ?? 'none';
     speedLimitAssistState = assist['state'] as String? ?? 'disabled';
+    modelSpeedOff = data['modelSpeedOff'] as bool? ?? false;
+    accelerationLift = (data['accelerationControlBoostRequested'] as num?)?.toDouble();
     if ((speedLimitValid && speedLimit > 0) || (speedLimitLastValid && speedLimitLast > 0)) speedLimitSeen = true;
     // no notify — picked up on next modelV2
   }

@@ -129,7 +129,7 @@ class SpeedTopRow extends StatelessWidget {
           SizedBox(width: 5 * unit),
           Text(
             st.isCruiseSet ? '${st.setSpeed.round()}' : '–',
-            style: TextStyle(color: speedColor, fontSize: 24 * unit, fontWeight: FontWeight.bold, height: 1.0),
+            style: TextStyle(color: setSpeedColor(st, speedColor), fontSize: 24 * unit, fontWeight: FontWeight.bold, height: 1.0),
           ),
         ],
       ),

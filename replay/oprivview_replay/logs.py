@@ -26,7 +26,7 @@ BOOL_PARAMS = ("IsMetric", "RoadNameToggle", "RivianForceTorqueSteer", "TrueVEgo
                "ShowTurnSignals", "BlindSpot", "LaneCenteringEnabled")
 INT_PARAMS = ("SpeedLimitMode", "SPCruiseSpeedOffset")
 # bump when the decoded format changes, so stale cache files are not reused
-DECODED_VERSION = 1
+DECODED_VERSION = 2
 
 
 def events(path: Path) -> Iterator:

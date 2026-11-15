@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:opview/selfdrive/ui/onroad/augmented_road_view.dart';
 import 'package:opview/selfdrive/ui/onroad/detailed/detailed_layout.dart';
 import 'package:opview/selfdrive/ui/onroad/enhanced/enhanced_layout.dart';
+import 'package:opview/selfdrive/ui/onroad/hud_renderer.dart';
 import 'package:opview/selfdrive/ui/onroad/model_renderer.dart';
 import 'package:opview/selfdrive/ui/onroad/top_row.dart';
 import 'package:opview/selfdrive/ui/ui_state.dart';
@@ -328,6 +329,55 @@ void main() {
       await tester.pumpWidget(_app(createMockUIState(alertText1: 'Pay Attention', alertSize: 1), _detailed()));
       expect(find.byKey(const ValueKey('enhancedAlertCard')), findsOneWidget);
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('the set speed is light blue while Model Controls Speed is off, and the lift row says so',
+        (tester) async {
+      _screen(tester, 1920, 1080);
+      final state = createMockUIState()..longActive = true;
+      Color? setSpeed() => tester
+          .widget<Text>(find.descendant(
+              of: find.byKey(const ValueKey('topRowSetSpeed')), matching: find.text('${state.setSpeed.round()}')))
+          .style
+          ?.color;
+      Finder inPanel(String text) =>
+          find.descendant(of: find.byType(DetailedLongitudinalPanel), matching: find.text(text));
+
+      state.applyLongitudinalPlanSP({'modelSpeedOff': false, 'accelerationControlBoostRequested': 0.37});
+      await tester.pumpWidget(_app(state, _detailed()));
+      expect(setSpeed(), HudColors.white);
+      expect(inPanel('Accel lift'), findsOneWidget);
+      expect(inPanel(formatAccel(0.37)), findsOneWidget);
+
+      state.applyLongitudinalPlanSP({'modelSpeedOff': true, 'accelerationControlBoostRequested': 0.0});
+      await tester.pumpWidget(_app(state, _detailed()));
+      expect(setSpeed(), HudColors.modelOff);
+      expect(inPanel('model off'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('Model Controls Speed and Acceleration Control', () {
+    test('an older branch without the fields reads as the model on, with no lift to show', () {
+      final st = createMockUIState()..longActive = true;
+      st.applyLongitudinalPlanSP({});
+      expect(st.modelSpeedOff, isFalse);
+      expect(setSpeedColor(st, HudColors.white), HudColors.white);
+      expect(accelLiftRow(st).$2, detailedNoValue);
+    });
+
+    test('light blue, dim while cruise is not set', () {
+      final st = createMockUIState()..applyLongitudinalPlanSP({'modelSpeedOff': true});
+      expect(setSpeedColor(st, HudColors.white), HudColors.modelOff);
+      st.vCruiseCluster = 0;
+      expect(setSpeedColor(st, HudColors.darkGrey), HudColors.modelOffDim);
+    });
+
+    test('the lift row: a dash unless openpilot is controlling the speed', () {
+      final st = createMockUIState()..applyLongitudinalPlanSP({'accelerationControlBoostRequested': 0.15});
+      expect(accelLiftRow(st).$2, detailedNoValue);
+      st.longActive = true;
+      expect(accelLiftRow(st).$2, formatAccel(0.15));
     });
   });
 }
