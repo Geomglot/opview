@@ -206,7 +206,7 @@ struct LongitudinalPlanSP @0xf35cc4560bbf6ec2 {
   e2eAlerts @7 :E2eAlerts;
   # Requested increase to the model candidate before min-selection, not actuator acceleration.
   accelerationControlBoostRequested @8 :Float32;
-  # "Model Controls Speed" off where openpilot controls the speed; absent (false) reads as the model on
+  # "Use Legacy (Chill) Speed Control" on where openpilot controls the speed; absent (false) reads as the model on
   modelSpeedOff @9 :Bool;
 
   struct DynamicExperimentalControl {

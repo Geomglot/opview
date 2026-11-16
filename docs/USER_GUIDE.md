@@ -144,10 +144,12 @@ Enhanced plus side panels of live data:
 - **Steering:** mode, target and actual angle, rate, torque command, driver torque, lateral
   acceleration with a 10 second chart, and the lane centering readout when it is on.
 - **Driver:** face, attention and monitoring policy.
-- **Longitudinal:** cruise control state, driving personality, commanded and actual acceleration,
-  the Acceleration Control lift, throttle / brake, with a 10 second chart. **Accel lift** is how much
-  Acceleration Control is raising the driving model's request toward the set speed; it shows "model
-  off" while Model Controls Speed is off, when it has nothing to do.
+- **Longitudinal:** who controls the speed (the badge: **Model**, or **Legacy (Chill)**), cruise control
+  state, driving personality, commanded and actual acceleration, the Acceleration Control lift,
+  throttle / brake, with a 10 second chart. On branches with the **Use Legacy (Chill) Speed Control**
+  setting the badge follows it; on older branches Experimental mode shows as Model. **Accel lift** is
+  how much Acceleration Control is raising the driving model's request toward the set speed; it shows
+  "model off" while Legacy (Chill) is on, when it has nothing to do.
 - **Lead:** distance, gap, closing speed, lead speed, time to impact, and a second lead car (teal).
 - A clock and the comma's health at the top right: CPU, memory, disk, power and calibration.
 - A strip along the bottom with the car's and the driving model's state.
@@ -155,8 +157,8 @@ Enhanced plus side panels of live data:
 Tap any panel to fold it down to its title; tap again to open it. The app remembers which are folded.
 
 ### Light blue set speed
-On comma branches with the **Model Controls Speed** setting, the set speed number turns light blue in
-every layout while that setting is off, as it does on the comma: cruise then holds the set speed and
+On comma branches with the **Use Legacy (Chill) Speed Control** setting, the set speed number turns light
+blue in every layout while that setting is on, as it does on the comma: cruise then holds the set speed and
 slows only for a lead car, not for what the driving model sees. A switch made while driving (a tap on
 the MAX box) shows within about half a second, live and in a replay.
 

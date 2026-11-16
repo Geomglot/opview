@@ -56,7 +56,7 @@ const detailedNoValue = '–';
 // -- formatting --
 
 /// "-0.42 m/s²"; never "-0.00"
-/// Acceleration Control's lift on the model's request. It does nothing while "Model Controls Speed" is off.
+/// Acceleration Control's lift on the model's request. It does nothing while Legacy (Chill) is on.
 (String, String, Color) accelLiftRow(UIState st) {
   final lift = st.accelerationLift;
   if (lift == null || !st.longActive) return ('Accel lift', detailedNoValue, _dimColor);
@@ -699,6 +699,10 @@ class DetailedDriverPanel extends StatelessWidget {
   }
 }
 
+/// who controls the speed: the model, or the legacy (Chill) planner. Branches with the "Use Legacy (Chill) Speed
+/// Control" setting say so in modelSpeedOff and never set experimentalMode; on older ones Experimental is the model.
+bool legacySpeedControl(UIState st) => st.hasLegacySpeedSetting ? st.modelSpeedOff : !st.experimentalMode;
+
 class DetailedLongitudinalPanel extends StatelessWidget {
   final UIState uiState;
   final double unit;
@@ -716,9 +720,9 @@ class DetailedLongitudinalPanel extends StatelessWidget {
       collapsed: collapsed,
       onTap: onTap,
       title: 'LONGITUDINAL',
-      badge: st.experimentalMode
-          ? detailedBadge(unit, 'EXPERIMENTAL', _orange, key: const ValueKey('detailedExperimental'))
-          : detailedBadge(unit, 'CHILL', HudColors.grey, key: const ValueKey('detailedChill')),
+      badge: legacySpeedControl(st)
+          ? detailedBadge(unit, 'LEGACY (CHILL)', HudColors.grey, key: const ValueKey('detailedLegacy'))
+          : detailedBadge(unit, 'MODEL', _orange, key: const ValueKey('detailedModel')),
       rows: [
         ('ACC', st.cruiseEnabled ? 'on' : 'off', st.cruiseEnabled ? _green : _dimColor),
         ('Personality', formatPersonality(st.personality), Colors.white),

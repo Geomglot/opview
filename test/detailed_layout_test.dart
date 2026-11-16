@@ -171,12 +171,24 @@ void main() {
       }
     });
 
-    testWidgets('mode badge: experimental or chill', (tester) async {
+    testWidgets('mode badge on an older branch: Experimental is the model', (tester) async {
       _screen(tester, 1920, 1080);
       await tester.pumpWidget(_app(createMockUIState(experimentalMode: true), _detailed()));
-      expect(find.byKey(const ValueKey('detailedExperimental')), findsOneWidget);
+      expect(find.byKey(const ValueKey('detailedModel')), findsOneWidget);
+      expect(find.text('MODEL'), findsOneWidget);
       await tester.pumpWidget(_app(createMockUIState(), _detailed()));
-      expect(find.byKey(const ValueKey('detailedChill')), findsOneWidget);
+      expect(find.byKey(const ValueKey('detailedLegacy')), findsOneWidget);
+      expect(find.text('LEGACY (CHILL)'), findsOneWidget);
+    });
+
+    testWidgets('mode badge on a branch with the Legacy (Chill) setting follows it', (tester) async {
+      _screen(tester, 1920, 1080);
+      final state = createMockUIState()..applyLongitudinalPlanSP({'modelSpeedOff': false});
+      await tester.pumpWidget(_app(state, _detailed()));
+      expect(find.byKey(const ValueKey('detailedModel')), findsOneWidget);
+      state.applyLongitudinalPlanSP({'modelSpeedOff': true});
+      await tester.pumpWidget(_app(state, _detailed()));
+      expect(find.byKey(const ValueKey('detailedLegacy')), findsOneWidget);
     });
 
     testWidgets('speed limit pill: limit, next limit, or dashes', (tester) async {
@@ -265,7 +277,7 @@ void main() {
       _screen(tester, 1920, 1080);
       final settings = _detailed()..collapsedPanels.add('longitudinal');
       await tester.pumpWidget(_app(createMockUIState(experimentalMode: true), settings));
-      expect(find.byKey(const ValueKey('detailedExperimental')), findsNothing);
+      expect(find.byKey(const ValueKey('detailedModel')), findsNothing);
       expect(find.text('LONGITUDINAL'), findsOneWidget);
     });
 
@@ -331,7 +343,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('the set speed is light blue while Model Controls Speed is off, and the lift row says so',
+    testWidgets('the set speed is light blue while Legacy (Chill) is on, and the lift row says so',
         (tester) async {
       _screen(tester, 1920, 1080);
       final state = createMockUIState()..longActive = true;
@@ -357,13 +369,25 @@ void main() {
     });
   });
 
-  group('Model Controls Speed and Acceleration Control', () {
+  group('Legacy (Chill) speed control and Acceleration Control', () {
     test('an older branch without the fields reads as the model on, with no lift to show', () {
       final st = createMockUIState()..longActive = true;
       st.applyLongitudinalPlanSP({});
       expect(st.modelSpeedOff, isFalse);
       expect(setSpeedColor(st, HudColors.white), HudColors.white);
       expect(accelLiftRow(st).$2, detailedNoValue);
+      expect(st.hasLegacySpeedSetting, isFalse);
+    });
+
+    test('the badge: the setting where the branch has it, otherwise experimentalMode', () {
+      final st = createMockUIState(experimentalMode: true);
+      expect(legacySpeedControl(st), isFalse);
+      st.experimentalMode = false;
+      expect(legacySpeedControl(st), isTrue);
+      st.applyLongitudinalPlanSP({'modelSpeedOff': false});
+      expect(legacySpeedControl(st), isFalse, reason: 'these branches never set experimentalMode');
+      st.applyLongitudinalPlanSP({'modelSpeedOff': true});
+      expect(legacySpeedControl(st), isTrue);
     });
 
     test('light blue, dim while cruise is not set', () {

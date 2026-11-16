@@ -25,8 +25,10 @@ _ENCODE_IDX = ("narrowRoadEncodeIdx", "roadEncodeIdx")
 BOOL_PARAMS = ("IsMetric", "RoadNameToggle", "RivianForceTorqueSteer", "TrueVEgoUI", "SPLiveSpeedCorrectionEnabled",
                "ShowTurnSignals", "BlindSpot", "LaneCenteringEnabled")
 INT_PARAMS = ("SpeedLimitMode", "SPCruiseSpeedOffset")
+# the speed setting's param on branches that send longitudinalPlanSP.modelSpeedOff (earlier "Model Controls Speed")
+LEGACY_SPEED_PARAMS = ("LegacySpeedControl", "ModelControlsSpeed")
 # bump when the decoded format changes, so stale cache files are not reused
-DECODED_VERSION = 2
+DECODED_VERSION = 3
 
 
 def events(path: Path) -> Iterator:
@@ -103,11 +105,16 @@ def decode_rlog(rlog: Path) -> Decoded:
   out = Decoded()
   frames: list[tuple[int, int, int]] = []
   last_sent: dict[str, int] = {}
+  # The vendored schema has modelSpeedOff, so it would read as false on every drive. Live, it reaches the app only
+  # from branches with the Legacy (Chill) setting, which the app uses to choose between it and experimentalMode.
+  legacy_setting = False
   for e in events(rlog):
     which = e.which()
     mono = e.logMonoTime
     if which == "initData":
-      out.params = opview_params({p.key: bytes(p.value) for p in e.initData.params.entries})
+      entries = {p.key: bytes(p.value) for p in e.initData.params.entries}
+      out.params = opview_params(entries)
+      legacy_setting = any(k in entries for k in LEGACY_SPEED_PARAMS)
     elif which in _ENCODE_IDX:
       enc = getattr(e, which)
       frames.append((enc.segmentId, enc.frameId, enc.timestampEof))
@@ -118,6 +125,8 @@ def decode_rlog(rlog: Path) -> Decoded:
       last_sent[which] = mono
       msg = getattr(e, which)
       data = opview_model(msg) if which == "modelV2" else opview_slim.slim(which, msg)
+      if which == "longitudinalPlanSP" and not legacy_setting:
+        data.pop("modelSpeedOff", None)
       text = json.dumps({"type": which, "logMonoTime": mono, "valid": e.valid, "data": data}, separators=(",", ":"))
       out.messages.append([mono, msg.frameId if which == "modelV2" else None, text])
   frames.sort()
