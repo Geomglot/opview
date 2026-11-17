@@ -107,11 +107,9 @@ jobs:
           for f in "${want[@]}"; do if [ -f "$f" ]; then have+=("$f"); else missing+=("$f"); fi; done
           ls -l
           if [ ${#have[@]} -eq 0 ]; then echo "::error::nothing was built"; exit 1; fi
-          # each file again under the name from before GeoRivView, the only name copies of the app from before the rename
-          # look for when they update themselves; these can stop once those copies have all updated
-          old=()
-          for f in "${have[@]}"; do cp "$f" "OPRivView-${f#GeoRivView-}"; old+=("OPRivView-${f#GeoRivView-}"); done
-          sha256sum "${have[@]}" "${old[@]}" > SHA256SUMS
+          # up to test.9 each file was also uploaded under the name from before GeoRivView (OPRivView-...), for copies of the
+          # app from before the rename to update themselves; from test.10 on only the GeoRivView names are made
+          sha256sum "${have[@]}" > SHA256SUMS
           cat SHA256SUMS
 
           # a draft is not found by its tag the way a published release is, so look through the list
@@ -136,7 +134,7 @@ jobs:
               echo
               echo "The app is not signed by Apple or Microsoft, so the first time you open it, macOS or Windows SmartScreen asks you to allow it. On Linux, the AppImage is made runnable once. The install guides have the steps: [Mac]($docs/INSTALL.md), [Windows]($docs/INSTALL-WINDOWS.md), [Linux]($docs/INSTALL-LINUX.md). How to use it: [user guide]($docs/USER_GUIDE.md)."
               echo
-              echo "Checksums are in \`SHA256SUMS\`. The files whose names start \`OPRivView\` are the same files under the app's old name, for copies of the app from before it was renamed to update themselves; download the \`GeoRivView\` ones."
+              echo "Checksums are in \`SHA256SUMS\`."
               echo
               echo "## What's new"
               echo
@@ -152,7 +150,7 @@ jobs:
             gh release create "$TAG" --draft --verify-tag "${pre[@]}" --title "$title" --notes-file notes.md
           fi
 
-          gh release upload "$TAG" "${have[@]}" "${old[@]}" SHA256SUMS --clobber
+          gh release upload "$TAG" "${have[@]}" SHA256SUMS --clobber
           if [ ${#missing[@]} -gt 0 ]; then
             echo "::error::the draft is missing ${missing[*]}; re-run the failed jobs to add it"
             exit 1
