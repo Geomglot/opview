@@ -218,6 +218,7 @@ def write_clip(tl: RouteTimeline, route_dir: Path, start: FramePos, end: FramePo
     def params(decoded: Decoded) -> None:
       line = json.dumps({"type": "opviewParams", "valid": True, "data": decoded.params}, separators=(",", ":"))
       f.write(line + "\n")
+      picker.feed(line)
       if index is not None:
         index["params"].append([count, line])
 

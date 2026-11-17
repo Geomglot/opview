@@ -37,9 +37,27 @@ const _cachedHostKey = 'last_known_host';
 // SharedPreferences key for a host the user typed in (skips discovery)
 const _manualHostKey = 'manual_host';
 
-// camera switching thresholds (augmented_road_view.py:29-30)
+// camera switching thresholds (augmented_road_view.py:36-37)
+// older branches, in Experimental mode
 const wideCamMaxSpeed = 10.0;  // m/s — switch to wide below this
 const roadCamMinSpeed = 15.0;  // m/s — switch to road above this
+// branches without Experimental mode (geo-dev10-a, geo-dev10plus-a), whenever openpilot controls longitudinal
+const longWideCamMaxSpeed = 5.0;
+const longRoadCamMinSpeed = 10.0;
+
+/// the camera the comma's own screen would show ('road' or 'wideRoad'), from the one showing now
+/// (augmented_road_view.py _switch_stream_if_needed). Branches without Experimental mode say whether openpilot
+/// controls longitudinal; older ones leave it out and use Experimental mode, with higher speeds.
+String cameraTarget(UIState st, String current) {
+  final long = st.openpilotLongitudinal;
+  final useWide = long ?? st.experimentalMode;
+  if (!useWide) return 'road';
+  final below = long == null ? wideCamMaxSpeed : longWideCamMaxSpeed;
+  final above = long == null ? roadCamMinSpeed : longRoadCamMinSpeed;
+  if (st.vEgo < below) return 'wideRoad';
+  if (st.vEgo > above) return 'road';
+  return current;  // hysteresis zone — keep current
+}
 
 class ConnectionManager {
   final UIState _uiState;
@@ -263,23 +281,9 @@ class ConnectionManager {
     _connect();
   }
 
-  /// switch camera based on experimental mode + speed hysteresis
-  /// (augmented_road_view.py:122-136)
+  /// switch camera as the comma's screen does (cameraTarget)
   void _switchStreamIfNeeded() {
-    String target;
-    if (_uiState.experimentalMode) {
-      final vEgo = _uiState.vEgo;
-      if (vEgo < wideCamMaxSpeed) {
-        target = 'wideRoad';
-      } else if (vEgo > roadCamMinSpeed) {
-        target = 'road';
-      } else {
-        // hysteresis zone — keep current
-        return;
-      }
-    } else {
-      target = 'road';
-    }
+    final target = cameraTarget(_uiState, _streamType);
     if (target == _streamType) return;
     _streamType = target;
     _uiState.streamType = target;

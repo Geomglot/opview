@@ -192,11 +192,12 @@ also be used on the comma for a fast draft. Connect never has the wide camera, s
 
 ## Wide camera
 
-`--camera auto` follows the app: in experimental mode the wide camera is shown below 10 m/s and the road camera
-above 15 m/s, keeping the current one in between (`replay/oprivview_replay/camera.py`, mirroring
-`ConnectionManager._switchStreamIfNeeded`). `road` and `wide` force one camera. The live app takes a second or two to
-reconnect when it switches; the replay switches at once. Auto has not yet been seen on a real experimental mode
-drive, because none of the drives on the comma had it on; `--camera wide` has been checked against a normal drive.
+`--camera auto` follows the app, which follows the comma's own screen (`replay/oprivview_replay/camera.py`, mirroring
+`cameraTarget` in `lib/services/connection_manager.dart`). On branches without Experimental mode (geo-dev10-a,
+geo-dev10plus-a) the wide camera is shown below 5 m/s and the road camera above 10 m/s whenever openpilot controls
+longitudinal; the log's saved settings say which kind of branch recorded the drive. On older branches the same happens
+in experimental mode, below 10 m/s and above 15 m/s. Either way the current camera is kept in between. `road` and
+`wide` force one camera. The live app takes a second or two to reconnect when it switches; the replay switches at once.
 
 ## Adding an option
 

@@ -28,7 +28,7 @@ INT_PARAMS = ("SpeedLimitMode", "SPCruiseSpeedOffset")
 # the speed setting's param on branches that send longitudinalPlanSP.modelSpeedOff (earlier "Model Controls Speed")
 LEGACY_SPEED_PARAMS = ("LegacySpeedControl", "ModelControlsSpeed")
 # bump when the decoded format changes, so stale cache files are not reused
-DECODED_VERSION = 3
+DECODED_VERSION = 4
 
 
 def events(path: Path) -> Iterator:
@@ -47,12 +47,15 @@ def events(path: Path) -> Iterator:
 
 def opview_params(entries: dict[str, bytes]) -> dict:
   """the settings webrtcd sends live as opviewParams, rebuilt from the copy saved at the start of each segment"""
-  brand, flags = "", 0
+  brand, flags, long = "", 0, False
   saved = entries.get("CarParamsPersistent")
   if saved:
     with _car.CarParams.from_bytes(saved) as cp:
-      brand, flags = str(cp.brand), int(cp.flags)
+      brand, flags, long = str(cp.brand), int(cp.flags), bool(cp.openpilotLongitudinalControl)
   out: dict = {"CarBrand": brand, "CarFlags": flags}
+  if "ExperimentalMode" not in entries:
+    # a branch without Experimental mode, whose screen picks the camera by this instead (camera.py)
+    out["OpenpilotLongitudinalControl"] = long
   for key in BOOL_PARAMS:
     out[key] = entries.get(key, b"0") == b"1"
   for key in INT_PARAMS:

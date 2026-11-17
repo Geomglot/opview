@@ -27,3 +27,14 @@ def test_panel_choices_match_the_names_the_app_checks():
   source = (Path(__file__).parents[2] / "lib/selfdrive/ui/onroad/detailed/detailed_layout.dart").read_text()
   panels = next(p for p in PARAMS if p.name == "collapsed_panels")
   assert all(f"collapsedPanels.contains('{name}')" in source for name in panels.choices)
+
+
+def test_a_branch_without_experimental_mode_says_whether_openpilot_controls_longitudinal():
+  from oprivview_replay import logs
+  cp = logs._car.CarParams.new_message()
+  cp.openpilotLongitudinalControl = True
+  saved = cp.to_bytes()
+  assert opview_params({"CarParamsPersistent": saved})["OpenpilotLongitudinalControl"] is True
+  assert opview_params({})["OpenpilotLongitudinalControl"] is False
+  # older branches keep the Experimental mode rule, so the key is left out as an older comma leaves it out live
+  assert "OpenpilotLongitudinalControl" not in opview_params({"CarParamsPersistent": saved, "ExperimentalMode": b"0"})

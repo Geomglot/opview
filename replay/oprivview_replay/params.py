@@ -29,7 +29,8 @@ PARAMS = (
   Param("detail", "Full uses the complete log and camera video. Log with small video has the path and lane lines over a lower "
         "resolution picture. Quick uses only the small files, with no path or lane lines. Automatic uses the best the drive has",
         "auto", ("auto", "full", "logs", "quick")),
-  Param("camera", "Automatic follows the app, which uses the wide camera at low speed in experimental mode", "auto",
+  Param("camera", "Automatic follows the app, which uses the wide camera at low speed as the comma does: in experimental mode, "
+        "or on branches without it whenever openpilot controls the speed", "auto",
         ("auto", "road", "wide")),
   Param("collapsed_panels", "Detailed view only: the panels to fold shut", (), ("steering", "driver", "longitudinal", "lead"), many=True),
   Param("clock", "", "h12", ("h12", "h24")),

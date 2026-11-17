@@ -76,6 +76,9 @@ class UIState extends ChangeNotifier {
   bool enabled = false;
   bool engageable = false;
   bool experimentalMode = false;
+  /// opviewParams OpenpilotLongitudinalControl, sent by branches without Experimental mode (null on older ones),
+  /// whose screen uses the wide camera at low speed whenever openpilot controls longitudinal
+  bool? openpilotLongitudinal;
   String alertText1 = '';
   String alertText2 = '';
   int alertSize = 0;     // 0=none, 1=small, 2=mid, 3=full
@@ -240,7 +243,7 @@ class UIState extends ChangeNotifier {
   final accelCommandHistory = <double>[];
   final accelActualHistory = <double>[];
 
-  // active camera: 'road' or 'wideRoad' (switches on experimental mode)
+  // active camera: 'road' or 'wideRoad' (cameraTarget in connection_manager.dart)
   String streamType = 'road';
 
   // connection state — drives "Connecting..." overlay + screen wake lock
@@ -467,6 +470,7 @@ class UIState extends ChangeNotifier {
     // car make and flags (carParams is only published every ~50 s)
     brand = data['CarBrand'] as String? ?? brand;
     carFlags = (data['CarFlags'] as num?)?.toInt() ?? carFlags;
+    openpilotLongitudinal = data['OpenpilotLongitudinalControl'] as bool?;
     // no notify — picked up on next modelV2
   }
 
